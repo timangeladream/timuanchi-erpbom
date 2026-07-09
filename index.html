@@ -230,6 +230,17 @@
   .ta-drawer-item:hover { background: var(--bg); }
   .ta-drawer-item--danger { color: var(--danger); }
   .ta-drawer-close { cursor: pointer; font-size: 18px; color: var(--text-muted); }
+
+  .ta-import-summary {
+    padding: 12px 14px; border-radius: 8px; background: #eef6ef; border: 1px solid #d6e9d9;
+    font-size: 13px; color: var(--text); margin: 14px 0; line-height: 1.7;
+  }
+  .ta-import-errors {
+    padding: 12px 14px; border-radius: 8px; background: #fdf0ef; border: 1px solid #f0d0cc;
+    font-size: 12.5px; color: var(--danger); margin: 14px 0; max-height: 220px; overflow-y: auto;
+  }
+  .ta-import-errors ul { margin: 6px 0 0; padding-left: 18px; }
+  .ta-import-progress { font-size: 13px; color: var(--text-muted); margin: 14px 0; }
 </style>
 </head>
 <body>
@@ -338,6 +349,10 @@
     <hr class="ta-section-divider">
 
     <div class="ta-form-grid">
+      <div class="ta-form-row">
+        <label>進貨日期</label>
+        <input type="date" id="pPurchaseDate">
+      </div>
       <div class="ta-form-row">
         <label>進貨國家/平台</label>
         <input type="text" id="pPlatform">
@@ -550,6 +565,25 @@
   </div>
 </div>
 
+<!-- 匯入資料 Modal -->
+<div class="ta-modal-overlay" id="importModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="importModal">✕</span>
+    <h2>匯入資料</h2>
+    <div class="ta-form-row">
+      <label>選擇進貨紀錄 Excel 檔案(.xlsx)</label>
+      <input type="file" id="importFileInput" accept=".xlsx,.xls">
+    </div>
+    <div id="importSummary"></div>
+    <div id="importErrorList"></div>
+    <div id="importProgress" class="ta-import-progress ta-is-hidden"></div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="importModal">取消</button>
+      <button class="ta-btn ta-btn-primary ta-is-hidden" id="confirmImportBtn">確認匯入</button>
+    </div>
+  </div>
+</div>
+
 <!-- 右側選單 -->
 <div class="ta-drawer-overlay" id="drawerOverlay"></div>
 <aside class="ta-drawer" id="sideDrawer">
@@ -564,10 +598,12 @@
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item" id="openOptionsBtn">選項管理</button>
   <button class="ta-drawer-item" id="openExchangeBtn">匯率設定</button>
+  <button class="ta-drawer-item" id="openImportBtn">匯入資料</button>
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item ta-drawer-item--danger" id="logoutBtn">登出</button>
 </aside>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
@@ -575,7 +611,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, setDoc, deleteDoc,
-  query, where, orderBy, serverTimestamp, onSnapshot
+  query, where, orderBy, serverTimestamp, onSnapshot, Timestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -1022,6 +1058,7 @@ function resetPurchaseForm() {
   ['pCategory','pBrand','pMaterial','pBeadType','pPackageSpecUnit','pQuantityUnit'].forEach(id => document.getElementById(id).value = '');
   ['pSize','pColorSeries','pColorCode','pPlatform','pSeller','pAmount','pPackageSpecValue','pQuantity'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('pCurrency').value = 'TWD';
+  document.getElementById('pPurchaseDate').value = new Date().toISOString().slice(0, 10);
   document.getElementById('pAmountModeTotal').checked = true;
   updateAmountLabel();
   setQuantityUnitLock(false);
@@ -1154,10 +1191,17 @@ async function submitPurchase() {
   const packageSpecUnit = document.getElementById('pPackageSpecUnit').value.trim();
   const quantity = parseFloat(document.getElementById('pQuantity').value);
   const quantityUnitInput = document.getElementById('pQuantityUnit').value.trim();
+  const purchaseDateStr = document.getElementById('pPurchaseDate').value;
 
   if (!quantity || quantity <= 0) { alert('請輸入本次進貨數量'); return; }
   if (!quantityUnitInput) { alert('請選擇本次進貨的單位'); return; }
   if (isNaN(amount) || amount < 0) { alert('請輸入正確的金額'); return; }
+  if (!purchaseDateStr) { alert('請選擇進貨日期'); return; }
+
+  // 進貨日期用使用者選的日期,時分秒沿用當下時間,確保同一天補登多筆時仍能依輸入順序排列
+  const now = new Date();
+  const [pdY, pdM, pdD] = purchaseDateStr.split('-').map(Number);
+  const purchaseTimestamp = Timestamp.fromDate(new Date(pdY, pdM - 1, pdD, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds()));
 
   let twdAmount, unitCost;
   if (amountMode === 'unit') {
@@ -1182,7 +1226,7 @@ async function submitPurchase() {
         currentStock: 0,
         currentUnitCost: 0,
         archived: false,
-        createdAt: serverTimestamp(),
+        createdAt: purchaseTimestamp,
         updatedAt: serverTimestamp(),
       });
       materialId = newDoc.id;
@@ -1195,7 +1239,7 @@ async function submitPurchase() {
       packageSpecValue: packageSpecValueRaw ? parseFloat(packageSpecValueRaw) : null,
       packageSpecUnit,
       quantity, quantityUnit: finalUnit, unitCost,
-      timestamp: serverTimestamp(),
+      timestamp: purchaseTimestamp,
     });
 
     const matRef = doc(db, 'materials', materialId);
@@ -1289,7 +1333,7 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async () =
 
   if (deleteTargetHistCount > 0) {
     const typed = document.getElementById('deleteConfirmInput').value.trim();
-    if (typed !== displayName(m)) { alert('輸入的名稱不符,請重新輸入。'); return; }
+    if (typed !== displayName(m)) { alert('輸入的名稱不符，請重新輸入。'); return; }
   }
 
   const btn = document.getElementById('confirmDeleteBtn');
@@ -1320,11 +1364,11 @@ function renderTimeline(logs, unit) {
       const logUnit = log.quantityUnit || unit;
       const amountLine = log.amountMode === 'unit'
         ? `單價：${log.originalAmount} ${log.currency} / 個（供應商報價，匯率 ${log.exchangeRateUsed}）`
-        : `原始金額:${log.originalAmount} ${log.currency}(該次總額,匯率 ${log.exchangeRateUsed})`;
+        : `原始金額：${log.originalAmount} ${log.currency}(該次總額,匯率 ${log.exchangeRateUsed})`;
       detail = `${escapeHtml(log.platform || '')} ${log.seller ? ' / ' + escapeHtml(log.seller) : ''}
         ${amountLine}
         →　台幣總額 NT$${(log.twdAmount||0).toFixed(2)}
-        ${log.packageSpecValue ? '　包裝規格:' + log.packageSpecValue + escapeHtml(log.packageSpecUnit || '') : ''}<br>
+        ${log.packageSpecValue ? '　包裝規格：' + log.packageSpecValue + escapeHtml(log.packageSpecUnit || '') : ''}<br>
         進貨數量：+${log.quantity} ${escapeHtml(logUnit)}　單價：NT$${(log.unitCost||0).toFixed(4)} / ${escapeHtml(logUnit)}`;
     } else if (log.type === 'adjust') {
       typeLabel = '人工盤點調整'; cls = 'adjust';
@@ -1458,6 +1502,300 @@ document.getElementById('saveExchangeBtn').addEventListener('click', async () =>
   if (isNaN(cny) || isNaN(jpy)) { alert('請輸入正確的匯率數字'); return; }
   await setDoc(doc(db, 'settings', 'exchangeRates'), { CNY: cny, JPY: jpy });
   closeModal('exchangeModal');
+});
+
+// ---------- 匯入資料 ----------
+let importParsedGroups = null; // 驗證通過後暫存,供確認匯入時使用
+
+document.getElementById('openImportBtn').addEventListener('click', () => {
+  closeDrawer();
+  resetImportModal();
+  openModal('importModal');
+});
+
+function resetImportModal() {
+  document.getElementById('importFileInput').value = '';
+  document.getElementById('importSummary').innerHTML = '';
+  document.getElementById('importErrorList').innerHTML = '';
+  const progressEl = document.getElementById('importProgress');
+  progressEl.classList.add('ta-is-hidden');
+  progressEl.textContent = '';
+  document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+  importParsedGroups = null;
+}
+
+document.getElementById('importFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('importSummary').innerHTML = '<div class="ta-import-summary">讀取中...</div>';
+  document.getElementById('importErrorList').innerHTML = '';
+  document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+  importParsedGroups = null;
+
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    processImportRows(rows);
+  } catch (err) {
+    document.getElementById('importSummary').innerHTML = '';
+    document.getElementById('importErrorList').innerHTML = `<div class="ta-import-errors">讀取檔案失敗:${escapeHtml(err.message)}</div>`;
+  }
+});
+
+function parseImportDate(val) {
+  if (val instanceof Date && !isNaN(val)) return val;
+  if (typeof val === 'number') {
+    const d = XLSX.SSF.parse_date_code(val);
+    if (d) return new Date(d.y, d.m - 1, d.d, d.H || 0, d.M || 0, d.S || 0);
+    return null;
+  }
+  if (typeof val === 'string' && val.trim()) {
+    const m = val.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+  return null;
+}
+
+function findMatchingMaterial(category, brand, material, beadType, size, colorSeries, colorCode) {
+  return materials.find(m => !m.archived &&
+    (m.category || '') === category && (m.brand || '') === brand && (m.material || '') === material &&
+    (m.beadType || '') === beadType && (m.size || '') === size && (m.colorSeries || '') === colorSeries &&
+    (m.colorCode || '') === colorCode
+  );
+}
+
+function processImportRows(rows) {
+  const summaryEl = document.getElementById('importSummary');
+  const errorListEl = document.getElementById('importErrorList');
+
+  if (!rows.length) {
+    summaryEl.innerHTML = '';
+    errorListEl.innerHTML = '<div class="ta-import-errors">檔案裡沒有讀到任何資料列。</div>';
+    return;
+  }
+
+  const errors = [];
+  const parsedRows = [];
+
+  rows.forEach((row, idx) => {
+    const rowNum = idx + 2; // 對應 Excel 實際列號(含標題列)
+    const category = String(row['分類'] ?? '').trim();
+    const brand = String(row['品牌'] ?? '').trim();
+    const material = String(row['材質'] ?? '').trim();
+    const beadType = String(row['類型/款式'] ?? '').trim();
+    const size = String(row['尺寸'] ?? '').trim();
+    const colorSeries = String(row['色系名稱'] ?? '').trim();
+    const colorCode = String(row['顏色'] ?? '').trim();
+    const platform = String(row['進貨國家/平台'] ?? '').trim();
+    const seller = String(row['供應商名稱'] ?? '').trim();
+    const currency = String(row['幣別'] ?? '').trim().toUpperCase();
+    const amountMode = String(row['金額類型'] ?? '').trim().toLowerCase();
+    const amount = row['金額'];
+    const packageSpecValueRaw = row['進貨包裝規格數字'];
+    const packageSpecUnit = String(row['進貨包裝規格單位'] ?? '').trim();
+    const quantity = row['本次進貨數量'];
+    const quantityUnit = String(row['數量單位'] ?? '').trim();
+    const dateVal = parseImportDate(row['進貨日期']);
+
+    const rowErrors = [];
+    if (!dateVal) rowErrors.push('進貨日期格式錯誤或空白(請用 YYYY-MM-DD)');
+    if (!['TWD','CNY','JPY'].includes(currency)) rowErrors.push('幣別必須是 TWD、CNY 或 JPY');
+    if (!['total','unit'].includes(amountMode)) rowErrors.push('金額類型必須是 total 或 unit');
+    if (amount === '' || amount == null || isNaN(Number(amount)) || Number(amount) < 0) rowErrors.push('金額必須是不小於0的數字');
+    if (quantity === '' || quantity == null || isNaN(Number(quantity)) || Number(quantity) <= 0) rowErrors.push('本次進貨數量必須是大於0的數字');
+    if (!quantityUnit) rowErrors.push('數量單位不能空白');
+
+    if (rowErrors.length) {
+      errors.push({ row: rowNum, messages: rowErrors });
+      return;
+    }
+
+    parsedRows.push({
+      rowNum, category, brand, material, beadType, size, colorSeries, colorCode,
+      platform, seller, currency, amountMode, amount: Number(amount),
+      packageSpecValue: (packageSpecValueRaw !== '' && packageSpecValueRaw != null) ? Number(packageSpecValueRaw) : null,
+      packageSpecUnit, quantity: Number(quantity), quantityUnit,
+      date: dateVal,
+    });
+  });
+
+  // 依 7 個身分欄位分組(同一款材料的多筆進貨)
+  const groups = new Map();
+  for (const r of parsedRows) {
+    const key = [r.category, r.brand, r.material, r.beadType, r.size, r.colorSeries, r.colorCode].join('');
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  }
+
+  // 檢查同一款材料的單位是否一致(含既有材料的單位)
+  for (const [key, groupRows] of groups) {
+    const [category, brand, material, beadType, size, colorSeries, colorCode] = key.split('');
+    const existing = findMatchingMaterial(category, brand, material, beadType, size, colorSeries, colorCode);
+    const lockedUnit = existing ? existing.unit : groupRows[0].quantityUnit;
+    groupRows.forEach(r => {
+      if (r.quantityUnit !== lockedUnit) {
+        errors.push({ row: r.rowNum, messages: [`單位「${r.quantityUnit}」跟同一款材料其他列/既有材料的單位「${lockedUnit}」不一致`] });
+      }
+    });
+  }
+
+  if (errors.length) {
+    errors.sort((a, b) => a.row - b.row);
+    summaryEl.innerHTML = '';
+    errorListEl.innerHTML = `<div class="ta-import-errors">
+      共 ${rows.length} 列資料,發現 ${errors.length} 列有問題,請修正後重新上傳(本次不會匯入任何資料):
+      <ul>${errors.map(e => `<li>第 ${e.row} 列:${e.messages.map(escapeHtml).join(';')}</li>`).join('')}</ul>
+    </div>`;
+    document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+    importParsedGroups = null;
+    return;
+  }
+
+  // 全部通過驗證,計算預覽摘要
+  let newMaterialCount = 0, mergeMaterialCount = 0, newRowCount = 0, mergeRowCount = 0;
+  const groupInfos = [];
+  for (const [key, groupRows] of groups) {
+    const [category, brand, material, beadType, size, colorSeries, colorCode] = key.split('');
+    const existing = findMatchingMaterial(category, brand, material, beadType, size, colorSeries, colorCode);
+    groupRows.sort((a, b) => a.date - b.date);
+    if (existing) {
+      mergeMaterialCount++;
+      mergeRowCount += groupRows.length;
+    } else {
+      newMaterialCount++;
+      newRowCount += groupRows.length;
+    }
+    groupInfos.push({ category, brand, material, beadType, size, colorSeries, colorCode, rows: groupRows, existingId: existing ? existing.id : null });
+  }
+
+  importParsedGroups = groupInfos;
+
+  errorListEl.innerHTML = '';
+  summaryEl.innerHTML = `<div class="ta-import-summary">
+    共讀取 ${rows.length} 列,全部通過驗證。<br>
+    將新增 ${newMaterialCount} 款新材料(共 ${newRowCount} 筆進貨紀錄)。<br>
+    將累加到 ${mergeMaterialCount} 款既有材料(共 ${mergeRowCount} 筆進貨紀錄)。
+  </div>`;
+  document.getElementById('confirmImportBtn').classList.remove('ta-is-hidden');
+}
+
+document.getElementById('confirmImportBtn').addEventListener('click', async () => {
+  if (!importParsedGroups) return;
+  const btn = document.getElementById('confirmImportBtn');
+  btn.disabled = true;
+  const progressEl = document.getElementById('importProgress');
+  progressEl.classList.remove('ta-is-hidden');
+  progressEl.textContent = '匯入中,請稍候...';
+
+  try {
+    // 先把匯入資料裡出現的新選項值(分類/品牌/材質/類型/單位)補進選項清單
+    const optionAdds = { categories: [], brands: [], materials: [], beadTypes: [], stockUnits: [], packageUnits: [] };
+    const seen = {};
+    for (const key of Object.keys(optionAdds)) seen[key] = new Set(options[key]);
+    const checkOption = (val, key) => { if (val && !seen[key].has(val)) { seen[key].add(val); optionAdds[key].push(val); } };
+    for (const g of importParsedGroups) {
+      checkOption(g.category, 'categories');
+      checkOption(g.brand, 'brands');
+      checkOption(g.material, 'materials');
+      checkOption(g.beadType, 'beadTypes');
+      for (const r of g.rows) {
+        checkOption(r.quantityUnit, 'stockUnits');
+        if (r.packageSpecUnit) checkOption(r.packageSpecUnit, 'packageUnits');
+      }
+    }
+    const optionUpdates = {};
+    for (const key of Object.keys(optionAdds)) {
+      if (optionAdds[key].length) optionUpdates[key] = [...options[key], ...optionAdds[key]];
+    }
+    if (Object.keys(optionUpdates).length) {
+      await setDoc(doc(db, 'settings', 'options'), optionUpdates, { merge: true });
+    }
+
+    // 組裝所有寫入操作
+    const ops = []; // { ref, data, opType }
+    let totalRows = 0;
+    importParsedGroups.forEach(g => totalRows += g.rows.length);
+
+    for (const g of importParsedGroups) {
+      let materialId = g.existingId;
+      let runningStock, runningCost;
+
+      if (!materialId) {
+        const newRef = doc(collection(db, 'materials'));
+        materialId = newRef.id;
+        const earliestTs = Timestamp.fromDate(g.rows[0].date);
+        ops.push({ ref: newRef, opType: 'set', data: {
+          category: g.category, brand: g.brand, material: g.material, beadType: g.beadType,
+          size: g.size, colorSeries: g.colorSeries, colorCode: g.colorCode,
+          unit: g.rows[0].quantityUnit,
+          currentStock: 0, currentUnitCost: 0, archived: false,
+          createdAt: earliestTs, updatedAt: serverTimestamp(),
+        }});
+        runningStock = 0;
+        runningCost = 0;
+      } else {
+        const existingMat = materials.find(m => m.id === materialId);
+        runningStock = existingMat.currentStock || 0;
+        runningCost = existingMat.currentUnitCost || 0;
+      }
+
+      for (const r of g.rows) {
+        const converted = convertToTwd(r.amount, r.currency);
+        let twdAmount, unitCost;
+        if (r.amountMode === 'unit') {
+          unitCost = converted;
+          twdAmount = unitCost * r.quantity;
+        } else {
+          twdAmount = converted;
+          unitCost = twdAmount / r.quantity;
+        }
+        const rateUsed = r.currency === 'TWD' ? 1 : (exchangeRates[r.currency] || 1);
+        const histRef = doc(collection(db, 'materials', materialId, 'history'));
+        ops.push({ ref: histRef, opType: 'set', data: {
+          type: 'purchase', platform: r.platform, seller: r.seller, currency: r.currency,
+          originalAmount: r.amount, amountMode: r.amountMode, exchangeRateUsed: rateUsed,
+          twdAmount, packageSpecValue: r.packageSpecValue, packageSpecUnit: r.packageSpecUnit,
+          quantity: r.quantity, quantityUnit: r.quantityUnit, unitCost,
+          timestamp: Timestamp.fromDate(r.date),
+        }});
+
+        runningStock += r.quantity;
+        runningCost = Math.max(runningCost, unitCost);
+      }
+
+      const matRef = doc(db, 'materials', materialId);
+      ops.push({ ref: matRef, opType: 'update', data: {
+        currentStock: runningStock, currentUnitCost: runningCost, updatedAt: serverTimestamp(),
+      }});
+    }
+
+    // 分批寫入(Firestore 單一批次上限 500 個操作)
+    const CHUNK_SIZE = 400;
+    let committed = 0;
+    for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+      const chunk = ops.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach(op => {
+        if (op.opType === 'update') batch.update(op.ref, op.data);
+        else batch.set(op.ref, op.data);
+      });
+      await batch.commit();
+      committed += chunk.length;
+      progressEl.textContent = `匯入中... 已寫入 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作`;
+    }
+
+    progressEl.textContent = `匯入完成!共處理 ${totalRows} 筆進貨紀錄。`;
+    document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+    document.getElementById('importSummary').innerHTML = '';
+    importParsedGroups = null;
+  } catch (err) {
+    progressEl.textContent = '';
+    document.getElementById('importErrorList').innerHTML = `<div class="ta-import-errors">匯入失敗:${escapeHtml(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
 });
 </script>
 </body>
