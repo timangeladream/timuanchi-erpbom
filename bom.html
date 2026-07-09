@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TimuAnchi 成品組合 BOM</title>
+<style>
+  :root {
+    --primary: #8a6d5c;
+    --primary-dark: #6e5548;
+    --bg: #f7f4f1;
+    --card-bg: #ffffff;
+    --border: #e2dcd6;
+    --text: #3a332e;
+    --text-muted: #8a7f76;
+    --danger: #c0524a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .ta-is-hidden { display: none !important; }
+
+  #loginScreen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+  }
+  .ta-login-box {
+    background: var(--card-bg);
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    width: 320px;
+  }
+  .ta-login-box h1 { font-size: 18px; margin: 0 0 24px; text-align: center; color: var(--primary-dark); }
+  .ta-login-box input {
+    width: 100%; padding: 10px 12px; margin-bottom: 12px;
+    border: 1px solid var(--border); border-radius: 6px; font-size: 14px;
+  }
+  .ta-login-box button {
+    width: 100%; padding: 10px; border: none; border-radius: 6px;
+    background: var(--primary); color: #fff; font-size: 14px; cursor: pointer;
+  }
+  .ta-login-box button:hover { background: var(--primary-dark); }
+  #loginError { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 16px; }
+
+  #app { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+  .ta-topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+  }
+  .ta-topbar h1 { font-size: 20px; color: var(--primary-dark); margin: 0; }
+  .ta-topbar-right { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-muted); }
+  .ta-btn {
+    padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border);
+    background: #fff; cursor: pointer; font-size: 13px; color: var(--text);
+  }
+  .ta-btn:hover { border-color: var(--primary); color: var(--primary-dark); }
+  .ta-hamburger-btn { font-size: 16px; padding: 8px 12px; line-height: 1; }
+
+  .ta-drawer-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 150;
+  }
+  .ta-drawer-overlay.ta-is-open { display: block; }
+
+  .ta-drawer {
+    position: fixed; top: 0; right: 0; height: 100vh; width: 280px; max-width: 85vw;
+    background: #fff; z-index: 151; box-shadow: -4px 0 20px rgba(0,0,0,0.12);
+    transform: translateX(100%); transition: transform 0.25s ease;
+    display: flex; flex-direction: column; padding: 20px;
+  }
+  .ta-drawer.ta-is-open { transform: translateX(0); }
+
+  .ta-drawer-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 20px; font-size: 13px; color: var(--text-muted);
+  }
+  .ta-drawer-close { cursor: pointer; font-size: 18px; color: var(--text-muted); }
+  .ta-drawer-nav { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+  .ta-drawer-link {
+    padding: 10px 12px; border-radius: 6px; font-size: 14px; text-decoration: none; color: var(--text);
+  }
+  .ta-drawer-link:hover { background: var(--bg); }
+  .ta-drawer-link.ta-is-active { background: var(--primary); color: #fff; font-weight: 600; }
+  .ta-drawer-divider { border-top: 1px solid var(--border); margin: 12px 0; }
+  .ta-drawer-item {
+    display: block; width: 100%; text-align: left; padding: 10px 12px; border-radius: 6px;
+    border: none; background: none; font-size: 14px; color: var(--text); cursor: pointer;
+  }
+  .ta-drawer-item:hover { background: var(--bg); }
+  .ta-drawer-item--danger { color: var(--danger); }
+
+  .ta-placeholder {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 60px 20px; text-align: center; color: var(--text-muted);
+  }
+  .ta-placeholder h2 { color: var(--primary-dark); font-size: 18px; margin: 0 0 8px; }
+  .ta-placeholder p { font-size: 13px; margin: 0; }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="ta-login-box">
+    <h1>TimuAnchi 材料系統</h1>
+    <input type="email" id="loginEmail" placeholder="Email">
+    <input type="password" id="loginPassword" placeholder="密碼">
+    <button id="loginBtn">登入</button>
+    <div id="loginError"></div>
+  </div>
+</div>
+
+<div id="app" class="ta-is-hidden">
+  <header class="ta-topbar">
+    <h1>成品組合 BOM</h1>
+    <div class="ta-topbar-right">
+      <button class="ta-btn ta-hamburger-btn" id="openMenuBtn" aria-label="選單">☰</button>
+    </div>
+  </header>
+
+  <div class="ta-placeholder">
+    <h2>即將推出</h2>
+    <p>成品組合(BOM)模組還在規劃中,之後會在這裡用材料組成成品、計算成品成本。</p>
+  </div>
+</div>
+
+<!-- 右側選單 -->
+<div class="ta-drawer-overlay" id="drawerOverlay"></div>
+<aside class="ta-drawer" id="sideDrawer">
+  <div class="ta-drawer-header">
+    <span id="userEmail"></span>
+    <span class="ta-drawer-close" id="closeDrawerBtn">✕</span>
+  </div>
+  <nav class="ta-drawer-nav">
+    <a href="index.html" class="ta-drawer-link">材料管理</a>
+    <a href="bom.html" class="ta-drawer-link ta-is-active">成品組合 BOM</a>
+  </nav>
+  <div class="ta-drawer-divider"></div>
+  <button class="ta-drawer-item ta-drawer-item--danger" id="logoutBtn">登出</button>
+</aside>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDgeqH5KrIVj6xVlA7gPXa8Mg4sQO73QL4",
+  authDomain: "timuanchi-erpbom.firebaseapp.com",
+  projectId: "timuanchi-erpbom",
+  storageBucket: "timuanchi-erpbom.firebasestorage.app",
+  messagingSenderId: "640849188003",
+  appId: "1:640849188003:web:9a0039a6053f206c8f5b16"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+document.getElementById('loginBtn').addEventListener('click', doLogin);
+document.getElementById('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  signInWithEmailAndPassword(auth, email, password).catch(err => {
+    errEl.textContent = '登入失敗:帳號或密碼錯誤';
+  });
+}
+
+document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
+
+function openDrawer() {
+  document.getElementById('sideDrawer').classList.add('ta-is-open');
+  document.getElementById('drawerOverlay').classList.add('ta-is-open');
+}
+function closeDrawer() {
+  document.getElementById('sideDrawer').classList.remove('ta-is-open');
+  document.getElementById('drawerOverlay').classList.remove('ta-is-open');
+}
+document.getElementById('openMenuBtn').addEventListener('click', openDrawer);
+document.getElementById('closeDrawerBtn').addEventListener('click', closeDrawer);
+document.getElementById('drawerOverlay').addEventListener('click', closeDrawer);
+
+onAuthStateChanged(auth, user => {
+  if (user) {
+    document.getElementById('loginScreen').classList.add('ta-is-hidden');
+    document.getElementById('app').classList.remove('ta-is-hidden');
+    document.getElementById('userEmail').textContent = user.email;
+  } else {
+    document.getElementById('loginScreen').classList.remove('ta-is-hidden');
+    document.getElementById('app').classList.add('ta-is-hidden');
+  }
+});
+</script>
+</body>
+</html>
