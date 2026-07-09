@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TimuAnchi 材料系統</title>
+<style>
+  :root {
+    --primary: #8a6d5c;
+    --primary-dark: #6e5548;
+    --bg: #f7f4f1;
+    --card-bg: #ffffff;
+    --border: #e2dcd6;
+    --text: #3a332e;
+    --text-muted: #8a7f76;
+    --danger: #c0524a;
+    --success: #4a7c59;
+    --warn: #b8894a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  #loginScreen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+  }
+  .login-box {
+    background: var(--card-bg);
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    width: 320px;
+  }
+  .login-box h1 { font-size: 18px; margin: 0 0 24px; text-align: center; color: var(--primary-dark); }
+  .login-box input {
+    width: 100%; padding: 10px 12px; margin-bottom: 12px;
+    border: 1px solid var(--border); border-radius: 6px; font-size: 14px;
+  }
+  .login-box button {
+    width: 100%; padding: 10px; border: none; border-radius: 6px;
+    background: var(--primary); color: #fff; font-size: 14px; cursor: pointer;
+  }
+  .login-box button:hover { background: var(--primary-dark); }
+  #loginError { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 16px; }
+
+  #app { display: none; max-width: 1200px; margin: 0 auto; padding: 20px; }
+  header.topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+  }
+  header.topbar h1 { font-size: 20px; color: var(--primary-dark); margin: 0; }
+  .topbar-right { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-muted); }
+  .btn {
+    padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border);
+    background: #fff; cursor: pointer; font-size: 13px; color: var(--text);
+  }
+  .btn:hover { border-color: var(--primary); color: var(--primary-dark); }
+  .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-danger { color: var(--danger); }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+  .summary-bar {
+    display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .summary-card {
+    background: var(--card-bg); border-radius: 10px; padding: 14px 18px;
+    border: 1px solid var(--border); flex: 1; min-width: 140px;
+  }
+  .summary-card .label { font-size: 12px; color: var(--text-muted); }
+  .summary-card .value { font-size: 20px; font-weight: 600; color: var(--primary-dark); margin-top: 4px; }
+
+  .filter-bar {
+    display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center;
+  }
+  .filter-bar select, .filter-bar input[type=text] {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
+  }
+  .filter-bar label { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 10px; overflow: hidden; }
+  thead th {
+    text-align: left; font-size: 12px; color: var(--text-muted); font-weight: 500;
+    padding: 10px 12px; border-bottom: 1px solid var(--border); background: #faf8f6;
+  }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  tbody tr:hover { background: #faf7f4; cursor: pointer; }
+  tbody tr.archived-row { opacity: 0.5; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #f0ebe6; color: var(--text-muted); }
+
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    align-items: center; justify-content: center; z-index: 100; padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 560px;
+    max-height: 88vh; overflow-y: auto;
+  }
+  .modal h2 { margin: 0 0 16px; font-size: 17px; color: var(--primary-dark); }
+  .modal.wide { max-width: 720px; }
+  .form-row { margin-bottom: 12px; }
+  .form-row label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+  .form-row input, .form-row select, .form-row textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
+  }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .form-grid .form-row.full { grid-column: 1 / -1; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .modal-close { position: absolute; top: 16px; right: 20px; cursor: pointer; font-size: 18px; color: var(--text-muted); }
+  .modal { position: relative; }
+
+  .combo-wrap { position: relative; }
+  .combo-add-btn {
+    position: absolute; right: 4px; top: 26px; font-size: 11px; padding: 3px 8px;
+    background: var(--primary); color: #fff; border: none; border-radius: 4px; cursor: pointer;
+  }
+
+  .dup-hint {
+    padding: 10px 12px; border-radius: 8px; font-size: 12.5px; margin-bottom: 14px; display: none;
+  }
+  .dup-hint.show { display: block; }
+  .dup-hint.found { background: #fdf3e8; color: var(--warn); border: 1px solid #f0dcc0; }
+  .dup-hint.clear { background: #eef6ef; color: var(--success); border: 1px solid #d6e9d9; }
+
+  .calc-hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  .timeline { margin-top: 16px; border-left: 2px solid var(--border); padding-left: 16px; }
+  .timeline-item { margin-bottom: 16px; position: relative; }
+  .timeline-item::before {
+    content: ''; position: absolute; left: -21px; top: 4px; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--primary);
+  }
+  .timeline-item .t-time { font-size: 11px; color: var(--text-muted); }
+  .timeline-item .t-type { font-size: 12px; font-weight: 600; margin: 2px 0; }
+  .timeline-item .t-type.purchase { color: var(--success); }
+  .timeline-item .t-type.adjust { color: var(--warn); }
+  .timeline-item .t-type.edit { color: var(--text-muted); }
+  .timeline-item .t-detail { font-size: 12.5px; color: var(--text); line-height: 1.6; }
+
+  .detail-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+  .detail-title { font-size: 16px; font-weight: 600; color: var(--primary-dark); }
+  .detail-stats { display: flex; gap: 20px; margin: 12px 0; }
+  .detail-stats div .label { font-size: 11px; color: var(--text-muted); }
+  .detail-stats div .value { font-size: 17px; font-weight: 600; }
+  .section-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  .empty-hint { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-box">
+    <h1>TimuAnchi 材料系統</h1>
+    <input type="email" id="loginEmail" placeholder="Email">
+    <input type="password" id="loginPassword" placeholder="密碼">
+    <button id="loginBtn">登入</button>
+    <div id="loginError"></div>
+  </div>
+</div>
+
+<div id="app">
+  <header class="topbar">
+    <h1>材料清單</h1>
+    <div class="topbar-right">
+      <span id="userEmail"></span>
+      <button class="btn" id="openExchangeBtn">匯率設定</button>
+      <button class="btn btn-primary" id="openPurchaseBtn">＋ 新增進貨 / 材料</button>
+      <button class="btn" id="logoutBtn">登出</button>
+    </div>
+  </header>
+
+  <div class="summary-bar">
+    <div class="summary-card">
+      <div class="label">材料款數(不含下架)</div>
+      <div class="value" id="statCount">-</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">庫存總顆數</div>
+      <div class="value" id="statQty">-</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">庫存總值(NT$)</div>
+      <div class="value" id="statValue">-</div>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <input type="text" id="searchInput" placeholder="搜尋材料名稱 / 色號">
+    <select id="filterBrand"><option value="">全部品牌</option></select>
+    <select id="filterMaterial"><option value="">全部材質</option></select>
+    <select id="filterBeadType"><option value="">全部類型</option></select>
+    <label><input type="checkbox" id="showArchived"> 顯示已下架</label>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>品牌</th><th>材質</th><th>類型</th><th>尺寸</th><th>色系</th><th>色號</th>
+        <th>庫存(顆)</th><th>進價</th><th>庫存值</th><th>狀態</th>
+      </tr>
+    </thead>
+    <tbody id="materialsTbody"></tbody>
+  </table>
+  <div class="empty-hint" id="emptyHint" style="display:none;">目前沒有材料資料,點右上角「新增進貨/材料」開始建立</div>
+</div>
+
+<!-- 新增進貨 / 材料 Modal -->
+<div class="modal-overlay" id="purchaseModal">
+  <div class="modal wide">
+    <span class="modal-close" data-close="purchaseModal">✕</span>
+    <h2>新增進貨 / 材料</h2>
+
+    <div class="form-grid">
+      <div class="form-row combo-wrap">
+        <label>品牌</label>
+        <select id="pBrand"></select>
+        <button type="button" class="combo-add-btn" data-target="pBrand" data-optkey="brands">+新增</button>
+      </div>
+      <div class="form-row combo-wrap">
+        <label>材質</label>
+        <select id="pMaterial"></select>
+        <button type="button" class="combo-add-btn" data-target="pMaterial" data-optkey="materials">+新增</button>
+      </div>
+      <div class="form-row combo-wrap">
+        <label>類型</label>
+        <select id="pBeadType"></select>
+        <button type="button" class="combo-add-btn" data-target="pBeadType" data-optkey="beadTypes">+新增</button>
+      </div>
+      <div class="form-row">
+        <label>尺寸(選填,統一半形小寫,如 2mm*6mm)</label>
+        <input type="text" id="pSize">
+      </div>
+      <div class="form-row">
+        <label>色系名稱(選填)</label>
+        <input type="text" id="pColorSeries">
+      </div>
+      <div class="form-row">
+        <label>顏色 / 色號(選填,格式不限)</label>
+        <input type="text" id="pColorCode">
+      </div>
+    </div>
+
+    <div class="dup-hint" id="dupHint"></div>
+
+    <hr class="section-divider">
+
+    <div class="form-grid">
+      <div class="form-row">
+        <label>進貨平台 / 國家</label>
+        <input type="text" id="pPlatform" placeholder="如:淘寶">
+      </div>
+      <div class="form-row">
+        <label>店家名稱</label>
+        <input type="text" id="pSeller">
+      </div>
+      <div class="form-row">
+        <label>幣別</label>
+        <select id="pCurrency">
+          <option value="TWD">台幣</option>
+          <option value="CNY">人民幣</option>
+          <option value="JPY">日幣</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>原始金額(該包裝總額)</label>
+        <input type="number" step="0.01" id="pAmount">
+      </div>
+      <div class="form-row">
+        <label>進貨包裝規格(g/兩/包/條,選填參考用)</label>
+        <input type="text" id="pPackageSpec" placeholder="如:5g">
+      </div>
+      <div class="form-row">
+        <label>本次進貨顆數(必填,用於庫存與單價計算)</label>
+        <input type="number" id="pQuantity">
+      </div>
+      <div class="form-row full">
+        <div class="calc-hint" id="calcHint"></div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" data-close="purchaseModal">取消</button>
+      <button class="btn btn-primary" id="submitPurchaseBtn">送出</button>
+    </div>
+  </div>
+</div>
+
+<!-- 材料詳情 Modal -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal wide">
+    <span class="modal-close" data-close="detailModal">✕</span>
+    <div id="detailBody"></div>
+  </div>
+</div>
+
+<!-- 人工盤點調整 Modal -->
+<div class="modal-overlay" id="adjustModal">
+  <div class="modal">
+    <span class="modal-close" data-close="adjustModal">✕</span>
+    <h2>人工盤點調整</h2>
+    <div class="form-row">
+      <label>目前庫存</label>
+      <input type="text" id="adjustCurrent" disabled>
+    </div>
+    <div class="form-row">
+      <label>調整後數量(顆)</label>
+      <input type="number" id="adjustNewQty">
+    </div>
+    <div class="form-row">
+      <label>調整原因(選填)</label>
+      <textarea id="adjustReason" rows="2"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" data-close="adjustModal">取消</button>
+      <button class="btn btn-primary" id="submitAdjustBtn">確認調整</button>
+    </div>
+  </div>
+</div>
+
+<!-- 匯率設定 Modal -->
+<div class="modal-overlay" id="exchangeModal">
+  <div class="modal">
+    <span class="modal-close" data-close="exchangeModal">✕</span>
+    <h2>匯率設定</h2>
+    <div class="form-row">
+      <label>人民幣 → 台幣(1人民幣 = ? 台幣)</label>
+      <input type="number" step="0.01" id="rateCNY">
+    </div>
+    <div class="form-row">
+      <label>日幣 → 台幣(1日幣 = ? 台幣)</label>
+      <input type="number" step="0.01" id="rateJPY">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" data-close="exchangeModal">取消</button>
+      <button class="btn btn-primary" id="saveExchangeBtn">儲存</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, setDoc,
+  query, where, orderBy, serverTimestamp, onSnapshot
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDgeqH5KrIVj6xVlA7gPXa8Mg4sQO73QL4",
+  authDomain: "timuanchi-erpbom.firebaseapp.com",
+  projectId: "timuanchi-erpbom",
+  storageBucket: "timuanchi-erpbom.firebasestorage.app",
+  messagingSenderId: "640849188003",
+  appId: "1:640849188003:web:9a0039a6053f206c8f5b16"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// ---------- 全域狀態 ----------
+let materials = [];       // 目前所有材料(含下架)
+let options = { brands: [], materials: [], beadTypes: [] };
+let exchangeRates = { CNY: 5, JPY: 3 };
+let currentDetailId = null;
+let dupMatchedMaterial = null; // 新增進貨時比對到的既有材料
+
+// ---------- 登入 ----------
+document.getElementById('loginBtn').addEventListener('click', doLogin);
+document.getElementById('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  signInWithEmailAndPassword(auth, email, password).catch(err => {
+    errEl.textContent = '登入失敗:帳號或密碼錯誤';
+  });
+}
+
+document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
+
+onAuthStateChanged(auth, user => {
+  if (user) {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('userEmail').textContent = user.email;
+    initData();
+  } else {
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
+});
+
+// ---------- 初始化資料 ----------
+function initData() {
+  onSnapshot(collection(db, 'materials'), snap => {
+    materials = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderFilters();
+    renderTable();
+    renderSummary();
+  });
+
+  const optRef = doc(db, 'settings', 'options');
+  onSnapshot(optRef, snap => {
+    if (snap.exists()) {
+      options = { brands: [], materials: [], beadTypes: [], ...snap.data() };
+    } else {
+      setDoc(optRef, options);
+    }
+    fillComboOptions('pBrand', options.brands);
+    fillComboOptions('pMaterial', options.materials);
+    fillComboOptions('pBeadType', options.beadTypes);
+  });
+
+  const rateRef = doc(db, 'settings', 'exchangeRates');
+  onSnapshot(rateRef, snap => {
+    if (snap.exists()) {
+      exchangeRates = snap.data();
+    } else {
+      setDoc(rateRef, exchangeRates);
+    }
+  });
+}
+
+function fillComboOptions(selectId, list) {
+  const sel = document.getElementById(selectId);
+  const current = sel.value;
+  sel.innerHTML = '<option value="">(未選擇)</option>' + list.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  if (list.includes(current)) sel.value = current;
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---------- 篩選 / 列表渲染 ----------
+document.getElementById('searchInput').addEventListener('input', renderTable);
+document.getElementById('filterBrand').addEventListener('change', renderTable);
+document.getElementById('filterMaterial').addEventListener('change', renderTable);
+document.getElementById('filterBeadType').addEventListener('change', renderTable);
+document.getElementById('showArchived').addEventListener('change', renderTable);
+
+function renderFilters() {
+  const uniq = key => [...new Set(materials.map(m => m[key]).filter(Boolean))].sort();
+  fillFilterSelect('filterBrand', uniq('brand'));
+  fillFilterSelect('filterMaterial', uniq('material'));
+  fillFilterSelect('filterBeadType', uniq('beadType'));
+}
+
+function fillFilterSelect(id, list) {
+  const sel = document.getElementById(id);
+  const current = sel.value;
+  const firstLabel = sel.options[0].textContent;
+  sel.innerHTML = `<option value="">${firstLabel}</option>` + list.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  if (list.includes(current)) sel.value = current;
+}
+
+function displayName(m) {
+  return [m.brand, m.material, m.beadType, m.colorSeries, m.size].filter(Boolean).join(' ') +
+    (m.colorCode ? '－' + m.colorCode : '');
+}
+
+function renderTable() {
+  const kw = document.getElementById('searchInput').value.trim().toLowerCase();
+  const fBrand = document.getElementById('filterBrand').value;
+  const fMaterial = document.getElementById('filterMaterial').value;
+  const fBeadType = document.getElementById('filterBeadType').value;
+  const showArchived = document.getElementById('showArchived').checked;
+
+  let list = materials.filter(m => {
+    if (!showArchived && m.archived) return false;
+    if (fBrand && m.brand !== fBrand) return false;
+    if (fMaterial && m.material !== fMaterial) return false;
+    if (fBeadType && m.beadType !== fBeadType) return false;
+    if (kw) {
+      const name = displayName(m).toLowerCase();
+      if (!name.includes(kw) && !(m.colorCode || '').toLowerCase().includes(kw)) return false;
+    }
+    return true;
+  });
+
+  list.sort((a, b) => displayName(a).localeCompare(displayName(b), 'zh-Hant'));
+
+  const tbody = document.getElementById('materialsTbody');
+  tbody.innerHTML = '';
+  document.getElementById('emptyHint').style.display = list.length ? 'none' : 'block';
+
+  for (const m of list) {
+    const stock = m.currentStock || 0;
+    const cost = m.currentUnitCost || 0;
+    const value = stock * cost;
+    const tr = document.createElement('tr');
+    if (m.archived) tr.classList.add('archived-row');
+    tr.innerHTML = `
+      <td>${escapeHtml(m.brand)}</td>
+      <td>${escapeHtml(m.material)}</td>
+      <td>${escapeHtml(m.beadType)}</td>
+      <td>${escapeHtml(m.size)}</td>
+      <td>${escapeHtml(m.colorSeries)}</td>
+      <td>${escapeHtml(m.colorCode)}</td>
+      <td>${stock.toLocaleString()}</td>
+      <td>${cost ? cost.toFixed(4) : '-'}</td>
+      <td>${value ? value.toFixed(2) : '-'}</td>
+      <td>${m.archived ? '<span class="tag">已下架</span>' : ''}</td>
+    `;
+    tr.addEventListener('click', () => openDetail(m.id));
+    tbody.appendChild(tr);
+  }
+}
+
+function renderSummary() {
+  const active = materials.filter(m => !m.archived);
+  const totalQty = active.reduce((s, m) => s + (m.currentStock || 0), 0);
+  const totalValue = active.reduce((s, m) => s + (m.currentStock || 0) * (m.currentUnitCost || 0), 0);
+  document.getElementById('statCount').textContent = active.length;
+  document.getElementById('statQty').textContent = totalQty.toLocaleString();
+  document.getElementById('statValue').textContent = totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+// ---------- Modal 開關 ----------
+document.querySelectorAll('[data-close]').forEach(el => {
+  el.addEventListener('click', () => closeModal(el.dataset.close));
+});
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ---------- 下拉選單「+新增」----------
+document.querySelectorAll('.combo-add-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const val = prompt('輸入新的選項:');
+    if (!val || !val.trim()) return;
+    const trimmed = val.trim();
+    const key = btn.dataset.optkey;
+    if (!options[key].includes(trimmed)) {
+      options[key] = [...options[key], trimmed];
+      await setDoc(doc(db, 'settings', 'options'), { [key]: options[key] }, { merge: true });
+    }
+    document.getElementById(btn.dataset.target).value = trimmed;
+  });
+});
+
+// ---------- 新增進貨 / 材料 ----------
+document.getElementById('openPurchaseBtn').addEventListener('click', () => {
+  resetPurchaseForm();
+  openModal('purchaseModal');
+});
+
+function resetPurchaseForm() {
+  ['pBrand','pMaterial','pBeadType'].forEach(id => document.getElementById(id).value = '');
+  ['pSize','pColorSeries','pColorCode','pPlatform','pSeller','pAmount','pPackageSpec','pQuantity'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('pCurrency').value = 'TWD';
+  dupMatchedMaterial = null;
+  const hint = document.getElementById('dupHint');
+  hint.className = 'dup-hint';
+  hint.textContent = '';
+  document.getElementById('calcHint').textContent = '';
+}
+
+['pBrand','pMaterial','pBeadType','pSize','pColorSeries','pColorCode'].forEach(id => {
+  document.getElementById(id).addEventListener('change', checkDuplicate);
+  document.getElementById(id).addEventListener('blur', checkDuplicate);
+});
+
+function checkDuplicate() {
+  const key = {
+    brand: document.getElementById('pBrand').value.trim(),
+    material: document.getElementById('pMaterial').value.trim(),
+    beadType: document.getElementById('pBeadType').value.trim(),
+    size: document.getElementById('pSize').value.trim(),
+    colorSeries: document.getElementById('pColorSeries').value.trim(),
+    colorCode: document.getElementById('pColorCode').value.trim(),
+  };
+  const hasAny = Object.values(key).some(v => v);
+  const hint = document.getElementById('dupHint');
+  if (!hasAny) {
+    dupMatchedMaterial = null;
+    hint.className = 'dup-hint';
+    hint.textContent = '';
+    return;
+  }
+  const match = materials.find(m => !m.archived &&
+    (m.brand || '') === key.brand &&
+    (m.material || '') === key.material &&
+    (m.beadType || '') === key.beadType &&
+    (m.size || '') === key.size &&
+    (m.colorSeries || '') === key.colorSeries &&
+    (m.colorCode || '') === key.colorCode
+  );
+  dupMatchedMaterial = match || null;
+  if (match) {
+    hint.className = 'dup-hint show found';
+    hint.textContent = `⚠ 偵測到已有相同材料(目前庫存 ${match.currentStock || 0} 顆)。送出後將新增一筆進貨紀錄到這筆材料,庫存會累加。`;
+  } else {
+    hint.className = 'dup-hint show clear';
+    hint.textContent = '沒有找到完全相符的既有材料,送出後將建立一筆全新材料。';
+  }
+}
+
+// 即時試算換算金額 / 單價
+['pCurrency','pAmount','pQuantity'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateCalcHint);
+  document.getElementById(id).addEventListener('change', updateCalcHint);
+});
+
+function convertToTwd(amount, currency) {
+  if (currency === 'TWD') return amount;
+  if (currency === 'CNY') return amount * (exchangeRates.CNY || 5);
+  if (currency === 'JPY') return amount * (exchangeRates.JPY || 3);
+  return amount;
+}
+
+function updateCalcHint() {
+  const amount = parseFloat(document.getElementById('pAmount').value);
+  const currency = document.getElementById('pCurrency').value;
+  const qty = parseFloat(document.getElementById('pQuantity').value);
+  const hintEl = document.getElementById('calcHint');
+  if (isNaN(amount) || isNaN(qty) || qty <= 0) { hintEl.textContent = ''; return; }
+  const twd = convertToTwd(amount, currency);
+  const unitCost = twd / qty;
+  hintEl.textContent = `換算台幣金額:NT$ ${twd.toFixed(2)}　→　換算單價:NT$ ${unitCost.toFixed(4)} / 顆`;
+}
+
+document.getElementById('submitPurchaseBtn').addEventListener('click', submitPurchase);
+
+async function submitPurchase() {
+  const brand = document.getElementById('pBrand').value.trim();
+  const material = document.getElementById('pMaterial').value.trim();
+  const beadType = document.getElementById('pBeadType').value.trim();
+  const size = document.getElementById('pSize').value.trim();
+  const colorSeries = document.getElementById('pColorSeries').value.trim();
+  const colorCode = document.getElementById('pColorCode').value.trim();
+
+  const platform = document.getElementById('pPlatform').value.trim();
+  const seller = document.getElementById('pSeller').value.trim();
+  const currency = document.getElementById('pCurrency').value;
+  const amount = parseFloat(document.getElementById('pAmount').value);
+  const packageSpec = document.getElementById('pPackageSpec').value.trim();
+  const quantity = parseFloat(document.getElementById('pQuantity').value);
+
+  if (!quantity || quantity <= 0) { alert('請輸入本次進貨顆數'); return; }
+  if (isNaN(amount) || amount < 0) { alert('請輸入正確的原始金額'); return; }
+
+  const twdAmount = convertToTwd(amount, currency);
+  const unitCost = twdAmount / quantity;
+  const rateUsed = currency === 'TWD' ? 1 : (exchangeRates[currency] || 1);
+
+  const btn = document.getElementById('submitPurchaseBtn');
+  btn.disabled = true;
+  try {
+    let materialId = dupMatchedMaterial ? dupMatchedMaterial.id : null;
+
+    if (!materialId) {
+      const newDoc = await addDoc(collection(db, 'materials'), {
+        brand, material, beadType, size, colorSeries, colorCode,
+        currentStock: 0,
+        currentUnitCost: 0,
+        archived: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      materialId = newDoc.id;
+    }
+
+    await addDoc(collection(db, 'materials', materialId, 'history'), {
+      type: 'purchase',
+      platform, seller, currency, originalAmount: amount, exchangeRateUsed: rateUsed,
+      twdAmount, packageSpec, quantity, unitCost,
+      timestamp: serverTimestamp(),
+    });
+
+    const matRef = doc(db, 'materials', materialId);
+    const snap = await getDoc(matRef);
+    const cur = snap.data();
+    await updateDoc(matRef, {
+      currentStock: (cur.currentStock || 0) + quantity,
+      currentUnitCost: Math.max(cur.currentUnitCost || 0, unitCost),
+      updatedAt: serverTimestamp(),
+    });
+
+    // 新增選項若尚未存在,一併補進 options(以防使用者跳過+新增直接手動輸入其他欄位帶出重複)
+    closeModal('purchaseModal');
+  } catch (e) {
+    alert('送出失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ---------- 材料詳情 ----------
+async function openDetail(id) {
+  currentDetailId = id;
+  const m = materials.find(x => x.id === id);
+  if (!m) return;
+
+  const stock = m.currentStock || 0;
+  const cost = m.currentUnitCost || 0;
+  const value = stock * cost;
+
+  const body = document.getElementById('detailBody');
+  body.innerHTML = `
+    <div class="detail-header">
+      <div class="detail-title">${escapeHtml(displayName(m))}</div>
+      <div>
+        <button class="btn btn-sm" id="editFieldsBtn">編輯屬性</button>
+        <button class="btn btn-sm" id="adjustBtn">人工盤點調整</button>
+        <button class="btn btn-sm btn-danger" id="archiveBtn">${m.archived ? '取消下架' : '下架'}</button>
+      </div>
+    </div>
+    <div class="detail-stats">
+      <div><div class="label">目前庫存</div><div class="value">${stock.toLocaleString()} 顆</div></div>
+      <div><div class="label">目前進價(歷史最高單價)</div><div class="value">NT$ ${cost.toFixed(4)}</div></div>
+      <div><div class="label">庫存值</div><div class="value">NT$ ${value.toFixed(2)}</div></div>
+    </div>
+    <hr class="section-divider">
+    <div style="font-size:13px;font-weight:600;margin-bottom:4px;">完整異動歷史</div>
+    <div class="timeline" id="historyTimeline"><div class="empty-hint">載入中...</div></div>
+  `;
+
+  document.getElementById('adjustBtn').addEventListener('click', () => openAdjustModal(m));
+  document.getElementById('archiveBtn').addEventListener('click', () => toggleArchive(m));
+  document.getElementById('editFieldsBtn').addEventListener('click', () => editMaterialFields(m));
+
+  openModal('detailModal');
+
+  const histSnap = await getDocs(query(collection(db, 'materials', id, 'history'), orderBy('timestamp', 'desc')));
+  const logs = histSnap.docs.map(d => d.data());
+  renderTimeline(logs);
+}
+
+function renderTimeline(logs) {
+  const el = document.getElementById('historyTimeline');
+  if (!logs.length) { el.innerHTML = '<div class="empty-hint">尚無紀錄</div>'; return; }
+  el.innerHTML = logs.map(log => {
+    const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('zh-TW') : '(時間處理中)';
+    let typeLabel = '', cls = '', detail = '';
+    if (log.type === 'purchase') {
+      typeLabel = '進貨'; cls = 'purchase';
+      detail = `${log.platform || ''} ${log.seller ? '／' + log.seller : ''}
+        原始金額:${log.originalAmount} ${log.currency}(匯率 ${log.exchangeRateUsed})
+        →　台幣 NT$${(log.twdAmount||0).toFixed(2)}
+        ${log.packageSpec ? '　包裝規格:' + escapeHtml(log.packageSpec) : ''}<br>
+        進貨數量:+${log.quantity} 顆　單價:NT$${(log.unitCost||0).toFixed(4)}`;
+    } else if (log.type === 'adjust') {
+      typeLabel = '人工盤點調整'; cls = 'adjust';
+      detail = `數量:${log.beforeQty} → ${log.afterQty} 顆(${log.diff >= 0 ? '+' : ''}${log.diff})
+        ${log.reason ? '<br>原因:' + escapeHtml(log.reason) : ''}`;
+    } else if (log.type === 'edit') {
+      typeLabel = '欄位修改'; cls = 'edit';
+      detail = `${escapeHtml(log.field)}:「${escapeHtml(log.oldValue)}」→「${escapeHtml(log.newValue)}」`;
+    } else if (log.type === 'archive') {
+      typeLabel = log.archived ? '下架' : '取消下架'; cls = 'edit';
+      detail = '';
+    }
+    return `<div class="timeline-item">
+      <div class="t-time">${time}</div>
+      <div class="t-type ${cls}">${typeLabel}</div>
+      <div class="t-detail">${detail}</div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleArchive(m) {
+  const newState = !m.archived;
+  if (!confirm(newState ? '確定要下架這款材料嗎?下架後不會出現在清單與新增進貨比對中,但歷史紀錄會完整保留。' : '確定要取消下架嗎?')) return;
+  await updateDoc(doc(db, 'materials', m.id), { archived: newState, updatedAt: serverTimestamp() });
+  await addDoc(collection(db, 'materials', m.id, 'history'), {
+    type: 'archive', archived: newState, timestamp: serverTimestamp(),
+  });
+  openDetail(m.id);
+}
+
+async function editMaterialFields(m) {
+  const fields = [
+    ['brand', '品牌'], ['material', '材質'], ['beadType', '類型'],
+    ['size', '尺寸'], ['colorSeries', '色系名稱'], ['colorCode', '顏色/色號']
+  ];
+  for (const [key, label] of fields) {
+    const oldVal = m[key] || '';
+    const input = prompt(`修改「${label}」(留空表示清空):`, oldVal);
+    if (input === null) continue; // 使用者取消,跳過此欄位
+    const newVal = input.trim();
+    if (newVal === oldVal) continue;
+    await updateDoc(doc(db, 'materials', m.id), { [key]: newVal, updatedAt: serverTimestamp() });
+    await addDoc(collection(db, 'materials', m.id, 'history'), {
+      type: 'edit', field: label, oldValue: oldVal, newValue: newVal, timestamp: serverTimestamp(),
+    });
+    m[key] = newVal;
+  }
+  openDetail(m.id);
+}
+
+// ---------- 人工盤點調整 ----------
+let adjustTargetMaterial = null;
+function openAdjustModal(m) {
+  adjustTargetMaterial = m;
+  document.getElementById('adjustCurrent').value = (m.currentStock || 0) + ' 顆';
+  document.getElementById('adjustNewQty').value = m.currentStock || 0;
+  document.getElementById('adjustReason').value = '';
+  openModal('adjustModal');
+}
+
+document.getElementById('submitAdjustBtn').addEventListener('click', async () => {
+  if (!adjustTargetMaterial) return;
+  const newQty = parseFloat(document.getElementById('adjustNewQty').value);
+  if (isNaN(newQty) || newQty < 0) { alert('請輸入正確的數量'); return; }
+  const reason = document.getElementById('adjustReason').value.trim();
+  const before = adjustTargetMaterial.currentStock || 0;
+
+  await addDoc(collection(db, 'materials', adjustTargetMaterial.id, 'history'), {
+    type: 'adjust', beforeQty: before, afterQty: newQty, diff: newQty - before, reason,
+    timestamp: serverTimestamp(),
+  });
+  await updateDoc(doc(db, 'materials', adjustTargetMaterial.id), {
+    currentStock: newQty, updatedAt: serverTimestamp(),
+  });
+
+  closeModal('adjustModal');
+  openDetail(adjustTargetMaterial.id);
+});
+
+// ---------- 匯率設定 ----------
+document.getElementById('openExchangeBtn').addEventListener('click', () => {
+  document.getElementById('rateCNY').value = exchangeRates.CNY || 5;
+  document.getElementById('rateJPY').value = exchangeRates.JPY || 3;
+  openModal('exchangeModal');
+});
+
+document.getElementById('saveExchangeBtn').addEventListener('click', async () => {
+  const cny = parseFloat(document.getElementById('rateCNY').value);
+  const jpy = parseFloat(document.getElementById('rateJPY').value);
+  if (isNaN(cny) || isNaN(jpy)) { alert('請輸入正確的匯率數字'); return; }
+  await setDoc(doc(db, 'settings', 'exchangeRates'), { CNY: cny, JPY: jpy });
+  closeModal('exchangeModal');
+});
+</script>
+</body>
+</html>
