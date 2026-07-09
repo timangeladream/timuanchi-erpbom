@@ -25,6 +25,14 @@
 
   .ta-is-hidden { display: none !important; }
 
+  #authLoading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
   #loginScreen {
     display: flex;
     align-items: center;
@@ -107,7 +115,9 @@
 </head>
 <body>
 
-<div id="loginScreen">
+<div id="authLoading">載入中...</div>
+
+<div id="loginScreen" class="ta-is-hidden">
   <div class="ta-login-box">
     <h1>TimuAnchi 材料系統</h1>
     <input type="email" id="loginEmail" placeholder="Email">
@@ -192,6 +202,7 @@ document.getElementById('closeDrawerBtn').addEventListener('click', closeDrawer)
 document.getElementById('drawerOverlay').addEventListener('click', closeDrawer);
 
 onAuthStateChanged(auth, user => {
+  document.getElementById('authLoading').classList.add('ta-is-hidden');
   if (user) {
     document.getElementById('loginScreen').classList.add('ta-is-hidden');
     document.getElementById('app').classList.remove('ta-is-hidden');
