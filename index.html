@@ -490,7 +490,11 @@ function renderTable() {
     return true;
   });
 
-  list.sort((a, b) => displayName(a).localeCompare(displayName(b), 'zh-Hant'));
+  list.sort((a, b) => {
+    const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : Infinity;
+    const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : Infinity;
+    return tb - ta;
+  });
 
   const tbody = document.getElementById('materialsTbody');
   tbody.innerHTML = '';
