@@ -105,6 +105,7 @@
   .ta-options-row-input {
     flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
   }
+  .ta-currency-code { min-width: 50px; font-weight: 600; font-size: 13px; }
 
   .ta-filter-bar {
     display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center;
@@ -364,9 +365,7 @@
       <div class="ta-form-row">
         <label>幣別</label>
         <select id="pCurrency">
-          <option value="TWD">台幣</option>
-          <option value="CNY">人民幣</option>
-          <option value="JPY">日幣</option>
+          <option value="TWD">TWD(台幣)</option>
         </select>
       </div>
       <div class="ta-form-row">
@@ -550,17 +549,11 @@
   <div class="ta-modal">
     <span class="ta-modal-close" data-close="exchangeModal">✕</span>
     <h2>匯率設定</h2>
-    <div class="ta-form-row">
-      <label>人民幣 → 台幣(1人民幣 = ? 台幣)</label>
-      <input type="number" step="0.01" id="rateCNY">
-    </div>
-    <div class="ta-form-row">
-      <label>日幣 → 台幣(1日幣 = ? 台幣)</label>
-      <input type="number" step="0.01" id="rateJPY">
-    </div>
+    <div class="ta-modal-text">台幣(TWD)為基準幣別,固定 = 1,不需設定。以下是其他幣別換算成台幣的匯率(1該幣別 = ? 台幣),改完數字按「儲存」立即生效。</div>
+    <div id="exchangeRateList"></div>
+    <button class="ta-btn" id="addCurrencyBtn">＋ 新增幣別</button>
     <div class="ta-modal-actions">
-      <button class="ta-btn" data-close="exchangeModal">取消</button>
-      <button class="ta-btn ta-btn-primary" id="saveExchangeBtn">儲存</button>
+      <button class="ta-btn ta-btn-primary" data-close="exchangeModal">關閉</button>
     </div>
   </div>
 </div>
@@ -599,6 +592,7 @@
   <button class="ta-drawer-item" id="openOptionsBtn">選項管理</button>
   <button class="ta-drawer-item" id="openExchangeBtn">匯率設定</button>
   <button class="ta-drawer-item" id="openImportBtn">匯入資料</button>
+  <button class="ta-drawer-item" id="openExportBtn">匯出資料</button>
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item ta-drawer-item--danger" id="logoutBtn">登出</button>
 </aside>
@@ -714,7 +708,17 @@ function initData() {
     } else {
       setDoc(rateRef, exchangeRates);
     }
+    fillCurrencySelect();
+    renderExchangeRateList();
   });
+}
+
+function fillCurrencySelect() {
+  const sel = document.getElementById('pCurrency');
+  const current = sel.value;
+  const codes = Object.keys(exchangeRates).sort();
+  sel.innerHTML = '<option value="TWD">TWD(台幣)</option>' + codes.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if (current && (current === 'TWD' || codes.includes(current))) sel.value = current;
 }
 
 function fillComboOptions(selectId, list) {
@@ -963,8 +967,19 @@ function renderSummary() {
 document.querySelectorAll('[data-close]').forEach(el => {
   el.addEventListener('click', () => closeModal(el.dataset.close));
 });
-function openModal(id) { document.getElementById(id).classList.add('ta-is-open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('ta-is-open'); }
+// 疊層順序:每次開啟彈窗都比目前開著的彈窗高一層,不管是哪一種彈窗、從哪裡被叫出來
+let modalZCounter = 160; // 起始值需高於右側選單(z-index 151),避免選單收合動畫途中被彈窗蓋到的瞬間穿幫
+function openModal(id) {
+  const el = document.getElementById(id);
+  modalZCounter += 1;
+  el.style.zIndex = modalZCounter;
+  el.classList.add('ta-is-open');
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  el.classList.remove('ta-is-open');
+  el.style.zIndex = '';
+}
 
 // ---------- 右側選單 ----------
 function openDrawer() {
@@ -1146,9 +1161,7 @@ function checkDuplicate() {
 
 function convertToTwd(amount, currency) {
   if (currency === 'TWD') return amount;
-  if (currency === 'CNY') return amount * (exchangeRates.CNY || 5);
-  if (currency === 'JPY') return amount * (exchangeRates.JPY || 3);
-  return amount;
+  return amount * (exchangeRates[currency] || 1);
 }
 
 function updateCalcHint() {
@@ -1491,17 +1504,51 @@ document.getElementById('submitAdjustBtn').addEventListener('click', async () =>
 // ---------- 匯率設定 ----------
 document.getElementById('openExchangeBtn').addEventListener('click', () => {
   closeDrawer();
-  document.getElementById('rateCNY').value = exchangeRates.CNY || 5;
-  document.getElementById('rateJPY').value = exchangeRates.JPY || 3;
+  renderExchangeRateList();
   openModal('exchangeModal');
 });
 
-document.getElementById('saveExchangeBtn').addEventListener('click', async () => {
-  const cny = parseFloat(document.getElementById('rateCNY').value);
-  const jpy = parseFloat(document.getElementById('rateJPY').value);
-  if (isNaN(cny) || isNaN(jpy)) { alert('請輸入正確的匯率數字'); return; }
-  await setDoc(doc(db, 'settings', 'exchangeRates'), { CNY: cny, JPY: jpy });
-  closeModal('exchangeModal');
+function renderExchangeRateList() {
+  const wrap = document.getElementById('exchangeRateList');
+  if (!wrap) return;
+  const codes = Object.keys(exchangeRates).sort();
+  if (!codes.length) {
+    wrap.innerHTML = '<div class="ta-empty-hint">尚未新增其他幣別</div>';
+    return;
+  }
+  wrap.innerHTML = '';
+  codes.forEach(code => {
+    const row = document.createElement('div');
+    row.className = 'ta-options-row';
+    row.innerHTML = `
+      <span class="ta-currency-code">${escapeHtml(code)}</span>
+      <input type="number" step="0.01" class="ta-options-row-input" value="${exchangeRates[code]}">
+      <button type="button" class="ta-btn ta-btn-sm ta-btn-primary">儲存</button>
+    `;
+    const input = row.querySelector('.ta-options-row-input');
+    const saveBtn = row.querySelector('.ta-btn-primary');
+    saveBtn.addEventListener('click', () => saveExchangeRate(code, input.value));
+    wrap.appendChild(row);
+  });
+}
+
+async function saveExchangeRate(code, valueStr) {
+  const val = parseFloat(valueStr);
+  if (isNaN(val) || val <= 0) { alert('請輸入正確的匯率數字'); return; }
+  await setDoc(doc(db, 'settings', 'exchangeRates'), { [code]: val }, { merge: true });
+}
+
+document.getElementById('addCurrencyBtn').addEventListener('click', async () => {
+  const codeInput = await showInputModal({ title: '新增幣別', label: '輸入幣別代碼(如 USD)' });
+  if (!codeInput) return;
+  const code = codeInput.trim().toUpperCase();
+  if (code === 'TWD') { alert('台幣已經是基準幣別,不需要新增'); return; }
+  if (exchangeRates[code] !== undefined) { alert('這個幣別已經存在了'); return; }
+  const rateInput = await showInputModal({ title: '設定匯率', label: `1 ${code} = ? 台幣` });
+  if (!rateInput) return;
+  const rate = parseFloat(rateInput);
+  if (isNaN(rate) || rate <= 0) { alert('請輸入正確的匯率數字'); return; }
+  await setDoc(doc(db, 'settings', 'exchangeRates'), { [code]: rate }, { merge: true });
 });
 
 // ---------- 匯入資料 ----------
@@ -1601,7 +1648,8 @@ function processImportRows(rows) {
 
     const rowErrors = [];
     if (!dateVal) rowErrors.push('進貨日期格式錯誤或空白(請用 YYYY-MM-DD)');
-    if (!['TWD','CNY','JPY'].includes(currency)) rowErrors.push('幣別必須是 TWD、CNY 或 JPY');
+    const validCurrencies = ['TWD', ...Object.keys(exchangeRates)];
+    if (!validCurrencies.includes(currency)) rowErrors.push(`幣別必須是系統已設定的幣別之一(${validCurrencies.join('、')}),如需新幣別請先到「匯率設定」新增`);
     if (!['total','unit'].includes(amountMode)) rowErrors.push('金額類型必須是 total 或 unit');
     if (amount === '' || amount == null || isNaN(Number(amount)) || Number(amount) < 0) rowErrors.push('金額必須是不小於0的數字');
     if (quantity === '' || quantity == null || isNaN(Number(quantity)) || Number(quantity) <= 0) rowErrors.push('本次進貨數量必須是大於0的數字');
@@ -1795,6 +1843,76 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
     document.getElementById('importErrorList').innerHTML = `<div class="ta-import-errors">匯入失敗:${escapeHtml(err.message)}</div>`;
   } finally {
     btn.disabled = false;
+  }
+});
+
+// ---------- 匯出資料 ----------
+const EXPORT_HISTORY_HEADERS = ['分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','進貨包裝規格數字','進貨包裝規格單位','本次進貨數量','數量單位','換算台幣總額','換算單價(台幣)','換算人民幣總額','換算單價(人民幣)'];
+
+function sanitizeSheetName(name) {
+  let n = String(name || '未分類').replace(/[\\/?*[\]:]/g, '_');
+  if (n.length > 28) n = n.slice(0, 28);
+  return n || '未分類';
+}
+
+document.getElementById('openExportBtn').addEventListener('click', async () => {
+  closeDrawer();
+  const btn = document.getElementById('openExportBtn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '匯出中...';
+
+  try {
+    // 平行讀取所有材料的完整進貨歷史
+    const historyResults = await Promise.all(materials.map(m =>
+      getDocs(query(collection(db, 'materials', m.id, 'history'), orderBy('timestamp', 'asc')))
+        .then(snap => ({ material: m, snap }))
+    ));
+    const cnyRate = exchangeRates.CNY || 5;
+    const historyRows = [];
+    for (const { material: m, snap } of historyResults) {
+      snap.docs.forEach(d => {
+        const log = d.data();
+        if (log.type !== 'purchase') return;
+        const twdAmount = log.twdAmount || 0;
+        const unitCost = log.unitCost || 0;
+        historyRows.push([
+          m.category || '', m.brand || '', m.material || '', m.beadType || '', m.size || '',
+          m.colorSeries || '', m.colorCode || '',
+          log.timestamp && log.timestamp.toDate ? log.timestamp.toDate().toISOString().slice(0, 10) : '',
+          log.platform || '', log.seller || '', log.currency || '', log.amountMode || '',
+          log.originalAmount ?? '', log.packageSpecValue ?? '', log.packageSpecUnit || '',
+          log.quantity ?? '', log.quantityUnit || '',
+          Number(twdAmount.toFixed(2)), Number(unitCost.toFixed(4)),
+          Number((twdAmount / cnyRate).toFixed(2)), Number((unitCost / cnyRate).toFixed(4)),
+        ]);
+      });
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    // 「全部」放所有分類的完整進貨歷史
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([EXPORT_HISTORY_HEADERS, ...historyRows]), '全部');
+
+    // 每個分類一個分頁,內容一樣是進貨歷史格式,只篩選該分類的紀錄
+    const usedNames = new Set(['全部']);
+    const categoriesInData = [...new Set(materials.map(m => m.category || '未分類'))];
+    for (const cat of categoriesInData) {
+      const rows = historyRows.filter(r => (r[0] || '未分類') === cat);
+      let sheetName = sanitizeSheetName(cat);
+      let suffix = 1;
+      while (usedNames.has(sheetName)) { suffix++; sheetName = sanitizeSheetName(cat) + '_' + suffix; }
+      usedNames.add(sheetName);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([EXPORT_HISTORY_HEADERS, ...rows]), sheetName);
+    }
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `材料資料匯出_${dateStr}.xlsx`);
+  } catch (err) {
+    alert('匯出失敗:' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 });
 </script>
