@@ -79,7 +79,7 @@
   .ta-btn-danger { color: var(--danger); }
   .ta-btn-danger-solid { background: var(--danger); color: #fff; border-color: var(--danger); }
   .ta-btn-danger-solid:hover { opacity: 0.9; }
-  .ta-btn-sm { padding: 4px 10px; font-size: 12px; }
+  .ta-btn-sm { padding: 6px 8px; font-size: 10px; }
 
   .ta-summary-bar {
     display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;
@@ -143,6 +143,27 @@
   .ta-tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #e8edf3; color: var(--text-muted); }
   .ta-col-right { text-align: right; }
   .ta-col-center { text-align: center; }
+
+  .ta-pagination-info { text-align: right; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+  .ta-pagination { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; justify-content: flex-end; }
+  .ta-pagination-numbers { display: flex; gap: 4px; flex-wrap: wrap; }
+  .ta-pagination-arrow, .ta-pagination-num {
+    width: 25px; height: 20px; padding: 0; border: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; color: var(--text); background: #eef1f5; cursor: pointer;
+  }
+  .ta-pagination-arrow { border-radius: 50%; }
+  .ta-pagination-num { border-radius: 6px; }
+  .ta-pagination-arrow:hover, .ta-pagination-num:hover { background: var(--border); }
+  .ta-pagination-arrow:disabled { opacity: 0.4; cursor: not-allowed; }
+  .ta-pagination-arrow:disabled:hover { background: #eef1f5; }
+  .ta-pagination-num.ta-is-active { background: var(--primary-dark); color: #fff; font-weight: 600; }
+  .ta-pagination-num.ta-is-active:hover { background: var(--primary-dark); }
+  .ta-pagination-ellipsis { padding: 0 4px; color: var(--text-muted); }
+  .ta-pagination-jump { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-muted); }
+  .ta-pagination-jump input {
+    width: 36px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 10px;
+  }
 
   .ta-modal-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
@@ -340,6 +361,9 @@
     <select id="filterBeadType"><option value="">全部類型/款式</option></select>
     <label><input type="checkbox" id="showArchived"> 顯示已下架</label>
   </div>
+
+  <div class="ta-pagination-info" id="paginationInfo"></div>
+  <div class="ta-pagination" id="pagination"></div>
 
   <div class="ta-table-scroll">
   <table>
@@ -679,6 +703,8 @@ let exchangeRates = { CNY: 5, JPY: 3 };
 let currentDetailId = null;
 let dupMatchedMaterial = null; // 新增進貨時比對到的既有材料
 let categoryFilter = ''; // 目前選中的分類頁籤,空字串代表全部
+let currentPage = 1;
+const PAGE_SIZE = 200;
 
 const DEFAULT_CATEGORIES = ['日本製玻璃珠', '捷克製玻璃珠', '中國製玻璃珠', '不鏽鋼', '925銀', '銅胚', '天然石水晶', '貝殼', '耳夾'];
 const DEFAULT_PACKAGE_UNITS = ['g', '兩', '包', '條', '公斤', '個'];
@@ -785,11 +811,12 @@ function escapeHtml(s) {
 }
 
 // ---------- 篩選 / 列表渲染 ----------
-document.getElementById('searchInput').addEventListener('input', renderTable);
-document.getElementById('filterBrand').addEventListener('change', renderTable);
-document.getElementById('filterMaterial').addEventListener('change', renderTable);
-document.getElementById('filterBeadType').addEventListener('change', renderTable);
-document.getElementById('showArchived').addEventListener('change', renderTable);
+function resetPageAndRenderTable() { currentPage = 1; renderTable(); }
+document.getElementById('searchInput').addEventListener('input', resetPageAndRenderTable);
+document.getElementById('filterBrand').addEventListener('change', resetPageAndRenderTable);
+document.getElementById('filterMaterial').addEventListener('change', resetPageAndRenderTable);
+document.getElementById('filterBeadType').addEventListener('change', resetPageAndRenderTable);
+document.getElementById('showArchived').addEventListener('change', resetPageAndRenderTable);
 
 function renderFilters() {
   const scoped = categoryFilter ? materials.filter(m => m.category === categoryFilter) : materials;
@@ -835,6 +862,7 @@ function renderCategoryTabs() {
 }
 
 function switchCategory() {
+  currentPage = 1;
   renderCategoryTabs();
   renderFilters();
   renderTable();
@@ -973,11 +1001,26 @@ function renderTable() {
     return tb - ta;
   });
 
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+  const pagedList = list.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   const tbody = document.getElementById('materialsTbody');
   tbody.innerHTML = '';
   document.getElementById('emptyHint').classList.toggle('ta-is-hidden', list.length > 0);
 
-  for (const m of list) {
+  const infoEl = document.getElementById('paginationInfo');
+  if (list.length === 0) {
+    infoEl.textContent = '';
+  } else {
+    const startIdx = (currentPage - 1) * PAGE_SIZE + 1;
+    const endIdx = Math.min(currentPage * PAGE_SIZE, list.length);
+    infoEl.textContent = `顯示第 ${startIdx.toLocaleString()}–${endIdx.toLocaleString()} 筆，共 ${list.length.toLocaleString()} 筆`;
+  }
+  renderPagination(totalPages);
+
+  for (const m of pagedList) {
     const stock = m.currentStock || 0;
     const cost = m.currentUnitCost || 0;
     const unit = m.unit || '';
@@ -998,6 +1041,51 @@ function renderTable() {
     tr.addEventListener('click', () => openDetail(m.id));
     tbody.appendChild(tr);
   }
+}
+
+function renderPagination(totalPages) {
+  const wrap = document.getElementById('pagination');
+
+  const pageNumbers = [];
+  for (let p = 1; p <= totalPages; p++) {
+    if (p === 1 || p === totalPages || (p >= currentPage - 2 && p <= currentPage + 2)) {
+      pageNumbers.push(p);
+    } else if (pageNumbers[pageNumbers.length - 1] !== '...') {
+      pageNumbers.push('...');
+    }
+  }
+
+  wrap.innerHTML = `
+    <button class="ta-pagination-arrow" id="prevPageBtn" aria-label="上一頁" ${currentPage === 1 ? 'disabled' : ''}>◀</button>
+    <span class="ta-pagination-numbers">
+      ${pageNumbers.map(p => p === '...'
+        ? `<span class="ta-pagination-ellipsis">...</span>`
+        : `<button class="ta-pagination-num${p === currentPage ? ' ta-is-active' : ''}" data-page="${p}">${p}</button>`
+      ).join('')}
+    </span>
+    <button class="ta-pagination-arrow" id="nextPageBtn" aria-label="下一頁" ${currentPage === totalPages ? 'disabled' : ''}>▶</button>
+    <span class="ta-pagination-jump">
+      <input type="number" id="jumpPageInput" min="1" max="${totalPages}" value="${currentPage}"> / ${totalPages}
+      <button class="ta-btn ta-btn-sm" id="jumpPageBtn">跳轉</button>
+    </span>
+  `;
+
+  document.getElementById('prevPageBtn').addEventListener('click', () => {
+    if (currentPage > 1) { currentPage--; renderTable(); }
+  });
+  document.getElementById('nextPageBtn').addEventListener('click', () => {
+    if (currentPage < totalPages) { currentPage++; renderTable(); }
+  });
+  wrap.querySelectorAll('.ta-pagination-num').forEach(btn => {
+    btn.addEventListener('click', () => { currentPage = parseInt(btn.dataset.page); renderTable(); });
+  });
+  const jumpInput = document.getElementById('jumpPageInput');
+  const doJump = () => {
+    const val = parseInt(jumpInput.value);
+    if (!isNaN(val) && val >= 1 && val <= totalPages) { currentPage = val; renderTable(); }
+  };
+  document.getElementById('jumpPageBtn').addEventListener('click', doJump);
+  jumpInput.addEventListener('keydown', e => { if (e.key === 'Enter') doJump(); });
 }
 
 function renderSummary() {
