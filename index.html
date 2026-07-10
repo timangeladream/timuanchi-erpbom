@@ -1584,8 +1584,8 @@ function renderTimeline(logs, unit) {
       const logUnit = log.quantityUnit || unit;
       const amountLine = log.amountMode === 'unit'
         ? `單價：${log.originalAmount} ${log.currency} / 個（供應商報價，匯率 ${log.exchangeRateUsed}）`
-        : `原始金額：${log.originalAmount} ${log.currency}(該次總額,匯率 ${log.exchangeRateUsed})`;
-      detail = `${escapeHtml(log.platform || '')} ${log.seller ? ' / ' + escapeHtml(log.seller) : ''}
+        : `原始金額：${log.originalAmount} ${log.currency}（該次總額，匯率 ${log.exchangeRateUsed}）`;
+      detail = `${escapeHtml(log.platform || '')} ${log.seller ? ' / ' + escapeHtml(log.seller) : ''}<br>
         ${amountLine}
         →　台幣總額 NT$${(log.twdAmount||0).toFixed(2)}
         ${log.packageSpecValue ? '　包裝規格：' + log.packageSpecValue + escapeHtml(log.packageSpecUnit || '') : ''}<br>
