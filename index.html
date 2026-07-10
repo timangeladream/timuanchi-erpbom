@@ -6,13 +6,13 @@
 <title>TimuAnchi 材料系統</title>
 <style>
   :root {
-    --primary: #8a6d5c;
-    --primary-dark: #6e5548;
-    --bg: #f7f4f1;
+    --primary: #2563a8;
+    --primary-dark: #1d4d85;
+    --bg: #f4f6f9;
     --card-bg: #ffffff;
-    --border: #e2dcd6;
-    --text: #3a332e;
-    --text-muted: #8a7f76;
+    --border: #dbe2ea;
+    --text: #000000;
+    --text-muted: #6b7684;
     --danger: #c0524a;
     --success: #4a7c59;
     --warn: #b8894a;
@@ -75,7 +75,7 @@
   }
   .ta-btn:hover { border-color: var(--primary); color: var(--primary-dark); }
   .ta-btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
-  .ta-btn-primary:hover { background: var(--primary-dark); }
+  .ta-btn-primary:hover { background: #fff; }
   .ta-btn-danger { color: var(--danger); }
   .ta-btn-danger-solid { background: var(--danger); color: #fff; border-color: var(--danger); }
   .ta-btn-danger-solid:hover { opacity: 0.9; }
@@ -134,13 +134,15 @@
   .ta-table-scroll { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 10px; overflow: hidden; }
   thead th {
-    text-align: left; font-size: 12px; color: var(--text-muted); font-weight: 500;
-    padding: 10px 12px; border-bottom: 1px solid var(--border); background: #faf8f6;
+    text-align: left; font-size: 12px; color: #fff; font-weight: 500;
+    padding: 10px 12px; border-bottom: 1px solid var(--border); background: #2563a8;
   }
   tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
-  tbody tr:hover { background: #faf7f4; cursor: pointer; }
+  tbody tr:hover { background: #eff3f7; cursor: pointer; }
   tbody tr.ta-row--archived { opacity: 0.5; }
-  .ta-tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #f0ebe6; color: var(--text-muted); }
+  .ta-tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #e8edf3; color: var(--text-muted); }
+  .ta-col-right { text-align: right; }
+  .ta-col-center { text-align: center; }
 
   .ta-modal-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
@@ -250,6 +252,18 @@
   }
   .ta-import-errors ul { margin: 6px 0 0; padding-left: 18px; }
   .ta-import-progress { font-size: 13px; color: var(--text-muted); margin: 14px 0; }
+
+  @media (max-width:640px){
+    .ta-stat-value{ 
+      font-size: 16px;
+    }
+    .ta-drawer{
+      width: 55%;
+    }
+    .ta-drawer-header{
+      font-size: 12px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -305,7 +319,7 @@
     <thead>
       <tr>
         <th>分類</th><th>品牌</th><th>材質</th><th>類型/款式</th><th>尺寸</th><th>色系</th><th>顏色</th>
-        <th>庫存</th><th>進價</th><th>狀態</th>
+        <th class="ta-col-right">庫存</th><th class="ta-col-right">進價</th><th class="ta-col-center">狀態</th>
       </tr>
     </thead>
     <tbody id="materialsTbody"></tbody>
@@ -950,9 +964,9 @@ function renderTable() {
       <td>${escapeHtml(m.size)}</td>
       <td>${escapeHtml(m.colorSeries)}</td>
       <td>${escapeHtml(m.colorCode)}</td>
-      <td>${stock.toLocaleString()} ${escapeHtml(unit)}</td>
-      <td>${cost ? 'NT$' + cost.toFixed(2) + ' / ' + escapeHtml(unit) : '-'}</td>
-      <td>${m.archived ? '<span class="ta-tag">已下架</span>' : ''}</td>
+      <td class="ta-col-right">${stock.toLocaleString()} ${escapeHtml(unit)}</td>
+      <td class="ta-col-right">${cost ? 'NT$' + cost.toFixed(2) + ' / ' + escapeHtml(unit) : '-'}</td>
+      <td class="ta-col-center">${m.archived ? '<span class="ta-tag">已下架</span>' : ''}</td>
     `;
     tr.addEventListener('click', () => openDetail(m.id));
     tbody.appendChild(tr);
