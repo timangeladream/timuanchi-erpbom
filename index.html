@@ -896,9 +896,9 @@ function renderCategoryTabs() {
 
   const addTab = document.createElement('div');
   addTab.className = 'ta-category-tab ta-category-tab--add';
-  addTab.textContent = '＋ 新增分類';
+  addTab.textContent = '＋ 新增分類頁籤';
   addTab.addEventListener('click', async () => {
-    const val = await showInputModal({ title: '新增分類', label: '輸入新的分類名稱' });
+    const val = await showInputModal({ title: '新增分類頁籤', label: '輸入新的分類頁籤名稱' });
     if (!val) return;
     if (!options.categories.includes(val)) {
       options.categories = [...(options.categories || []), val];
