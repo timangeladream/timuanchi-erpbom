@@ -98,7 +98,7 @@
   }
   .ta-category-tab:hover { border-color: var(--primary); color: var(--primary-dark); }
   .ta-category-tab.ta-is-active { background: var(--primary); color: #fff; border-color: var(--primary); }
-  .ta-category-tab--add { border-style: dashed; }
+  .ta-category-tab--disabled { opacity: 0.5; }
 
   .ta-options-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
   .ta-options-tab {
@@ -113,7 +113,21 @@
   .ta-options-row-input {
     flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
   }
+  .ta-options-row-code {
+    width: 90px; flex: none; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; text-transform: uppercase;
+  }
+  .ta-input-uppercase { text-transform: uppercase; }
   .ta-currency-code { min-width: 50px; font-weight: 600; font-size: 13px; }
+
+  .ta-category-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .ta-category-row--disabled { opacity: 0.5; }
+  .ta-category-row-order { display: flex; gap: 4px; }
+  .ta-category-row-info {
+    flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ta-category-row-name { flex: 1; }
 
   .ta-filter-bar {
     display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center;
@@ -193,6 +207,7 @@
   .ta-modal h2 { margin: 0 0 16px; font-size: 17px; color: var(--primary-dark); }
   .ta-modal--wide { max-width: 720px; }
   .ta-modal-text { font-size: 13px; color: var(--text); line-height: 1.6; margin-bottom: 14px; }
+  .ta-modal-error { font-size: 12.5px; color: var(--danger); margin: -6px 0 14px; }
 
   .ta-form-row { margin-bottom: 12px; }
   .ta-form-row label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
@@ -385,7 +400,7 @@
   <div class="ta-category-tabs" id="categoryTabs"></div>
 
   <div class="ta-filter-bar">
-    <input type="text" id="searchInput" placeholder="搜尋材料名稱 / 顏色">
+    <input type="text" id="searchInput" placeholder="搜尋材料名稱 / 顏色 / 編號">
   </div>
 
   <div class="ta-pagination" id="pagination"></div>
@@ -394,6 +409,7 @@
   <table>
     <thead>
       <tr>
+        <th>編號</th>
         <th>分類</th>
         <th class="ta-th-filter">
           <select id="filterBrand" class="ta-th-select"><option value="">品牌</option></select>
@@ -579,6 +595,39 @@
   </div>
 </div>
 
+<!-- 分類管理 Modal -->
+<div class="ta-modal-overlay" id="categoryManageModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="categoryManageModal">✕</span>
+    <h2>分類管理</h2>
+    <div id="categoryManageList"></div>
+    <button class="ta-btn" id="openCategoryAddBtn">＋ 新增分類</button>
+    <div class="ta-modal-actions">
+      <button class="ta-btn ta-btn-primary" data-close="categoryManageModal">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增/編輯分類 Modal -->
+<div class="ta-modal-overlay" id="categoryFormModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="categoryFormModal">✕</span>
+    <h2 id="categoryFormTitle">新增分類</h2>
+    <div class="ta-form-row">
+      <label>分類名稱</label>
+      <input type="text" id="categoryFormName">
+    </div>
+    <div class="ta-form-row">
+      <label>代碼(用於材料編號,僅限大寫英文字母與數字,例如 SS)</label>
+      <input type="text" id="categoryFormCode" class="ta-input-uppercase">
+    </div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="categoryFormModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="categoryFormSaveBtn">儲存</button>
+    </div>
+  </div>
+</div>
+
 <!-- 選項管理 Modal -->
 <div class="ta-modal-overlay" id="optionsModal">
   <div class="ta-modal ta-modal--wide">
@@ -695,6 +744,25 @@
   </div>
 </div>
 
+<!-- 清除資料 Modal -->
+<div class="ta-modal-overlay" id="wipeModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="wipeModal">✕</span>
+    <h2>清除資料</h2>
+    <div class="ta-modal-text">此操作會刪除所有材料與進貨歷史紀錄,且無法復原(選項清單與匯率設定不受影響)。請輸入登入密碼以確認。</div>
+    <div class="ta-form-row">
+      <label>密碼</label>
+      <input type="password" id="wipePasswordInput">
+    </div>
+    <div class="ta-modal-error ta-is-hidden" id="wipeErrorText"></div>
+    <div class="ta-import-progress ta-is-hidden" id="wipeProgressText"></div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="wipeModal">取消</button>
+      <button class="ta-btn ta-btn-sm ta-btn-danger-solid" id="confirmWipeBtn">確認清除</button>
+    </div>
+  </div>
+</div>
+
 <!-- 右側選單 -->
 <div class="ta-drawer-overlay" id="drawerOverlay"></div>
 <aside class="ta-drawer" id="sideDrawer">
@@ -707,10 +775,13 @@
     <a href="bom.html" class="ta-drawer-link">成品組合 BOM</a>
   </nav>
   <div class="ta-drawer-divider"></div>
+  <button class="ta-drawer-item" id="openCategoryManageBtn">分類管理</button>
   <button class="ta-drawer-item" id="openOptionsBtn">選項管理</button>
   <button class="ta-drawer-item" id="openExchangeBtn">匯率設定</button>
   <button class="ta-drawer-item" id="openImportBtn">匯入資料</button>
   <button class="ta-drawer-item" id="openExportBtn">匯出資料</button>
+  <div class="ta-drawer-divider"></div>
+  <button class="ta-drawer-item ta-drawer-item--danger" id="openWipeBtn">清除資料</button>
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item ta-drawer-item--danger" id="logoutBtn">登出</button>
 </aside>
@@ -719,11 +790,12 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+  getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
+  EmailAuthProvider, reauthenticateWithCredential
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, setDoc, deleteDoc,
-  query, where, orderBy, serverTimestamp, onSnapshot, Timestamp, writeBatch
+  query, where, orderBy, serverTimestamp, onSnapshot, Timestamp, writeBatch, runTransaction, deleteField
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -741,7 +813,7 @@ const db = getFirestore(app);
 
 // ---------- 全域狀態 ----------
 let materials = [];       // 目前所有材料(含下架)
-let options = { brands: [], materials: [], beadTypes: [], categories: [], packageUnits: [], stockUnits: [] };
+let options = { brands: [], materials: [], beadTypes: [], categories: [], packageUnits: [], stockUnits: [], categoryCodes: {}, disabledCategories: [] };
 let exchangeRates = { CNY: 5, JPY: 3 };
 let currentDetailId = null;
 let dupMatchedMaterial = null; // 新增進貨時比對到的既有材料
@@ -793,7 +865,7 @@ function initData() {
 
   const optRef = doc(db, 'settings', 'options');
   onSnapshot(optRef, snap => {
-    const base = { brands: [], materials: [], beadTypes: [], categories: [], packageUnits: [], stockUnits: [] };
+    const base = { brands: [], materials: [], beadTypes: [], categories: [], packageUnits: [], stockUnits: [], categoryCodes: {}, disabledCategories: [] };
     if (snap.exists()) {
       options = { ...base, ...snap.data() };
       // 舊資料補齊新欄位的預設值(僅在該欄位尚不存在時寫入)
@@ -801,6 +873,8 @@ function initData() {
       if (!snap.data().categories) missing.categories = DEFAULT_CATEGORIES;
       if (!snap.data().packageUnits) missing.packageUnits = DEFAULT_PACKAGE_UNITS;
       if (!snap.data().stockUnits) missing.stockUnits = DEFAULT_STOCK_UNITS;
+      if (!snap.data().categoryCodes) missing.categoryCodes = {};
+      if (!snap.data().disabledCategories) missing.disabledCategories = [];
       if (Object.keys(missing).length) {
         options = { ...options, ...missing };
         setDoc(optRef, missing, { merge: true });
@@ -809,13 +883,14 @@ function initData() {
       options = { ...base, categories: DEFAULT_CATEGORIES, packageUnits: DEFAULT_PACKAGE_UNITS, stockUnits: DEFAULT_STOCK_UNITS };
       setDoc(optRef, options);
     }
+    const enabledCategories = options.categories.filter(c => !(options.disabledCategories || []).includes(c));
     fillComboOptions('pBrand', options.brands);
     fillComboOptions('pMaterial', options.materials);
     fillComboOptions('pBeadType', options.beadTypes);
-    fillComboOptions('pCategory', options.categories);
+    fillComboOptions('pCategory', enabledCategories);
     fillComboOptions('pPackageSpecUnit', options.packageUnits);
     fillComboOptions('pQuantityUnit', options.stockUnits);
-    fillComboOptions('eCategory', options.categories);
+    fillComboOptions('eCategory', enabledCategories);
     fillComboOptions('eBrand', options.brands);
     fillComboOptions('eMaterial', options.materials);
     fillComboOptions('eBeadType', options.beadTypes);
@@ -880,6 +955,7 @@ function renderFilters() {
 function renderCategoryTabs() {
   const wrap = document.getElementById('categoryTabs');
   const cats = options.categories || [];
+  const disabledSet = new Set(options.disabledCategories || []);
 
   const allTab = document.createElement('div');
   allTab.className = 'ta-category-tab' + (categoryFilter === '' ? ' ta-is-active' : '');
@@ -887,29 +963,17 @@ function renderCategoryTabs() {
   allTab.addEventListener('click', () => { categoryFilter = ''; switchCategory(); });
 
   const tabs = cats.map(c => {
+    const isDisabled = disabledSet.has(c);
     const tab = document.createElement('div');
-    tab.className = 'ta-category-tab' + (categoryFilter === c ? ' ta-is-active' : '');
-    tab.textContent = c;
+    tab.className = 'ta-category-tab' + (categoryFilter === c ? ' ta-is-active' : '') + (isDisabled ? ' ta-category-tab--disabled' : '');
+    tab.textContent = c + (isDisabled ? '(已停用)' : '');
     tab.addEventListener('click', () => { categoryFilter = c; switchCategory(); });
     return tab;
-  });
-
-  const addTab = document.createElement('div');
-  addTab.className = 'ta-category-tab ta-category-tab--add';
-  addTab.textContent = '＋ 新增分類頁籤';
-  addTab.addEventListener('click', async () => {
-    const val = await showInputModal({ title: '新增分類頁籤', label: '輸入新的分類頁籤名稱' });
-    if (!val) return;
-    if (!options.categories.includes(val)) {
-      options.categories = [...(options.categories || []), val];
-      await setDoc(doc(db, 'settings', 'options'), { categories: options.categories }, { merge: true });
-    }
   });
 
   wrap.innerHTML = '';
   wrap.appendChild(allTab);
   tabs.forEach(t => wrap.appendChild(t));
-  wrap.appendChild(addTab);
 }
 
 function switchCategory() {
@@ -920,16 +984,168 @@ function switchCategory() {
   renderSummary();
 }
 
-// ---------- 選項管理(分類/品牌/材質/類型/單位 共用的編輯+調順序介面) ----------
+// ---------- 分類管理(獨立於選項管理,多了代碼與啟用/停用) ----------
+let categoryFormEditIdx = null;
+
+document.getElementById('openCategoryManageBtn').addEventListener('click', () => {
+  closeDrawer();
+  renderCategoryManageList();
+  openModal('categoryManageModal');
+});
+
+document.getElementById('openCategoryAddBtn').addEventListener('click', () => {
+  categoryFormEditIdx = null;
+  document.getElementById('categoryFormTitle').textContent = '新增分類';
+  document.getElementById('categoryFormName').value = '';
+  document.getElementById('categoryFormCode').value = '';
+  openModal('categoryFormModal');
+});
+
+function renderCategoryManageList() {
+  const cats = options.categories || [];
+  const disabledSet = new Set(options.disabledCategories || []);
+  const wrap = document.getElementById('categoryManageList');
+  wrap.innerHTML = '';
+  if (!cats.length) {
+    wrap.innerHTML = '<div class="ta-empty-hint">尚無分類</div>';
+    return;
+  }
+  cats.forEach((name, idx) => {
+    const isDisabled = disabledSet.has(name);
+    const code = (options.categoryCodes || {})[name] || '(未設定代碼)';
+    const row = document.createElement('div');
+    row.className = 'ta-category-row' + (isDisabled ? ' ta-category-row--disabled' : '');
+    row.innerHTML = `
+      <div class="ta-category-row-order">
+        <button type="button" class="ta-btn ta-btn-sm ta-category-move-up" ${idx === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="ta-btn ta-btn-sm ta-category-move-down" ${idx === cats.length - 1 ? 'disabled' : ''}>↓</button>
+      </div>
+      <div class="ta-category-row-info">
+        <span class="ta-category-row-name">${escapeHtml(name)}</span>
+        <span class="ta-tag">${escapeHtml(code)}</span>
+        ${isDisabled ? '<span class="ta-tag">已停用</span>' : ''}
+      </div>
+      <button type="button" class="ta-btn ta-btn-sm ta-category-edit-btn">編輯</button>
+      <button type="button" class="ta-btn ta-btn-sm ta-category-toggle-btn">${isDisabled ? '啟用' : '停用'}</button>
+    `;
+    row.querySelector('.ta-category-move-up').addEventListener('click', () => moveCategoryOption(idx, -1));
+    row.querySelector('.ta-category-move-down').addEventListener('click', () => moveCategoryOption(idx, 1));
+    row.querySelector('.ta-category-edit-btn').addEventListener('click', () => openCategoryEditForm(idx));
+    row.querySelector('.ta-category-toggle-btn').addEventListener('click', () => toggleCategoryDisabled(name));
+    wrap.appendChild(row);
+  });
+}
+
+function openCategoryEditForm(idx) {
+  categoryFormEditIdx = idx;
+  const name = options.categories[idx];
+  document.getElementById('categoryFormTitle').textContent = '編輯分類';
+  document.getElementById('categoryFormName').value = name;
+  document.getElementById('categoryFormCode').value = (options.categoryCodes || {})[name] || '';
+  openModal('categoryFormModal');
+}
+
+async function moveCategoryOption(idx, delta) {
+  const list = [...(options.categories || [])];
+  const newIdx = idx + delta;
+  if (newIdx < 0 || newIdx >= list.length) return;
+  [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
+  options.categories = list;
+  await setDoc(doc(db, 'settings', 'options'), { categories: list }, { merge: true });
+  renderCategoryManageList();
+  renderCategoryTabs();
+}
+
+async function toggleCategoryDisabled(name) {
+  const disabledSet = new Set(options.disabledCategories || []);
+  if (disabledSet.has(name)) disabledSet.delete(name); else disabledSet.add(name);
+  const list = [...disabledSet];
+  options.disabledCategories = list;
+  await setDoc(doc(db, 'settings', 'options'), { disabledCategories: list }, { merge: true });
+  renderCategoryManageList();
+  renderCategoryTabs();
+}
+
+document.getElementById('categoryFormSaveBtn').addEventListener('click', async () => {
+  const name = document.getElementById('categoryFormName').value.trim();
+  const codeInput = document.getElementById('categoryFormCode').value.trim().toUpperCase();
+
+  if (!name) { alert('請輸入分類名稱'); return; }
+  if (!codeInput) { alert('請輸入分類代碼'); return; }
+  if (!/^[A-Z0-9]+$/.test(codeInput)) { alert('分類代碼只能是大寫英文字母或數字'); return; }
+
+  const cats = options.categories || [];
+  const codes = options.categoryCodes || {};
+  const isEdit = categoryFormEditIdx != null;
+  const oldName = isEdit ? cats[categoryFormEditIdx] : null;
+
+  if (cats.some((c, i) => c === name && i !== categoryFormEditIdx)) { alert('這個分類名稱已經存在了'); return; }
+  const codeConflictName = Object.keys(codes).find(n => n !== oldName && codes[n] === codeInput);
+  if (codeConflictName) { alert(`這個代碼已經被分類「${codeConflictName}」使用了,請換一個`); return; }
+
+  const btn = document.getElementById('categoryFormSaveBtn');
+  btn.disabled = true;
+  try {
+    if (!isEdit) {
+      const newList = [...cats, name];
+      options.categories = newList;
+      options.categoryCodes = { ...codes, [name]: codeInput };
+      await setDoc(doc(db, 'settings', 'options'), {
+        categories: newList, [`categoryCodes.${name}`]: codeInput,
+      }, { merge: true });
+    } else {
+      const nameChanged = name !== oldName;
+
+      if (nameChanged) {
+        const newList = [...cats];
+        newList[categoryFormEditIdx] = name;
+        options.categories = newList;
+        await setDoc(doc(db, 'settings', 'options'), { categories: newList }, { merge: true });
+      }
+
+      const fieldUpdates = { [`categoryCodes.${name}`]: codeInput };
+      if (nameChanged) fieldUpdates[`categoryCodes.${oldName}`] = deleteField();
+      await updateDoc(doc(db, 'settings', 'options'), fieldUpdates);
+      const newCodes = { ...(options.categoryCodes || {}) };
+      if (nameChanged) delete newCodes[oldName];
+      newCodes[name] = codeInput;
+      options.categoryCodes = newCodes;
+
+      if (nameChanged && (options.disabledCategories || []).includes(oldName)) {
+        const newDisabled = options.disabledCategories.map(n => n === oldName ? name : n);
+        options.disabledCategories = newDisabled;
+        await setDoc(doc(db, 'settings', 'options'), { disabledCategories: newDisabled }, { merge: true });
+      }
+
+      if (nameChanged) {
+        const affected = materials.filter(m => m.category === oldName);
+        for (const m of affected) {
+          await updateDoc(doc(db, 'materials', m.id), { category: name, updatedAt: serverTimestamp() });
+          await addDoc(collection(db, 'materials', m.id, 'history'), {
+            type: 'edit', field: '分類', oldValue: oldName, newValue: name, timestamp: serverTimestamp(),
+          });
+        }
+      }
+    }
+    closeModal('categoryFormModal');
+    renderCategoryManageList();
+    renderCategoryTabs();
+  } catch (e) {
+    alert('儲存失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- 選項管理(品牌/材質/類型/單位 共用的編輯+調順序介面) ----------
 const OPTION_GROUPS = [
-  { key: 'categories', label: '分類', cascadeField: 'category' },
   { key: 'brands', label: '品牌', cascadeField: 'brand' },
   { key: 'materials', label: '材質', cascadeField: 'material' },
   { key: 'beadTypes', label: '類型/款式', cascadeField: 'beadType' },
   { key: 'packageUnits', label: '包裝單位', cascadeField: null },
   { key: 'stockUnits', label: '庫存單位', cascadeField: 'unit' },
 ];
-let optionsModalKey = 'categories';
+let optionsModalKey = 'brands';
 
 document.getElementById('openOptionsBtn').addEventListener('click', () => {
   closeDrawer();
@@ -974,7 +1190,11 @@ function renderOptionsList() {
     const saveBtn = row.querySelector('.ta-btn-primary');
     upBtn.addEventListener('click', () => moveOption(idx, -1));
     downBtn.addEventListener('click', () => moveOption(idx, 1));
-    saveBtn.addEventListener('click', () => renameOption(idx, input.value.trim()));
+    saveBtn.addEventListener('click', async () => {
+      const result = await renameOption(idx, input.value.trim());
+      // 只更新這一列自己的欄位,避免同時在編輯的其他列(還沒按儲存)被重繪蓋掉
+      if (result) input.value = result.newVal;
+    });
     wrap.appendChild(row);
   });
 }
@@ -992,9 +1212,10 @@ async function moveOption(idx, delta) {
 async function renameOption(idx, newVal) {
   const list = [...(options[optionsModalKey] || [])];
   const oldVal = list[idx];
-  if (!newVal) { alert('名稱不能空白'); return; }
-  if (newVal === oldVal) return;
-  if (list.includes(newVal)) { alert('這個名稱已經存在了'); return; }
+
+  if (!newVal) { alert('名稱不能空白'); return null; }
+  if (newVal === oldVal) return { newVal };
+  if (list.includes(newVal)) { alert('這個名稱已經存在了'); return null; }
 
   list[idx] = newVal;
   options[optionsModalKey] = list;
@@ -1010,7 +1231,7 @@ async function renameOption(idx, newVal) {
       });
     }
   }
-  renderOptionsList();
+  return { newVal };
 }
 
 function fillFilterSelect(id, list, includeBlankOption) {
@@ -1054,7 +1275,7 @@ function renderTable() {
     if (!matchesFieldFilter(m.colorCode, fColorCode)) return false;
     if (kw) {
       const name = displayName(m).toLowerCase();
-      if (!name.includes(kw) && !(m.colorCode || '').toLowerCase().includes(kw)) return false;
+      if (!name.includes(kw) && !(m.colorCode || '').toLowerCase().includes(kw) && !(m.materialCode || '').toLowerCase().includes(kw)) return false;
     }
     return true;
   });
@@ -1082,6 +1303,7 @@ function renderTable() {
     const tr = document.createElement('tr');
     if (m.archived) tr.classList.add('ta-row--archived');
     tr.innerHTML = `
+      <td>${escapeHtml(m.materialCode)}</td>
       <td>${escapeHtml(m.category)}</td>
       <td>${escapeHtml(m.brand)}</td>
       <td>${escapeHtml(m.material)}</td>
@@ -1391,6 +1613,24 @@ function updateCalcHint() {
   }
 }
 
+// ---------- 材料編號 ----------
+const MATERIAL_CODE_SEQ_DIGITS = 5;
+
+// 用交易(transaction)確保同一個分類代碼同時被多台裝置新增材料時,流水號不會撞號
+async function getNextMaterialCode(category) {
+  const code = (options.categoryCodes || {})[category];
+  if (!code) return null;
+  const counterRef = doc(db, 'settings', 'materialCounters');
+  const seq = await runTransaction(db, async transaction => {
+    const snap = await transaction.get(counterRef);
+    const current = (snap.exists() ? snap.data()[code] : 0) || 0;
+    const next = current + 1;
+    transaction.set(counterRef, { [code]: next }, { merge: true });
+    return next;
+  });
+  return code + String(seq).padStart(MATERIAL_CODE_SEQ_DIGITS, '0');
+}
+
 document.getElementById('submitPurchaseBtn').addEventListener('click', submitPurchase);
 
 async function submitPurchase() {
@@ -1417,6 +1657,10 @@ async function submitPurchase() {
   if (!quantityUnitInput) { alert('請選擇本次進貨的單位'); return; }
   if (isNaN(amount) || amount < 0) { alert('請輸入正確的金額'); return; }
   if (!purchaseDateStr) { alert('請選擇進貨日期'); return; }
+  if (!dupMatchedMaterial && !(options.categoryCodes || {})[category]) {
+    alert(`分類「${category}」還沒有設定材料編號用的代碼,請先到選項管理補上代碼,才能新增這個分類的材料`);
+    return;
+  }
 
   // 進貨日期用使用者選的日期,時分秒沿用當下時間,確保同一天補登多筆時仍能依輸入順序排列
   const now = new Date();
@@ -1440,12 +1684,14 @@ async function submitPurchase() {
     let materialId = dupMatchedMaterial ? dupMatchedMaterial.id : null;
 
     if (!materialId) {
+      const materialCode = await getNextMaterialCode(category);
       const newDoc = await addDoc(collection(db, 'materials'), {
         category, brand, material, beadType, size, colorSeries, colorCode,
         unit: finalUnit,
         currentStock: 0,
         currentUnitCost: 0,
         archived: false,
+        materialCode,
         createdAt: purchaseTimestamp,
         updatedAt: serverTimestamp(),
       });
@@ -1501,7 +1747,7 @@ async function openDetail(id) {
         <button class="ta-btn ta-btn-sm ta-btn-danger" id="deleteBtn">刪除</button>
       </div>
     </div>
-    <div class="ta-detail-category"><span class="ta-tag">${escapeHtml(m.category || '未分類')}</span></div>
+    <div class="ta-detail-category"><span class="ta-tag">${escapeHtml(m.category || '未分類')}</span>${m.materialCode ? ` <span class="ta-tag">${escapeHtml(m.materialCode)}</span>` : ''}</div>
     <div class="ta-detail-stats">
       <div><div class="ta-stat-label">目前庫存</div><div class="ta-stat-value">${stock.toLocaleString()} ${escapeHtml(unit)}</div></div>
       <div><div class="ta-stat-label">目前進價(歷史最高單價)</div><div class="ta-stat-value">NT$ ${cost.toFixed(2)} / ${escapeHtml(unit)}</div></div>
@@ -1894,6 +2140,11 @@ function processImportRows(rows) {
         errors.push({ row: r.rowNum, messages: [`單位「${r.quantityUnit}」跟同一款材料其他列/既有材料的單位「${lockedUnit}」不一致`] });
       }
     });
+    if (!existing && !(options.categoryCodes || {})[category]) {
+      groupRows.forEach(r => {
+        errors.push({ row: r.rowNum, messages: [`分類「${category}」還沒有設定材料編號用的代碼,請先到選項管理補上代碼`] });
+      });
+    }
   }
 
   if (errors.length) {
@@ -1973,19 +2224,21 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
     let totalRows = 0;
     importParsedGroups.forEach(g => totalRows += g.rows.length);
 
-    for (const g of importParsedGroups) {
+    for (const [groupIdx, g] of importParsedGroups.entries()) {
       let materialId = g.existingId;
       let runningStock, runningCost;
 
       if (!materialId) {
         const newRef = doc(collection(db, 'materials'));
         materialId = newRef.id;
-        const earliestTs = Timestamp.fromDate(g.rows[0].date);
+        // 同一批匯入若進貨日期相同,用 Excel 裡出現的先後順序疊加毫秒差,避免排序時序位不分
+        const earliestTs = Timestamp.fromMillis(g.rows[0].date.getTime() + groupIdx);
+        const materialCode = await getNextMaterialCode(g.category);
         ops.push({ ref: newRef, opType: 'set', data: {
           category: g.category, brand: g.brand, material: g.material, beadType: g.beadType,
           size: g.size, colorSeries: g.colorSeries, colorCode: g.colorCode,
           unit: g.rows[0].quantityUnit,
-          currentStock: 0, currentUnitCost: 0, archived: false,
+          currentStock: 0, currentUnitCost: 0, archived: false, materialCode,
           createdAt: earliestTs, updatedAt: serverTimestamp(),
         }});
         runningStock = 0;
@@ -2120,6 +2373,85 @@ document.getElementById('openExportBtn').addEventListener('click', async () => {
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
+  }
+});
+
+// ---------- 清除資料 ----------
+document.getElementById('openWipeBtn').addEventListener('click', () => {
+  closeDrawer();
+  document.getElementById('wipePasswordInput').value = '';
+  const errEl = document.getElementById('wipeErrorText');
+  const progressEl = document.getElementById('wipeProgressText');
+  errEl.classList.add('ta-is-hidden');
+  errEl.textContent = '';
+  progressEl.classList.add('ta-is-hidden');
+  progressEl.textContent = '';
+  const confirmBtn = document.getElementById('confirmWipeBtn');
+  confirmBtn.disabled = false;
+  confirmBtn.classList.remove('ta-is-hidden');
+  openModal('wipeModal');
+});
+
+document.getElementById('confirmWipeBtn').addEventListener('click', async () => {
+  const password = document.getElementById('wipePasswordInput').value;
+  const errEl = document.getElementById('wipeErrorText');
+  const progressEl = document.getElementById('wipeProgressText');
+  const btn = document.getElementById('confirmWipeBtn');
+
+  errEl.classList.add('ta-is-hidden');
+  errEl.textContent = '';
+
+  if (!password) {
+    errEl.textContent = '請輸入密碼';
+    errEl.classList.remove('ta-is-hidden');
+    return;
+  }
+
+  btn.disabled = true;
+  progressEl.classList.remove('ta-is-hidden');
+  progressEl.textContent = '驗證密碼中...';
+
+  try {
+    const credential = EmailAuthProvider.credential(auth.currentUser.email, password);
+    await reauthenticateWithCredential(auth.currentUser, credential);
+  } catch (err) {
+    progressEl.classList.add('ta-is-hidden');
+    progressEl.textContent = '';
+    errEl.textContent = '密碼錯誤,未執行清除';
+    errEl.classList.remove('ta-is-hidden');
+    btn.disabled = false;
+    return;
+  }
+
+  try {
+    progressEl.textContent = '讀取資料中...';
+    const targetMaterials = materials.slice(); // 先複製快照,避免刪除過程中即時監聽把陣列改掉
+    const ops = [];
+    let historyCount = 0;
+    for (const m of targetMaterials) {
+      const histSnap = await getDocs(collection(db, 'materials', m.id, 'history'));
+      histSnap.docs.forEach(d => { ops.push(d.ref); historyCount++; });
+      ops.push(doc(db, 'materials', m.id));
+    }
+
+    const CHUNK_SIZE = 400;
+    let committed = 0;
+    for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+      const chunk = ops.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach(ref => batch.delete(ref));
+      await batch.commit();
+      committed += chunk.length;
+      progressEl.textContent = `清除中... 已處理 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作`;
+    }
+
+    progressEl.textContent = `清除完成!共刪除 ${targetMaterials.length} 筆材料、${historyCount} 筆歷史紀錄。`;
+    btn.classList.add('ta-is-hidden');
+  } catch (err) {
+    progressEl.textContent = '';
+    errEl.textContent = '清除失敗:' + err.message;
+    errEl.classList.remove('ta-is-hidden');
+    btn.disabled = false;
   }
 });
 </script>
