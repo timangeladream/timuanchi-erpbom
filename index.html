@@ -410,6 +410,7 @@
     <thead>
       <tr>
         <th>編號</th>
+        <th>最新進貨日期</th>
         <th>分類</th>
         <th class="ta-th-filter">
           <select id="filterBrand" class="ta-th-select"><option value="">品牌</option></select>
@@ -635,8 +636,25 @@
     <h2>選項管理</h2>
     <div class="ta-options-tabs" id="optionsTabs"></div>
     <div id="optionsList"></div>
+    <button class="ta-btn" id="openOptionAddBtn">＋ 新增</button>
     <div class="ta-modal-actions">
       <button class="ta-btn" data-close="optionsModal">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增/編輯選項 Modal -->
+<div class="ta-modal-overlay" id="optionFormModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="optionFormModal">✕</span>
+    <h2 id="optionFormTitle">新增選項</h2>
+    <div class="ta-form-row">
+      <label id="optionFormLabel">名稱</label>
+      <input type="text" id="optionFormName">
+    </div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="optionFormModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="optionFormSaveBtn">儲存</button>
     </div>
   </div>
 </div>
@@ -749,8 +767,16 @@
   <div class="ta-modal">
     <span class="ta-modal-close" data-close="wipeModal">✕</span>
     <h2>清除資料</h2>
-    <div class="ta-modal-text">此操作會刪除所有材料與進貨歷史紀錄,且無法復原(選項清單與匯率設定不受影響)。請輸入登入密碼以確認。</div>
+    <div class="ta-modal-text">選擇要清除的範圍(選項清單與匯率設定不受影響)。</div>
     <div class="ta-form-row">
+      <label>清除範圍</label>
+      <select id="wipeScopeSelect">
+        <option value="">請選擇...</option>
+        <option value="__ALL__">全部分類</option>
+      </select>
+    </div>
+    <div class="ta-modal-text ta-is-hidden" id="wipeScopePreview"></div>
+    <div class="ta-form-row ta-is-hidden" id="wipePasswordRow">
       <label>密碼</label>
       <input type="password" id="wipePasswordInput">
     </div>
@@ -758,7 +784,7 @@
     <div class="ta-import-progress ta-is-hidden" id="wipeProgressText"></div>
     <div class="ta-modal-actions">
       <button class="ta-btn" data-close="wipeModal">取消</button>
-      <button class="ta-btn ta-btn-sm ta-btn-danger-solid" id="confirmWipeBtn">確認清除</button>
+      <button class="ta-btn ta-btn-sm ta-btn-danger-solid ta-is-hidden" id="confirmWipeBtn">確認清除</button>
     </div>
   </div>
 </div>
@@ -795,7 +821,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, setDoc, deleteDoc,
-  query, where, orderBy, serverTimestamp, onSnapshot, Timestamp, writeBatch, runTransaction, deleteField
+  query, where, orderBy, serverTimestamp, onSnapshot, Timestamp, writeBatch, runTransaction, deleteField,
+  getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -861,6 +888,7 @@ function initData() {
     renderFilters();
     renderTable();
     renderSummary();
+    backfillLastPurchaseDates();
   });
 
   const optRef = doc(db, 'settings', 'options');
@@ -907,6 +935,30 @@ function initData() {
     fillCurrencySelect();
     renderExchangeRateList();
   });
+}
+
+// 舊資料背景補算「最新進貨日期」欄位:只處理目前還缺這個欄位的材料,補過一次之後不會再重算
+let backfillInProgress = false;
+async function backfillLastPurchaseDates() {
+  if (backfillInProgress) return;
+  const targets = materials.filter(m => !m.lastPurchaseDate);
+  if (!targets.length) return;
+  backfillInProgress = true;
+  try {
+    for (const m of targets) {
+      const histSnap = await getDocs(query(collection(db, 'materials', m.id, 'history'), where('type', '==', 'purchase')));
+      let latest = null;
+      histSnap.docs.forEach(d => {
+        const ts = d.data().timestamp;
+        if (ts && (!latest || ts.toMillis() > latest.toMillis())) latest = ts;
+      });
+      if (latest) {
+        await updateDoc(doc(db, 'materials', m.id), { lastPurchaseDate: latest });
+      }
+    }
+  } finally {
+    backfillInProgress = false;
+  }
 }
 
 function fillCurrencySelect() {
@@ -1164,6 +1216,8 @@ function renderOptionsTabs() {
     tab.addEventListener('click', () => { optionsModalKey = g.key; renderOptionsTabs(); renderOptionsList(); });
     wrap.appendChild(tab);
   });
+  const currentGroup = OPTION_GROUPS.find(g => g.key === optionsModalKey);
+  document.getElementById('openOptionAddBtn').textContent = `＋ 新增${currentGroup.label}`;
 }
 
 function renderOptionsList() {
@@ -1179,22 +1233,17 @@ function renderOptionsList() {
     row.className = 'ta-options-row';
     row.innerHTML = `
       <div class="ta-options-row-order">
-        <button type="button" class="ta-btn ta-btn-sm" ${idx === 0 ? 'disabled' : ''}>↑</button>
-        <button type="button" class="ta-btn ta-btn-sm" ${idx === list.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="ta-btn ta-btn-sm ta-option-move-up" ${idx === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="ta-btn ta-btn-sm ta-option-move-down" ${idx === list.length - 1 ? 'disabled' : ''}>↓</button>
       </div>
-      <input type="text" class="ta-options-row-input" value="${escapeHtml(val)}">
-      <button type="button" class="ta-btn ta-btn-sm ta-btn-primary">儲存</button>
+      <div class="ta-options-row-input">${escapeHtml(val)}</div>
+      <button type="button" class="ta-btn ta-btn-sm ta-option-edit-btn">編輯</button>
+      <button type="button" class="ta-btn ta-btn-sm ta-btn-danger ta-option-delete-btn">刪除</button>
     `;
-    const [upBtn, downBtn] = row.querySelectorAll('.ta-options-row-order button');
-    const input = row.querySelector('.ta-options-row-input');
-    const saveBtn = row.querySelector('.ta-btn-primary');
-    upBtn.addEventListener('click', () => moveOption(idx, -1));
-    downBtn.addEventListener('click', () => moveOption(idx, 1));
-    saveBtn.addEventListener('click', async () => {
-      const result = await renameOption(idx, input.value.trim());
-      // 只更新這一列自己的欄位,避免同時在編輯的其他列(還沒按儲存)被重繪蓋掉
-      if (result) input.value = result.newVal;
-    });
+    row.querySelector('.ta-option-move-up').addEventListener('click', () => moveOption(idx, -1));
+    row.querySelector('.ta-option-move-down').addEventListener('click', () => moveOption(idx, 1));
+    row.querySelector('.ta-option-edit-btn').addEventListener('click', () => openOptionEditForm(idx));
+    row.querySelector('.ta-option-delete-btn').addEventListener('click', () => deleteOptionValue(idx));
     wrap.appendChild(row);
   });
 }
@@ -1233,6 +1282,68 @@ async function renameOption(idx, newVal) {
   }
   return { newVal };
 }
+
+async function addOptionValue(newVal) {
+  const list = [...(options[optionsModalKey] || [])];
+  if (!newVal) { alert('名稱不能空白'); return null; }
+  if (list.includes(newVal)) { alert('這個名稱已經存在了'); return null; }
+  list.push(newVal);
+  options[optionsModalKey] = list;
+  await setDoc(doc(db, 'settings', 'options'), { [optionsModalKey]: list }, { merge: true });
+  return { newVal };
+}
+
+async function deleteOptionValue(idx) {
+  const list = [...(options[optionsModalKey] || [])];
+  const val = list[idx];
+  const group = OPTION_GROUPS.find(g => g.key === optionsModalKey);
+  const ok = await showConfirmModal({
+    title: `刪除${group.label}`,
+    text: `確定要刪除「${val}」這個選項嗎?刪除後已經使用這個值的材料資料不會被清除或改變,只是之後新增/編輯材料時不能再從清單挑選這個選項。`,
+  });
+  if (!ok) return;
+  list.splice(idx, 1);
+  options[optionsModalKey] = list;
+  await setDoc(doc(db, 'settings', 'options'), { [optionsModalKey]: list }, { merge: true });
+  renderOptionsList();
+}
+
+let optionFormEditIdx = null;
+
+document.getElementById('openOptionAddBtn').addEventListener('click', () => {
+  optionFormEditIdx = null;
+  const group = OPTION_GROUPS.find(g => g.key === optionsModalKey);
+  document.getElementById('optionFormTitle').textContent = `新增${group.label}`;
+  document.getElementById('optionFormLabel').textContent = `${group.label}名稱`;
+  document.getElementById('optionFormName').value = '';
+  openModal('optionFormModal');
+});
+
+function openOptionEditForm(idx) {
+  optionFormEditIdx = idx;
+  const group = OPTION_GROUPS.find(g => g.key === optionsModalKey);
+  document.getElementById('optionFormTitle').textContent = `編輯${group.label}`;
+  document.getElementById('optionFormLabel').textContent = `${group.label}名稱`;
+  document.getElementById('optionFormName').value = options[optionsModalKey][idx];
+  openModal('optionFormModal');
+}
+
+document.getElementById('optionFormSaveBtn').addEventListener('click', async () => {
+  const val = document.getElementById('optionFormName').value.trim();
+  const btn = document.getElementById('optionFormSaveBtn');
+  btn.disabled = true;
+  try {
+    const result = optionFormEditIdx == null
+      ? await addOptionValue(val)
+      : await renameOption(optionFormEditIdx, val);
+    if (result) {
+      closeModal('optionFormModal');
+      renderOptionsList();
+    }
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 function fillFilterSelect(id, list, includeBlankOption) {
   const sel = document.getElementById(id);
@@ -1300,10 +1411,12 @@ function renderTable() {
     const stock = m.currentStock || 0;
     const cost = m.currentUnitCost || 0;
     const unit = m.unit || '';
+    const lastPurchaseText = m.lastPurchaseDate && m.lastPurchaseDate.toDate ? m.lastPurchaseDate.toDate().toLocaleDateString('zh-TW') : '-';
     const tr = document.createElement('tr');
     if (m.archived) tr.classList.add('ta-row--archived');
     tr.innerHTML = `
       <td>${escapeHtml(m.materialCode)}</td>
+      <td>${escapeHtml(lastPurchaseText)}</td>
       <td>${escapeHtml(m.category)}</td>
       <td>${escapeHtml(m.brand)}</td>
       <td>${escapeHtml(m.material)}</td>
@@ -1711,9 +1824,12 @@ async function submitPurchase() {
     const matRef = doc(db, 'materials', materialId);
     const snap = await getDoc(matRef);
     const cur = snap.data();
+    const lastPurchaseDate = (cur.lastPurchaseDate && cur.lastPurchaseDate.toMillis() > purchaseTimestamp.toMillis())
+      ? cur.lastPurchaseDate : purchaseTimestamp;
     await updateDoc(matRef, {
       currentStock: (cur.currentStock || 0) + quantity,
       currentUnitCost: Math.max(cur.currentUnitCost || 0, unitCost),
+      lastPurchaseDate,
       updatedAt: serverTimestamp(),
     });
 
@@ -2226,7 +2342,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
 
     for (const [groupIdx, g] of importParsedGroups.entries()) {
       let materialId = g.existingId;
-      let runningStock, runningCost;
+      let runningStock, runningCost, lastPurchaseDate;
 
       if (!materialId) {
         const newRef = doc(collection(db, 'materials'));
@@ -2243,10 +2359,12 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
         }});
         runningStock = 0;
         runningCost = 0;
+        lastPurchaseDate = null;
       } else {
         const existingMat = materials.find(m => m.id === materialId);
         runningStock = existingMat.currentStock || 0;
         runningCost = existingMat.currentUnitCost || 0;
+        lastPurchaseDate = existingMat.lastPurchaseDate || null;
       }
 
       for (const r of g.rows) {
@@ -2273,9 +2391,14 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
         runningCost = Math.max(runningCost, unitCost);
       }
 
+      const latestRowTs = Timestamp.fromDate(g.rows[g.rows.length - 1].date);
+      if (!lastPurchaseDate || latestRowTs.toMillis() > lastPurchaseDate.toMillis()) {
+        lastPurchaseDate = latestRowTs;
+      }
+
       const matRef = doc(db, 'materials', materialId);
       ops.push({ ref: matRef, opType: 'update', data: {
-        currentStock: runningStock, currentUnitCost: runningCost, updatedAt: serverTimestamp(),
+        currentStock: runningStock, currentUnitCost: runningCost, lastPurchaseDate, updatedAt: serverTimestamp(),
       }});
     }
 
@@ -2307,7 +2430,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
 });
 
 // ---------- 匯出資料 ----------
-const EXPORT_HISTORY_HEADERS = ['分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','進貨包裝規格數字','進貨包裝規格單位','本次進貨數量','數量單位','換算台幣總額','換算單價(台幣)','換算人民幣總額','換算單價(人民幣)'];
+const EXPORT_HISTORY_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','進貨包裝規格數字','進貨包裝規格單位','本次進貨數量','數量單位','換算台幣總額','換算單價(台幣)','換算人民幣總額','換算單價(人民幣)'];
 
 function sanitizeSheetName(name) {
   let n = String(name || '未分類').replace(/[\\/?*[\]:]/g, '_');
@@ -2337,7 +2460,7 @@ document.getElementById('openExportBtn').addEventListener('click', async () => {
         const twdAmount = log.twdAmount || 0;
         const unitCost = log.unitCost || 0;
         historyRows.push([
-          m.category || '', m.brand || '', m.material || '', m.beadType || '', m.size || '',
+          m.materialCode || '', m.category || '', m.brand || '', m.material || '', m.beadType || '', m.size || '',
           m.colorSeries || '', m.colorCode || '',
           log.timestamp && log.timestamp.toDate ? log.timestamp.toDate().toISOString().slice(0, 10) : '',
           log.platform || '', log.seller || '', log.currency || '', log.amountMode || '',
@@ -2358,7 +2481,7 @@ document.getElementById('openExportBtn').addEventListener('click', async () => {
     const usedNames = new Set(['全部']);
     const categoriesInData = [...new Set(materials.map(m => m.category || '未分類'))];
     for (const cat of categoriesInData) {
-      const rows = historyRows.filter(r => (r[0] || '未分類') === cat);
+      const rows = historyRows.filter(r => (r[1] || '未分類') === cat);
       let sheetName = sanitizeSheetName(cat);
       let suffix = 1;
       while (usedNames.has(sheetName)) { suffix++; sheetName = sanitizeSheetName(cat) + '_' + suffix; }
@@ -2379,7 +2502,12 @@ document.getElementById('openExportBtn').addEventListener('click', async () => {
 // ---------- 清除資料 ----------
 document.getElementById('openWipeBtn').addEventListener('click', () => {
   closeDrawer();
+  const scopeSelect = document.getElementById('wipeScopeSelect');
+  scopeSelect.innerHTML = '<option value="">請選擇...</option><option value="__ALL__">全部分類</option>' +
+    (options.categories || []).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
   document.getElementById('wipePasswordInput').value = '';
+  document.getElementById('wipeScopePreview').classList.add('ta-is-hidden');
+  document.getElementById('wipePasswordRow').classList.add('ta-is-hidden');
   const errEl = document.getElementById('wipeErrorText');
   const progressEl = document.getElementById('wipeProgressText');
   errEl.classList.add('ta-is-hidden');
@@ -2388,11 +2516,43 @@ document.getElementById('openWipeBtn').addEventListener('click', () => {
   progressEl.textContent = '';
   const confirmBtn = document.getElementById('confirmWipeBtn');
   confirmBtn.disabled = false;
-  confirmBtn.classList.remove('ta-is-hidden');
+  confirmBtn.classList.add('ta-is-hidden'); // 選好範圍、看過筆數後才會顯示
   openModal('wipeModal');
 });
 
+document.getElementById('wipeScopeSelect').addEventListener('change', async () => {
+  const scope = document.getElementById('wipeScopeSelect').value;
+  const previewEl = document.getElementById('wipeScopePreview');
+  const passwordRow = document.getElementById('wipePasswordRow');
+  const confirmBtn = document.getElementById('confirmWipeBtn');
+
+  if (!scope) {
+    previewEl.classList.add('ta-is-hidden');
+    passwordRow.classList.add('ta-is-hidden');
+    confirmBtn.classList.add('ta-is-hidden');
+    return;
+  }
+
+  const targetMaterials = scope === '__ALL__' ? materials : materials.filter(m => m.category === scope);
+  previewEl.textContent = '計算筆數中...';
+  previewEl.classList.remove('ta-is-hidden');
+  passwordRow.classList.add('ta-is-hidden');
+  confirmBtn.classList.add('ta-is-hidden');
+
+  let historyCount = 0;
+  for (const m of targetMaterials) {
+    const countSnap = await getCountFromServer(collection(db, 'materials', m.id, 'history'));
+    historyCount += countSnap.data().count;
+  }
+
+  const scopeLabel = scope === '__ALL__' ? '全部分類' : `「${scope}」`;
+  previewEl.textContent = `${scopeLabel}目前有 ${targetMaterials.length} 筆材料、${historyCount} 筆進貨紀錄,清除後無法復原。`;
+  passwordRow.classList.remove('ta-is-hidden');
+  confirmBtn.classList.remove('ta-is-hidden');
+});
+
 document.getElementById('confirmWipeBtn').addEventListener('click', async () => {
+  const scope = document.getElementById('wipeScopeSelect').value;
   const password = document.getElementById('wipePasswordInput').value;
   const errEl = document.getElementById('wipeErrorText');
   const progressEl = document.getElementById('wipeProgressText');
@@ -2401,6 +2561,11 @@ document.getElementById('confirmWipeBtn').addEventListener('click', async () => 
   errEl.classList.add('ta-is-hidden');
   errEl.textContent = '';
 
+  if (!scope) {
+    errEl.textContent = '請選擇清除範圍';
+    errEl.classList.remove('ta-is-hidden');
+    return;
+  }
   if (!password) {
     errEl.textContent = '請輸入密碼';
     errEl.classList.remove('ta-is-hidden');
@@ -2425,7 +2590,8 @@ document.getElementById('confirmWipeBtn').addEventListener('click', async () => 
 
   try {
     progressEl.textContent = '讀取資料中...';
-    const targetMaterials = materials.slice(); // 先複製快照,避免刪除過程中即時監聽把陣列改掉
+    // 先複製快照,避免刪除過程中即時監聽把陣列改掉
+    const targetMaterials = (scope === '__ALL__' ? materials : materials.filter(m => m.category === scope)).slice();
     const ops = [];
     let historyCount = 0;
     for (const m of targetMaterials) {
@@ -2445,7 +2611,16 @@ document.getElementById('confirmWipeBtn').addEventListener('click', async () => 
       progressEl.textContent = `清除中... 已處理 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作`;
     }
 
-    progressEl.textContent = `清除完成!共刪除 ${targetMaterials.length} 筆材料、${historyCount} 筆歷史紀錄。`;
+    // 清除範圍對應的材料編號流水號一起歸零,避免下次編號從一個跟現況對不上的號碼繼續跳
+    if (scope === '__ALL__') {
+      await deleteDoc(doc(db, 'settings', 'materialCounters'));
+    } else {
+      const code = (options.categoryCodes || {})[scope];
+      if (code) await setDoc(doc(db, 'settings', 'materialCounters'), { [code]: 0 }, { merge: true });
+    }
+
+    const scopeLabel = scope === '__ALL__' ? '全部分類' : `「${scope}」`;
+    progressEl.textContent = `清除完成！已清除${scopeLabel}共 ${targetMaterials.length} 筆材料、${historyCount} 筆歷史紀錄,對應的材料編號也已重新歸零。`;
     btn.classList.add('ta-is-hidden');
   } catch (err) {
     progressEl.textContent = '';
