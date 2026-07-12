@@ -144,6 +144,9 @@
   .ta-radio-option { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text); cursor: pointer; }
   .ta-radio-row input[type=radio] { width: auto; }
 
+  .ta-checkbox-option { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); cursor: pointer; margin-bottom: 10px; }
+  .ta-checkbox-option input[type=checkbox] { width: auto; }
+
   .ta-table-scroll { overflow-x: auto; }
   table { width: 100%; min-width: 900px; margin: 0 auto; border-collapse: collapse; background: var(--card-bg); border-radius: 10px; overflow: hidden; }
   thead th {
@@ -409,28 +412,28 @@
   <table>
     <thead>
       <tr>
-        <th>編號</th>
-        <th>最新進貨日期</th>
-        <th>分類</th>
-        <th class="ta-th-filter">
+        <th data-col="materialCode">編號</th>
+        <th data-col="lastPurchaseDate">最新進貨日期</th>
+        <th data-col="category">分類</th>
+        <th class="ta-th-filter" data-col="brand">
           <select id="filterBrand" class="ta-th-select"><option value="">品牌</option></select>
         </th>
-        <th class="ta-th-filter">
+        <th class="ta-th-filter" data-col="material">
           <select id="filterMaterial" class="ta-th-select"><option value="">材質</option></select>
         </th>
-        <th class="ta-th-filter">
+        <th class="ta-th-filter" data-col="beadType">
           <select id="filterBeadType" class="ta-th-select"><option value="">類型/款式</option></select>
         </th>
-        <th class="ta-th-filter">
+        <th class="ta-th-filter" data-col="size">
           <select id="filterSize" class="ta-th-select"><option value="">尺寸</option></select>
         </th>
-        <th class="ta-th-filter">
+        <th class="ta-th-filter" data-col="colorSeries">
           <select id="filterColorSeries" class="ta-th-select"><option value="">色系</option></select>
         </th>
-        <th class="ta-th-filter">
+        <th class="ta-th-filter" data-col="colorCode">
           <select id="filterColorCode" class="ta-th-select"><option value="">顏色</option></select>
         </th>
-        <th class="ta-col-right">庫存</th><th class="ta-col-right">進價</th><th class="ta-col-center">狀態</th>
+        <th class="ta-col-right" data-col="stock">庫存</th><th class="ta-col-right" id="costHeaderCell" data-col="cost">進價</th><th class="ta-col-center" data-col="status">狀態</th>
       </tr>
     </thead>
     <tbody id="materialsTbody"></tbody>
@@ -629,6 +632,20 @@
   </div>
 </div>
 
+<!-- 欄位顯示管理 Modal -->
+<div class="ta-modal-overlay" id="columnVisibilityModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="columnVisibilityModal">✕</span>
+    <h2>欄位顯示管理</h2>
+    <div class="ta-modal-text">勾選要在材料清單顯示的欄位(分類、狀態一律顯示,無法關閉)。這個設定只會存在這台裝置,不會影響你其他裝置的顯示。</div>
+    <div id="columnVisibilityList"></div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" id="setColumnVisibilityDefaultBtn">設為預設值(同步到所有裝置)</button>
+      <button class="ta-btn ta-btn-primary" data-close="columnVisibilityModal">關閉</button>
+    </div>
+  </div>
+</div>
+
 <!-- 選項管理 Modal -->
 <div class="ta-modal-overlay" id="optionsModal">
   <div class="ta-modal ta-modal--wide">
@@ -802,6 +819,7 @@
   </nav>
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item" id="openCategoryManageBtn">分類管理</button>
+  <button class="ta-drawer-item" id="openColumnVisibilityBtn">欄位顯示管理</button>
   <button class="ta-drawer-item" id="openOptionsBtn">選項管理</button>
   <button class="ta-drawer-item" id="openExchangeBtn">匯率設定</button>
   <button class="ta-drawer-item" id="openImportBtn">匯入資料</button>
@@ -923,6 +941,8 @@ function initData() {
     fillComboOptions('eMaterial', options.materials);
     fillComboOptions('eBeadType', options.beadTypes);
     renderCategoryTabs();
+    loadColumnVisibility();
+    applyColumnVisibility();
   });
 
   const rateRef = doc(db, 'settings', 'exchangeRates');
@@ -934,8 +954,95 @@ function initData() {
     }
     fillCurrencySelect();
     renderExchangeRateList();
+    renderCurrencyColumns();
+    renderTable();
   });
 }
+
+// 依匯率設定裡目前有的幣別,動態產生對應的「進價(幣別)」表頭欄位
+function renderCurrencyColumns() {
+  document.querySelectorAll('.ta-currency-col-header').forEach(el => el.remove());
+  let anchor = document.getElementById('costHeaderCell');
+  Object.keys(exchangeRates).sort().forEach(code => {
+    const th = document.createElement('th');
+    th.className = 'ta-col-right ta-currency-col-header';
+    th.dataset.col = `cost_${code}`;
+    th.textContent = `進價(${code})`;
+    anchor.after(th);
+    anchor = th;
+  });
+  applyColumnVisibility();
+}
+
+// ---------- 欄位顯示管理(分類、狀態鎖定一律顯示,其餘欄位可自由勾選) ----------
+const COLUMN_DEFS = [
+  { key: 'materialCode', label: '編號' },
+  { key: 'lastPurchaseDate', label: '最新進貨日期' },
+  { key: 'brand', label: '品牌', filterId: 'filterBrand' },
+  { key: 'material', label: '材質', filterId: 'filterMaterial' },
+  { key: 'beadType', label: '類型/款式', filterId: 'filterBeadType' },
+  { key: 'size', label: '尺寸', filterId: 'filterSize' },
+  { key: 'colorSeries', label: '色系', filterId: 'filterColorSeries' },
+  { key: 'colorCode', label: '顏色', filterId: 'filterColorCode' },
+  { key: 'stock', label: '庫存' },
+  { key: 'cost', label: '進價(台幣)' },
+];
+const COLUMN_VISIBILITY_STORAGE_KEY = 'ta_columnVisibility';
+let columnVisibility = {};
+
+function getCurrencyColumnDefs() {
+  return Object.keys(exchangeRates).sort().map(code => ({ key: `cost_${code}`, label: `進價(${code})` }));
+}
+
+function getToggleableColumnDefs() {
+  return [...COLUMN_DEFS, ...getCurrencyColumnDefs()];
+}
+
+function loadColumnVisibility() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY)); } catch (e) {}
+  columnVisibility = { ...(saved || options.columnVisibilityDefault || {}) };
+}
+
+function applyColumnVisibility() {
+  getToggleableColumnDefs().forEach(col => {
+    const th = document.querySelector(`[data-col="${col.key}"]`);
+    if (th) th.classList.toggle('ta-is-hidden', columnVisibility[col.key] === false);
+  });
+  renderTable();
+}
+
+function renderColumnVisibilityList() {
+  const wrap = document.getElementById('columnVisibilityList');
+  wrap.innerHTML = '';
+  getToggleableColumnDefs().forEach(col => {
+    const label = document.createElement('label');
+    label.className = 'ta-checkbox-option';
+    const checked = columnVisibility[col.key] !== false;
+    label.innerHTML = `<input type="checkbox" ${checked ? 'checked' : ''}>${escapeHtml(col.label)}`;
+    label.querySelector('input').addEventListener('change', e => {
+      columnVisibility[col.key] = e.target.checked;
+      localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(columnVisibility));
+      if (!e.target.checked && col.filterId) {
+        const sel = document.getElementById(col.filterId);
+        if (sel) sel.value = '';
+      }
+      applyColumnVisibility();
+    });
+    wrap.appendChild(label);
+  });
+}
+
+document.getElementById('openColumnVisibilityBtn').addEventListener('click', () => {
+  closeDrawer();
+  renderColumnVisibilityList();
+  openModal('columnVisibilityModal');
+});
+
+document.getElementById('setColumnVisibilityDefaultBtn').addEventListener('click', async () => {
+  await setDoc(doc(db, 'settings', 'options'), { columnVisibilityDefault: columnVisibility }, { merge: true });
+  alert('已設為這個帳號的預設欄位顯示設定');
+});
 
 // 舊資料背景補算「最新進貨日期」欄位:只處理目前還缺這個欄位的材料,補過一次之後不會再重算
 let backfillInProgress = false;
@@ -1412,22 +1519,27 @@ function renderTable() {
     const cost = m.currentUnitCost || 0;
     const unit = m.unit || '';
     const lastPurchaseText = m.lastPurchaseDate && m.lastPurchaseDate.toDate ? m.lastPurchaseDate.toDate().toLocaleDateString('zh-TW') : '-';
+    const cellDefs = [
+      { key: 'materialCode', html: `<td>${escapeHtml(m.materialCode)}</td>` },
+      { key: 'lastPurchaseDate', html: `<td>${escapeHtml(lastPurchaseText)}</td>` },
+      { key: 'category', html: `<td>${escapeHtml(m.category)}</td>` },
+      { key: 'brand', html: `<td>${escapeHtml(m.brand)}</td>` },
+      { key: 'material', html: `<td>${escapeHtml(m.material)}</td>` },
+      { key: 'beadType', html: `<td>${escapeHtml(m.beadType)}</td>` },
+      { key: 'size', html: `<td>${escapeHtml(m.size)}</td>` },
+      { key: 'colorSeries', html: `<td>${escapeHtml(m.colorSeries)}</td>` },
+      { key: 'colorCode', html: `<td>${escapeHtml(m.colorCode)}</td>` },
+      { key: 'stock', html: `<td class="ta-col-right">${stock.toLocaleString()} ${escapeHtml(unit)}</td>` },
+      { key: 'cost', html: `<td class="ta-col-right">${cost ? 'NT$' + cost.toFixed(2) + ' / ' + escapeHtml(unit) : '-'}</td>` },
+      ...Object.keys(exchangeRates).sort().map(code => {
+        const rate = exchangeRates[code] || 1;
+        return { key: `cost_${code}`, html: `<td class="ta-col-right">${cost ? (cost / rate).toFixed(2) + ' ' + escapeHtml(code) : '-'}</td>` };
+      }),
+      { key: 'status', html: `<td class="ta-col-center">${m.archived ? '<span class="ta-tag">已下架</span>' : ''}</td>` },
+    ];
     const tr = document.createElement('tr');
     if (m.archived) tr.classList.add('ta-row--archived');
-    tr.innerHTML = `
-      <td>${escapeHtml(m.materialCode)}</td>
-      <td>${escapeHtml(lastPurchaseText)}</td>
-      <td>${escapeHtml(m.category)}</td>
-      <td>${escapeHtml(m.brand)}</td>
-      <td>${escapeHtml(m.material)}</td>
-      <td>${escapeHtml(m.beadType)}</td>
-      <td>${escapeHtml(m.size)}</td>
-      <td>${escapeHtml(m.colorSeries)}</td>
-      <td>${escapeHtml(m.colorCode)}</td>
-      <td class="ta-col-right">${stock.toLocaleString()} ${escapeHtml(unit)}</td>
-      <td class="ta-col-right">${cost ? 'NT$' + cost.toFixed(2) + ' / ' + escapeHtml(unit) : '-'}</td>
-      <td class="ta-col-center">${m.archived ? '<span class="ta-tag">已下架</span>' : ''}</td>
-    `;
+    tr.innerHTML = cellDefs.filter(c => columnVisibility[c.key] !== false).map(c => c.html).join('');
     tr.addEventListener('click', () => openDetail(m.id));
     tbody.appendChild(tr);
   }
