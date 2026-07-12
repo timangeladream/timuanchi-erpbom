@@ -1533,7 +1533,7 @@ function renderTable() {
       { key: 'cost', html: `<td class="ta-col-right">${cost ? 'NT$' + cost.toFixed(2) + ' / ' + escapeHtml(unit) : '-'}</td>` },
       ...Object.keys(exchangeRates).sort().map(code => {
         const rate = exchangeRates[code] || 1;
-        return { key: `cost_${code}`, html: `<td class="ta-col-right">${cost ? (cost / rate).toFixed(2) + ' ' + escapeHtml(code) : '-'}</td>` };
+        return { key: `cost_${code}`, html: `<td class="ta-col-right">${cost ? escapeHtml(code) + ' ' + (cost / rate).toFixed(2) + ' / ' + escapeHtml(unit) : '-'}</td>` };
       }),
       { key: 'status', html: `<td class="ta-col-center">${m.archived ? '<span class="ta-tag">已下架</span>' : ''}</td>` },
     ];
@@ -2059,11 +2059,17 @@ function renderTimeline(logs, unit) {
       const amountLine = log.amountMode === 'unit'
         ? `單價：${log.originalAmount} ${log.currency} / 個（供應商報價，匯率 ${log.exchangeRateUsed}）`
         : `原始金額：${log.originalAmount} ${log.currency}（該次總額，匯率 ${log.exchangeRateUsed}）`;
+      const unitCostTags = [`<span class="ta-tag">NT$${(log.unitCost||0).toFixed(4)} / ${escapeHtml(logUnit)}</span>`]
+        .concat(Object.keys(exchangeRates).sort().map(code => {
+          const rate = exchangeRates[code] || 1;
+          return `<span class="ta-tag">${escapeHtml(code)} ${((log.unitCost||0) / rate).toFixed(4)} / ${escapeHtml(logUnit)}</span>`;
+        })).join(' ');
       detail = `${escapeHtml(log.platform || '')} ${log.seller ? ' / ' + escapeHtml(log.seller) : ''}<br>
         ${amountLine}
         →　台幣總額 NT$${(log.twdAmount||0).toFixed(2)}
         ${log.packageSpecValue ? '　包裝規格：' + log.packageSpecValue + escapeHtml(log.packageSpecUnit || '') : ''}<br>
-        進貨數量：+${log.quantity} ${escapeHtml(logUnit)}　單價：NT$${(log.unitCost||0).toFixed(4)} / ${escapeHtml(logUnit)}`;
+        進貨數量：+${log.quantity} ${escapeHtml(logUnit)}<br>
+        單價：${unitCostTags}`;
     } else if (log.type === 'adjust') {
       typeLabel = '人工盤點調整'; cls = 'adjust';
       detail = `數量:${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff >= 0 ? '+' : ''}${log.diff})
