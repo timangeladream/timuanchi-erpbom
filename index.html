@@ -442,7 +442,10 @@
         <th class="ta-th-filter" data-col="colorCode">
           <select id="filterColorCode" class="ta-th-select"><option value="">顏色</option></select>
         </th>
-        <th class="ta-col-right" data-col="stock">庫存</th><th class="ta-col-right" id="costHeaderCell" data-col="cost">進價</th><th class="ta-col-center" data-col="status">狀態</th>
+        <th class="ta-th-filter" data-col="colorTag">
+          <select id="filterColorTag" class="ta-th-select"><option value="">同色標籤</option></select>
+        </th>
+        <th class="ta-col-right" data-col="stock">庫存</th><th class="ta-col-right" data-col="secondaryStock">次品庫存</th><th class="ta-col-right" id="costHeaderCell" data-col="cost">進價</th><th class="ta-col-center" data-col="status">狀態</th>
       </tr>
     </thead>
     <tbody id="materialsTbody"></tbody>
@@ -493,6 +496,10 @@
       <div class="ta-form-row ta-form-row--full">
         <label>同色標籤(選填,填一樣的字,不同品牌/供應商的材料就會在詳情頁互相顯示成「同色替代品」)</label>
         <input type="text" id="pColorTag">
+      </div>
+      <div class="ta-form-row ta-form-row--full">
+        <label>材料備註(選填,只在新增全新材料時生效,之後可從「編輯屬性」修改)</label>
+        <textarea id="pNote" rows="2"></textarea>
       </div>
     </div>
 
@@ -600,6 +607,32 @@
           </div>
         </div>
       </div>
+
+      <hr class="ta-section-divider">
+      <div class="ta-form-row">
+        <label>短少數量(選填,廠商完全沒到貨的數量,金額仍照訂購數量計算,預設0)</label>
+        <input type="number" id="pShortageQty" placeholder="0">
+      </div>
+      <div class="ta-form-row">
+        <label>多給數量(選填,廠商額外多給、不另外收費的數量,預設0)</label>
+        <input type="number" id="pExtraQty" placeholder="0">
+      </div>
+      <div class="ta-form-row">
+        <label>報廢數量(選填,收到的貨品中不能使用的數量,預設0)</label>
+        <input type="number" id="pScrapQty" placeholder="0">
+      </div>
+      <div class="ta-form-row">
+        <label>次品數量(選填,可用但品質較差、存進次品庫存的數量,預設0)</label>
+        <input type="number" id="pSecondaryQty" placeholder="0">
+      </div>
+      <div class="ta-form-row ta-form-row--full">
+        <label>正品入庫數量(自動算出)</label>
+        <input type="text" id="pGoodQtyOutput" disabled>
+      </div>
+      <div class="ta-form-row ta-form-row--full">
+        <label>進貨備註(選填)</label>
+        <textarea id="pPurchaseNote" rows="2"></textarea>
+      </div>
     </div>
 
     <div class="ta-modal-actions">
@@ -658,6 +691,10 @@
       <div class="ta-form-row ta-form-row--full">
         <label>同色標籤(選填,填一樣的字,不同品牌/供應商的材料就會在詳情頁互相顯示成「同色替代品」)</label>
         <input type="text" id="eColorTag">
+      </div>
+      <div class="ta-form-row ta-form-row--full">
+        <label>材料備註(選填)</label>
+        <textarea id="eNote" rows="2"></textarea>
       </div>
     </div>
     <div class="ta-modal-actions">
@@ -795,6 +832,13 @@
   <div class="ta-modal">
     <span class="ta-modal-close" data-close="adjustModal">✕</span>
     <h2>人工盤點調整</h2>
+    <div class="ta-form-row ta-form-row--full">
+      <label>調整項目</label>
+      <div class="ta-radio-row">
+        <label class="ta-radio-option"><input type="radio" name="adjustTarget" value="primary" id="adjustTargetPrimary" checked> 正品庫存</label>
+        <label class="ta-radio-option"><input type="radio" name="adjustTarget" value="secondary" id="adjustTargetSecondary"> 次品庫存</label>
+      </div>
+    </div>
     <div class="ta-form-row">
       <label>目前庫存</label>
       <input type="text" id="adjustCurrent" disabled>
@@ -833,6 +877,7 @@
   <div class="ta-modal ta-modal--wide">
     <span class="ta-modal-close" data-close="importModal">✕</span>
     <h2>匯入資料</h2>
+    <button class="ta-btn" id="downloadImportTemplateBtn">下載空白範例檔案</button>
     <div class="ta-form-row">
       <label>選擇進貨紀錄 Excel 檔案(.xlsx)</label>
       <input type="file" id="importFileInput" accept=".xlsx,.xls">
@@ -1052,7 +1097,9 @@ const COLUMN_DEFS = [
   { key: 'size', label: '尺寸', filterId: 'filterSize' },
   { key: 'colorSeries', label: '色系', filterId: 'filterColorSeries' },
   { key: 'colorCode', label: '顏色', filterId: 'filterColorCode' },
+  { key: 'colorTag', label: '同色標籤', filterId: 'filterColorTag' },
   { key: 'stock', label: '庫存' },
+  { key: 'secondaryStock', label: '次品庫存' },
   { key: 'cost', label: '進價(台幣)' },
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = 'ta_columnVisibility';
@@ -1164,6 +1211,7 @@ document.getElementById('filterBeadType').addEventListener('change', resetPageAn
 document.getElementById('filterSize').addEventListener('change', resetPageAndRenderTable);
 document.getElementById('filterColorSeries').addEventListener('change', resetPageAndRenderTable);
 document.getElementById('filterColorCode').addEventListener('change', resetPageAndRenderTable);
+document.getElementById('filterColorTag').addEventListener('change', resetPageAndRenderTable);
 
 const BLANK_FILTER_VALUE = '__BLANK__'; // 篩選選單裡代表「只看這欄空白的」,跟代表「全部/不篩選」的空字串區分開
 
@@ -1177,6 +1225,7 @@ function renderFilters() {
   fillFilterSelect('filterSize', uniq('size'), hasBlank('size'));
   fillFilterSelect('filterColorSeries', uniq('colorSeries'), hasBlank('colorSeries'));
   fillFilterSelect('filterColorCode', uniq('colorCode'), hasBlank('colorCode'));
+  fillFilterSelect('filterColorTag', uniq('colorTag'), hasBlank('colorTag'));
 }
 
 function renderCategoryTabs() {
@@ -1550,6 +1599,7 @@ function renderTable() {
   const fSize = document.getElementById('filterSize').value;
   const fColorSeries = document.getElementById('filterColorSeries').value;
   const fColorCode = document.getElementById('filterColorCode').value;
+  const fColorTag = document.getElementById('filterColorTag').value;
 
   let list = materials.filter(m => {
     if (categoryFilter && m.category !== categoryFilter) return false;
@@ -1559,6 +1609,7 @@ function renderTable() {
     if (!matchesFieldFilter(m.size, fSize)) return false;
     if (!matchesFieldFilter(m.colorSeries, fColorSeries)) return false;
     if (!matchesFieldFilter(m.colorCode, fColorCode)) return false;
+    if (!matchesFieldFilter(m.colorTag, fColorTag)) return false;
     if (kw) {
       const name = displayName(m).toLowerCase();
       if (!name.includes(kw) && !(m.colorCode || '').toLowerCase().includes(kw) && !(m.materialCode || '').toLowerCase().includes(kw)) return false;
@@ -1584,6 +1635,7 @@ function renderTable() {
 
   for (const m of pagedList) {
     const stock = m.currentStock || 0;
+    const secondaryStock = m.currentStockSecondary || 0;
     const cost = m.currentUnitCost || 0;
     const unit = m.unit || '';
     const lastPurchaseText = m.lastPurchaseDate && m.lastPurchaseDate.toDate ? m.lastPurchaseDate.toDate().toLocaleDateString('zh-TW') : '-';
@@ -1597,7 +1649,9 @@ function renderTable() {
       { key: 'size', html: `<td>${escapeHtml(m.size)}</td>` },
       { key: 'colorSeries', html: `<td>${escapeHtml(m.colorSeries)}</td>` },
       { key: 'colorCode', html: `<td>${escapeHtml(m.colorCode)}</td>` },
+      { key: 'colorTag', html: `<td>${escapeHtml(m.colorTag)}</td>` },
       { key: 'stock', html: `<td class="ta-col-right">${stock.toLocaleString()} ${escapeHtml(unit)}</td>` },
+      { key: 'secondaryStock', html: `<td class="ta-col-right">${secondaryStock.toLocaleString()} ${escapeHtml(unit)}</td>` },
       { key: 'cost', html: `<td class="ta-col-right">${cost ? 'NT$' + cost.toFixed(2) + ' / ' + escapeHtml(unit) : '-'}</td>` },
       ...Object.keys(exchangeRates).sort().map(code => {
         const rate = exchangeRates[code] || 1;
@@ -1794,8 +1848,9 @@ document.getElementById('openPurchaseBtn').addEventListener('click', () => {
 
 function resetPurchaseForm() {
   ['pCategory','pBrand','pMaterial','pBeadType','pQuantityUnit','pPkgUnit'].forEach(id => document.getElementById(id).value = '');
-  ['pSize','pColorSeries','pColorCode','pColorTag','pPlatform','pSeller','pQuantity',
-   'pUnitPrice','pTotalAmount','pPkgUnitPrice','pPkgUnitQty','pPkgCount'].forEach(id => document.getElementById(id).value = '');
+  ['pSize','pColorSeries','pColorCode','pColorTag','pNote','pPlatform','pSeller','pQuantity',
+   'pUnitPrice','pTotalAmount','pPkgUnitPrice','pPkgUnitQty','pPkgCount',
+   'pShortageQty','pExtraQty','pScrapQty','pSecondaryQty','pPurchaseNote'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('pPkgBaseQty').value = '1';
   document.getElementById('pCurrency').value = 'TWD';
   document.getElementById('pPurchaseDate').value = new Date().toISOString().slice(0, 10);
@@ -1890,7 +1945,7 @@ function checkDuplicate() {
 }
 
 // 即時試算換算金額 / 單價 / 顆數(依三種金額輸入模式各自計算)
-['pCurrency','pQuantity','pQuantityUnit','pUnitPrice','pTotalAmount','pPkgUnit','pPkgBaseQty','pPkgUnitPrice','pPkgUnitQty','pPkgCount'].forEach(id => {
+['pCurrency','pQuantity','pQuantityUnit','pUnitPrice','pTotalAmount','pPkgUnit','pPkgBaseQty','pPkgUnitPrice','pPkgUnitQty','pPkgCount','pShortageQty','pExtraQty','pScrapQty','pSecondaryQty'].forEach(id => {
   document.getElementById(id).addEventListener('input', updateAmountCalc);
   document.getElementById(id).addEventListener('change', updateAmountCalc);
 });
@@ -1911,21 +1966,30 @@ function updateAmountCalc() {
   const mode = document.querySelector('input[name="pAmountMode"]:checked').value;
   const currency = document.getElementById('pCurrency').value;
   const unit = document.getElementById('pQuantityUnit').value || '(單位)';
+  let receivedQuantity = null;
 
   if (mode === 'unit') {
     const unitPrice = parseFloat(document.getElementById('pUnitPrice').value);
     const qty = parseFloat(document.getElementById('pQuantity').value);
     const outEl = document.getElementById('pUnitModeTotalOutput');
-    if (isNaN(unitPrice) || isNaN(qty) || qty <= 0) { outEl.value = ''; return; }
-    const twdTotal = convertToTwd(unitPrice, currency) * qty;
-    outEl.value = formatDualAmount(unitPrice * qty, currency, twdTotal, 2, '');
+    if (isNaN(unitPrice) || isNaN(qty) || qty <= 0) {
+      outEl.value = '';
+    } else {
+      const twdTotal = convertToTwd(unitPrice, currency) * qty;
+      outEl.value = formatDualAmount(unitPrice * qty, currency, twdTotal, 2, '');
+      receivedQuantity = qty;
+    }
   } else if (mode === 'total') {
     const totalAmount = parseFloat(document.getElementById('pTotalAmount').value);
     const qty = parseFloat(document.getElementById('pQuantity').value);
     const outEl = document.getElementById('pTotalModeUnitPriceOutput');
-    if (isNaN(totalAmount) || isNaN(qty) || qty <= 0) { outEl.value = ''; return; }
-    const twdUnitCost = convertToTwd(totalAmount, currency) / qty;
-    outEl.value = formatDualAmount(totalAmount / qty, currency, twdUnitCost, 4, ' / ' + unit);
+    if (isNaN(totalAmount) || isNaN(qty) || qty <= 0) {
+      outEl.value = '';
+    } else {
+      const twdUnitCost = convertToTwd(totalAmount, currency) / qty;
+      outEl.value = formatDualAmount(totalAmount / qty, currency, twdUnitCost, 4, ' / ' + unit);
+      receivedQuantity = qty;
+    }
   } else {
     const pkgBaseQty = parseFloat(document.getElementById('pPkgBaseQty').value) || 1;
     const pkgUnitPrice = parseFloat(document.getElementById('pPkgUnitPrice').value);
@@ -1938,17 +2002,27 @@ function updateAmountCalc() {
     const priceOutEl = document.getElementById('pPkgUnitPriceOutput');
     if (isNaN(pkgUnitPrice) || isNaN(pkgUnitQty) || isNaN(pkgCount) || pkgCount <= 0 || pkgUnitQty <= 0) {
       unitsOutEl.value = ''; qtyOutEl.value = ''; amountOutEl.value = ''; priceOutEl.value = '';
-      return;
+    } else {
+      const totalUnits = pkgBaseQty * pkgCount;
+      const totalQty = pkgUnitQty * pkgCount;
+      const originalTotalAmount = pkgUnitPrice * pkgCount;
+      const twdTotal = convertToTwd(originalTotalAmount, currency);
+      unitsOutEl.value = `${totalUnits.toLocaleString()} ${pkgUnit}`;
+      qtyOutEl.value = `${totalQty.toLocaleString()} ${unit}`;
+      amountOutEl.value = formatDualAmount(originalTotalAmount, currency, twdTotal, 2, '');
+      priceOutEl.value = formatDualAmount(originalTotalAmount / totalQty, currency, twdTotal / totalQty, 4, ' / ' + unit);
+      receivedQuantity = totalQty;
     }
-    const totalUnits = pkgBaseQty * pkgCount;
-    const totalQty = pkgUnitQty * pkgCount;
-    const originalTotalAmount = pkgUnitPrice * pkgCount;
-    const twdTotal = convertToTwd(originalTotalAmount, currency);
-    unitsOutEl.value = `${totalUnits.toLocaleString()} ${pkgUnit}`;
-    qtyOutEl.value = `${totalQty.toLocaleString()} ${unit}`;
-    amountOutEl.value = formatDualAmount(originalTotalAmount, currency, twdTotal, 2, '');
-    priceOutEl.value = formatDualAmount(originalTotalAmount / totalQty, currency, twdTotal / totalQty, 4, ' / ' + unit);
   }
+
+  const goodOutEl = document.getElementById('pGoodQtyOutput');
+  if (receivedQuantity == null) { goodOutEl.value = ''; return; }
+  const shortageQty = parseFloat(document.getElementById('pShortageQty').value) || 0;
+  const extraQty = parseFloat(document.getElementById('pExtraQty').value) || 0;
+  const scrapQty = parseFloat(document.getElementById('pScrapQty').value) || 0;
+  const secondaryQty = parseFloat(document.getElementById('pSecondaryQty').value) || 0;
+  const goodQty = receivedQuantity - shortageQty - scrapQty - secondaryQty + extraQty;
+  goodOutEl.value = `${goodQty.toLocaleString()} ${unit}` + (goodQty < 0 ? '(短少+報廢+次品數量超過收到總數量,請檢查)' : '');
 }
 
 // ---------- 材料編號 ----------
@@ -1980,6 +2054,7 @@ async function submitPurchase() {
   const colorSeries = document.getElementById('pColorSeries').value.trim();
   const colorCode = document.getElementById('pColorCode').value.trim();
   const colorTag = document.getElementById('pColorTag').value.trim();
+  const note = document.getElementById('pNote').value.trim();
 
   const platform = document.getElementById('pPlatform').value.trim();
   const seller = document.getElementById('pSeller').value.trim();
@@ -1995,17 +2070,17 @@ async function submitPurchase() {
     return;
   }
 
-  let quantity, originalAmount, pkgUnit = null, pkgBaseQty = null, pkgUnitQty = null, pkgCount = null;
+  let receivedQuantity, originalAmount, pkgUnit = null, pkgBaseQty = null, pkgUnitQty = null, pkgCount = null;
   if (amountMode === 'unit') {
     originalAmount = parseFloat(document.getElementById('pUnitPrice').value);
-    quantity = parseFloat(document.getElementById('pQuantity').value);
+    receivedQuantity = parseFloat(document.getElementById('pQuantity').value);
     if (isNaN(originalAmount) || originalAmount < 0) { alert('請輸入正確的單價'); return; }
-    if (!quantity || quantity <= 0) { alert('請輸入本次進貨數量'); return; }
+    if (!receivedQuantity || receivedQuantity <= 0) { alert('請輸入本次進貨數量'); return; }
   } else if (amountMode === 'total') {
     originalAmount = parseFloat(document.getElementById('pTotalAmount').value);
-    quantity = parseFloat(document.getElementById('pQuantity').value);
+    receivedQuantity = parseFloat(document.getElementById('pQuantity').value);
     if (isNaN(originalAmount) || originalAmount < 0) { alert('請輸入正確的整批金額'); return; }
-    if (!quantity || quantity <= 0) { alert('請輸入本次進貨整批顆數'); return; }
+    if (!receivedQuantity || receivedQuantity <= 0) { alert('請輸入本次進貨整批顆數'); return; }
   } else {
     pkgUnit = document.getElementById('pPkgUnit').value.trim();
     pkgBaseQty = parseFloat(document.getElementById('pPkgBaseQty').value) || 1;
@@ -2017,8 +2092,20 @@ async function submitPurchase() {
     if (!pkgUnitQty || pkgUnitQty <= 0) { alert(`請輸入正確的每${pkgUnit}顆數`); return; }
     if (!pkgCount || pkgCount <= 0) { alert(`請輸入正確的進貨數量(幾${pkgUnit})`); return; }
     originalAmount = pkgUnitPrice;
-    quantity = pkgUnitQty * pkgCount;
+    receivedQuantity = pkgUnitQty * pkgCount;
   }
+
+  const shortageQty = parseFloat(document.getElementById('pShortageQty').value) || 0;
+  const extraQty = parseFloat(document.getElementById('pExtraQty').value) || 0;
+  const scrapQty = parseFloat(document.getElementById('pScrapQty').value) || 0;
+  const secondaryQty = parseFloat(document.getElementById('pSecondaryQty').value) || 0;
+  const purchaseNote = document.getElementById('pPurchaseNote').value.trim();
+  if (shortageQty < 0) { alert('短少數量不能是負數'); return; }
+  if (extraQty < 0) { alert('多給數量不能是負數'); return; }
+  if (scrapQty < 0) { alert('報廢數量不能是負數'); return; }
+  if (secondaryQty < 0) { alert('次品數量不能是負數'); return; }
+  if (shortageQty + scrapQty + secondaryQty > receivedQuantity) { alert('短少數量+報廢數量+次品數量不能超過本次訂購(收到)的總數量'); return; }
+  const goodQty = receivedQuantity - shortageQty - scrapQty - secondaryQty + extraQty;
 
   // 進貨日期用使用者選的日期,時分秒沿用當下時間,確保同一天補登多筆時仍能依輸入順序排列
   const now = new Date();
@@ -2028,13 +2115,13 @@ async function submitPurchase() {
   let twdAmount, unitCost;
   if (amountMode === 'unit') {
     unitCost = convertToTwd(originalAmount, currency);
-    twdAmount = unitCost * quantity;
+    twdAmount = unitCost * receivedQuantity;
   } else if (amountMode === 'total') {
     twdAmount = convertToTwd(originalAmount, currency);
-    unitCost = twdAmount / quantity;
+    unitCost = twdAmount / receivedQuantity;
   } else {
     twdAmount = convertToTwd(originalAmount * pkgCount, currency);
-    unitCost = twdAmount / quantity;
+    unitCost = twdAmount / receivedQuantity;
   }
   const rateUsed = currency === 'TWD' ? 1 : (exchangeRates[currency] || 1);
   const finalUnit = dupMatchedMaterial ? (dupMatchedMaterial.unit || quantityUnitInput) : quantityUnitInput;
@@ -2047,9 +2134,10 @@ async function submitPurchase() {
     if (!materialId) {
       const materialCode = await getNextMaterialCode(category);
       const newDoc = await addDoc(collection(db, 'materials'), {
-        category, brand, material, beadType, size, colorSeries, colorCode, colorTag,
+        category, brand, material, beadType, size, colorSeries, colorCode, colorTag, note,
         unit: finalUnit,
         currentStock: 0,
+        currentStockSecondary: 0,
         currentUnitCost: 0,
         archived: false,
         materialCode,
@@ -2064,7 +2152,9 @@ async function submitPurchase() {
       platform, seller, currency, originalAmount, amountMode, exchangeRateUsed: rateUsed,
       twdAmount,
       pkgUnit, pkgBaseQty, pkgUnitQty, pkgCount,
-      quantity, quantityUnit: finalUnit, unitCost,
+      quantity: goodQty, shortageQuantity: shortageQty, extraQuantity: extraQty,
+      scrapQuantity: scrapQty, secondaryQuantity: secondaryQty,
+      quantityUnit: finalUnit, unitCost, note: purchaseNote,
       timestamp: purchaseTimestamp,
     });
 
@@ -2074,7 +2164,8 @@ async function submitPurchase() {
     const lastPurchaseDate = (cur.lastPurchaseDate && cur.lastPurchaseDate.toMillis() > purchaseTimestamp.toMillis())
       ? cur.lastPurchaseDate : purchaseTimestamp;
     await updateDoc(matRef, {
-      currentStock: (cur.currentStock || 0) + quantity,
+      currentStock: (cur.currentStock || 0) + goodQty,
+      currentStockSecondary: (cur.currentStockSecondary || 0) + secondaryQty,
       currentUnitCost: Math.max(cur.currentUnitCost || 0, unitCost),
       lastPurchaseDate,
       updatedAt: serverTimestamp(),
@@ -2106,6 +2197,7 @@ async function openDetail(id) {
   if (!m) return;
 
   const stock = m.currentStock || 0;
+  const secondaryStock = m.currentStockSecondary || 0;
   const cost = m.currentUnitCost || 0;
   const unit = m.unit || '';
   const value = stock * cost;
@@ -2145,14 +2237,23 @@ async function openDetail(id) {
       </div>
     </div>
     <div class="ta-detail-category"><span class="ta-tag">${escapeHtml(m.category || '未分類')}</span>${m.materialCode ? ` <span class="ta-tag">${escapeHtml(m.materialCode)}</span>` : ''}${m.colorTag ? ` <span class="ta-tag">同色標籤:${escapeHtml(m.colorTag)}</span>` : ''}</div>
+    ${m.note ? `<div class="ta-modal-text">備註:${escapeHtml(m.note)}</div>` : ''}
     <div class="ta-detail-stats">
       <div><div class="ta-stat-label">目前庫存</div><div class="ta-stat-value">${stock.toLocaleString()} ${escapeHtml(unit)}</div></div>
+      <div><div class="ta-stat-label">次品庫存</div><div class="ta-stat-value">${secondaryStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
       <div><div class="ta-stat-label">目前進價(歷史最高單價)</div><div class="ta-stat-value">NT$ ${cost.toFixed(2)} / ${escapeHtml(unit)}</div></div>
       <div><div class="ta-stat-label">庫存價值</div><div class="ta-stat-value">NT$ ${value.toFixed(2)}</div></div>
     </div>
+    <div class="ta-detail-stats">
+      <div><div class="ta-stat-label">累計報廢數量</div><div class="ta-stat-value" id="scrapQtyStat">-</div></div>
+      <div><div class="ta-stat-label">累計報廢損失</div><div class="ta-stat-value" id="scrapLossStat">-</div></div>
+      <div><div class="ta-stat-label">累計短少數量</div><div class="ta-stat-value" id="shortageQtyStat">-</div></div>
+      <div><div class="ta-stat-label">累計短少損失</div><div class="ta-stat-value" id="shortageLossStat">-</div></div>
+      <div><div class="ta-stat-label">累計多給數量</div><div class="ta-stat-value" id="extraQtyStat">-</div></div>
+    </div>
     <hr class="ta-section-divider">
     ${alternativesSection}
-    <div class="ta-timeline-heading">完整異動歷史</div>
+    <div class="ta-timeline-heading" id="historyHeading">完整異動歷史</div>
     <div class="ta-timeline" id="historyTimeline"><div class="ta-empty-hint">載入中...</div></div>
   `;
 
@@ -2169,6 +2270,22 @@ async function openDetail(id) {
   const histSnap = await getDocs(query(collection(db, 'materials', id, 'history'), orderBy('timestamp', 'desc')));
   const logs = histSnap.docs.map(d => d.data());
   renderTimeline(logs, unit);
+
+  const purchaseCount = logs.filter(log => log.type === 'purchase').length;
+  const adjustCount = logs.filter(log => log.type === 'adjust').length;
+  document.getElementById('historyHeading').textContent = `完整異動歷史（進貨：${purchaseCount}次、人工盤點調整：${adjustCount}次）`;
+
+  const scrapQtyTotal = logs.reduce((sum, log) => sum + (log.scrapQuantity || 0), 0);
+  const scrapLossTotal = logs.reduce((sum, log) => sum + (log.scrapQuantity || 0) * (log.unitCost || 0), 0);
+  document.getElementById('scrapQtyStat').textContent = `${scrapQtyTotal.toLocaleString()} ${unit}`;
+  document.getElementById('scrapLossStat').textContent = `NT$ ${scrapLossTotal.toFixed(2)}`;
+
+  const shortageQtyTotal = logs.reduce((sum, log) => sum + (log.shortageQuantity || 0), 0);
+  const shortageLossTotal = logs.reduce((sum, log) => sum + (log.shortageQuantity || 0) * (log.unitCost || 0), 0);
+  const extraQtyTotal = logs.reduce((sum, log) => sum + (log.extraQuantity || 0), 0);
+  document.getElementById('shortageQtyStat').textContent = `${shortageQtyTotal.toLocaleString()} ${unit}`;
+  document.getElementById('shortageLossStat').textContent = `NT$ ${shortageLossTotal.toFixed(2)}`;
+  document.getElementById('extraQtyStat').textContent = `${extraQtyTotal.toLocaleString()} ${unit}`;
 }
 
 let deleteTargetMaterial = null;
@@ -2251,11 +2368,17 @@ function renderTimeline(logs, unit) {
         ${amountLine}
         ${log.packageSpecValue ? '　包裝規格：' + log.packageSpecValue + escapeHtml(log.packageSpecUnit || '') : ''}<br>
         進貨數量：+${log.quantity} ${escapeHtml(logUnit)}<br>
+        ${log.shortageQuantity ? `短少：${log.shortageQuantity} ${escapeHtml(logUnit)}（損失約 NT$${(log.shortageQuantity * (log.unitCost||0)).toFixed(2)}）<br>` : ''}
+        ${log.extraQuantity ? `多給：+${log.extraQuantity} ${escapeHtml(logUnit)}<br>` : ''}
+        ${log.scrapQuantity ? `報廢：${log.scrapQuantity} ${escapeHtml(logUnit)}（損失約 NT$${(log.scrapQuantity * (log.unitCost||0)).toFixed(2)}）<br>` : ''}
+        ${log.secondaryQuantity ? `次品：+${log.secondaryQuantity} ${escapeHtml(logUnit)}<br>` : ''}
         總額：${totalCostTags}<br>
-        單價：${unitCostTags}`;
+        單價：${unitCostTags}
+        ${log.note ? '<br>備註：' + escapeHtml(log.note) : ''}`;
     } else if (log.type === 'adjust') {
       typeLabel = '人工盤點調整'; cls = 'adjust';
-      detail = `數量:${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff >= 0 ? '+' : ''}${log.diff})
+      const targetLabel = log.target === 'secondary' ? '次品庫存' : '正品庫存';
+      detail = `${targetLabel} 數量:${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff >= 0 ? '+' : ''}${log.diff})
         ${log.reason ? '<br>原因:' + escapeHtml(log.reason) : ''}`;
     } else if (log.type === 'edit') {
       typeLabel = '欄位修改'; cls = 'edit';
@@ -2300,6 +2423,7 @@ function editMaterialFields(m) {
   document.getElementById('eColorSeries').value = m.colorSeries || '';
   document.getElementById('eColorCode').value = m.colorCode || '';
   document.getElementById('eColorTag').value = m.colorTag || '';
+  document.getElementById('eNote').value = m.note || '';
   openModal('editModal');
 }
 
@@ -2310,7 +2434,7 @@ document.getElementById('submitEditBtn').addEventListener('click', async () => {
     ['category', '分類', 'eCategory'], ['brand', '品牌', 'eBrand'], ['material', '材質', 'eMaterial'],
     ['beadType', '類型/款式', 'eBeadType'], ['size', '尺寸', 'eSize'],
     ['colorSeries', '色系名稱', 'eColorSeries'], ['colorCode', '顏色', 'eColorCode'],
-    ['colorTag', '同色標籤', 'eColorTag'],
+    ['colorTag', '同色標籤', 'eColorTag'], ['note', '備註', 'eNote'],
   ];
   const updates = {};
   const logs = [];
@@ -2346,27 +2470,44 @@ document.getElementById('submitEditBtn').addEventListener('click', async () => {
 let adjustTargetMaterial = null;
 function openAdjustModal(m) {
   adjustTargetMaterial = m;
-  const unit = m.unit || '';
-  document.getElementById('adjustCurrent').value = (m.currentStock || 0) + ' ' + unit;
-  document.getElementById('adjustQtyLabel').textContent = `調整後數量(${unit})`;
-  document.getElementById('adjustNewQty').value = m.currentStock || 0;
+  document.getElementById('adjustTargetPrimary').checked = true;
   document.getElementById('adjustReason').value = '';
+  updateAdjustCurrentDisplay();
   openModal('adjustModal');
 }
+
+function updateAdjustCurrentDisplay() {
+  const m = adjustTargetMaterial;
+  if (!m) return;
+  const unit = m.unit || '';
+  const isSecondary = document.getElementById('adjustTargetSecondary').checked;
+  const current = isSecondary ? (m.currentStockSecondary || 0) : (m.currentStock || 0);
+  const label = isSecondary ? '次品庫存' : '正品庫存';
+  document.getElementById('adjustCurrent').value = `${current} ${unit}(${label})`;
+  document.getElementById('adjustQtyLabel').textContent = `調整後數量(${unit},${label})`;
+  document.getElementById('adjustNewQty').value = current;
+}
+
+document.querySelectorAll('input[name="adjustTarget"]').forEach(radio => {
+  radio.addEventListener('change', updateAdjustCurrentDisplay);
+});
 
 document.getElementById('submitAdjustBtn').addEventListener('click', async () => {
   if (!adjustTargetMaterial) return;
   const newQty = parseFloat(document.getElementById('adjustNewQty').value);
   if (isNaN(newQty) || newQty < 0) { alert('請輸入正確的數量'); return; }
   const reason = document.getElementById('adjustReason').value.trim();
-  const before = adjustTargetMaterial.currentStock || 0;
+  const isSecondary = document.getElementById('adjustTargetSecondary').checked;
+  const stockField = isSecondary ? 'currentStockSecondary' : 'currentStock';
+  const before = adjustTargetMaterial[stockField] || 0;
 
   await addDoc(collection(db, 'materials', adjustTargetMaterial.id, 'history'), {
-    type: 'adjust', beforeQty: before, afterQty: newQty, diff: newQty - before, reason,
+    type: 'adjust', target: isSecondary ? 'secondary' : 'primary',
+    beforeQty: before, afterQty: newQty, diff: newQty - before, reason,
     timestamp: serverTimestamp(),
   });
   await updateDoc(doc(db, 'materials', adjustTargetMaterial.id), {
-    currentStock: newQty, updatedAt: serverTimestamp(),
+    [stockField]: newQty, updatedAt: serverTimestamp(),
   });
 
   closeModal('adjustModal');
@@ -2425,6 +2566,15 @@ document.getElementById('addCurrencyBtn').addEventListener('click', async () => 
 
 // ---------- 匯入資料 ----------
 let importParsedGroups = null; // 驗證通過後暫存,供確認匯入時使用
+
+// 跟 processImportRows() 實際讀取的欄位名稱保持一致,兩邊有新增/異動欄位時務必同步修改
+const IMPORT_TEMPLATE_HEADERS = ['分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註'];
+
+document.getElementById('downloadImportTemplateBtn').addEventListener('click', () => {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([IMPORT_TEMPLATE_HEADERS]), '匯入範本');
+  XLSX.writeFile(wb, '材料進貨匯入範本.xlsx');
+});
 
 document.getElementById('openImportBtn').addEventListener('click', () => {
   closeDrawer();
@@ -2508,25 +2658,57 @@ function processImportRows(rows) {
     const colorSeries = String(row['色系名稱'] ?? '').trim();
     const colorCode = String(row['顏色'] ?? '').trim();
     const colorTag = String(row['同色標籤'] ?? '').trim();
+    const note = String(row['材料備註'] ?? '').trim();
+    const purchaseNote = String(row['進貨備註'] ?? '').trim();
     const platform = String(row['進貨國家/平台'] ?? '').trim();
     const seller = String(row['供應商名稱'] ?? '').trim();
     const currency = String(row['幣別'] ?? '').trim().toUpperCase();
     const amountMode = String(row['金額類型'] ?? '').trim().toLowerCase();
     const amount = row['金額'];
-    const packageSpecValueRaw = row['進貨包裝規格數字'];
-    const packageSpecUnit = String(row['進貨包裝規格單位'] ?? '').trim();
-    const quantity = row['本次進貨數量'];
+    const pkgUnit = String(row['包裝單位'] ?? '').trim();
+    const pkgBaseQtyRaw = row['報價基準數量'];
+    const pkgUnitQtyRaw = row['每包顆數'];
+    const pkgCountRaw = row['購買份數'];
+    const quantityRaw = row['本次進貨數量'];
     const quantityUnit = String(row['數量單位'] ?? '').trim();
+    const shortageQtyRaw = row['短少數量'];
+    const extraQtyRaw = row['多給數量'];
+    const scrapQtyRaw = row['報廢數量'];
+    const secondaryQtyRaw = row['次品數量'];
     const dateVal = parseImportDate(row['進貨日期']);
 
     const rowErrors = [];
     if (!dateVal) rowErrors.push('進貨日期格式錯誤或空白(請用 YYYY-MM-DD)');
     const validCurrencies = ['TWD', ...Object.keys(exchangeRates)];
     if (!validCurrencies.includes(currency)) rowErrors.push(`幣別必須是系統已設定的幣別之一(${validCurrencies.join('、')}),如需新幣別請先到「匯率設定」新增`);
-    if (!['total','unit'].includes(amountMode)) rowErrors.push('金額類型必須是 total 或 unit');
+    if (!['total','unit','package'].includes(amountMode)) rowErrors.push('金額類型必須是 total、unit 或 package');
     if (amount === '' || amount == null || isNaN(Number(amount)) || Number(amount) < 0) rowErrors.push('金額必須是不小於0的數字');
-    if (quantity === '' || quantity == null || isNaN(Number(quantity)) || Number(quantity) <= 0) rowErrors.push('本次進貨數量必須是大於0的數字');
     if (!quantityUnit) rowErrors.push('數量單位不能空白');
+
+    let receivedQuantity = null, pkgBaseQty = null, pkgUnitQty = null, pkgCount = null;
+    if (amountMode === 'package') {
+      pkgBaseQty = (pkgBaseQtyRaw === '' || pkgBaseQtyRaw == null) ? 1 : Number(pkgBaseQtyRaw);
+      pkgUnitQty = Number(pkgUnitQtyRaw);
+      pkgCount = Number(pkgCountRaw);
+      if (!pkgUnit) rowErrors.push('金額類型為 package 時,包裝單位不能空白');
+      if (isNaN(pkgBaseQty) || pkgBaseQty <= 0) rowErrors.push('報價基準數量必須是大於0的數字(留空預設為1)');
+      if (pkgUnitQtyRaw === '' || pkgUnitQtyRaw == null || isNaN(pkgUnitQty) || pkgUnitQty <= 0) rowErrors.push('每包顆數必須是大於0的數字');
+      if (pkgCountRaw === '' || pkgCountRaw == null || isNaN(pkgCount) || pkgCount <= 0) rowErrors.push('購買份數必須是大於0的數字');
+      if (!rowErrors.length) receivedQuantity = pkgUnitQty * pkgCount;
+    } else {
+      receivedQuantity = Number(quantityRaw);
+      if (quantityRaw === '' || quantityRaw == null || isNaN(receivedQuantity) || receivedQuantity <= 0) rowErrors.push('本次進貨數量必須是大於0的數字');
+    }
+
+    const shortageQuantity = (shortageQtyRaw === '' || shortageQtyRaw == null) ? 0 : Number(shortageQtyRaw);
+    const extraQuantity = (extraQtyRaw === '' || extraQtyRaw == null) ? 0 : Number(extraQtyRaw);
+    const scrapQuantity = (scrapQtyRaw === '' || scrapQtyRaw == null) ? 0 : Number(scrapQtyRaw);
+    const secondaryQuantity = (secondaryQtyRaw === '' || secondaryQtyRaw == null) ? 0 : Number(secondaryQtyRaw);
+    if (isNaN(shortageQuantity) || shortageQuantity < 0) rowErrors.push('短少數量不能是負數');
+    if (isNaN(extraQuantity) || extraQuantity < 0) rowErrors.push('多給數量不能是負數');
+    if (isNaN(scrapQuantity) || scrapQuantity < 0) rowErrors.push('報廢數量不能是負數');
+    if (isNaN(secondaryQuantity) || secondaryQuantity < 0) rowErrors.push('次品數量不能是負數');
+    if (!rowErrors.length && (shortageQuantity + scrapQuantity + secondaryQuantity > receivedQuantity)) rowErrors.push('短少數量+報廢數量+次品數量不能超過本次進貨(訂購)數量');
 
     if (rowErrors.length) {
       errors.push({ row: rowNum, messages: rowErrors });
@@ -2534,10 +2716,14 @@ function processImportRows(rows) {
     }
 
     parsedRows.push({
-      rowNum, category, brand, material, beadType, size, colorSeries, colorCode, colorTag,
-      platform, seller, currency, amountMode, amount: Number(amount),
-      packageSpecValue: (packageSpecValueRaw !== '' && packageSpecValueRaw != null) ? Number(packageSpecValueRaw) : null,
-      packageSpecUnit, quantity: Number(quantity), quantityUnit,
+      rowNum, category, brand, material, beadType, size, colorSeries, colorCode, colorTag, note,
+      platform, seller, currency, amountMode, amount: Number(amount), purchaseNote,
+      pkgUnit: amountMode === 'package' ? pkgUnit : null,
+      pkgBaseQty: amountMode === 'package' ? pkgBaseQty : null,
+      pkgUnitQty: amountMode === 'package' ? pkgUnitQty : null,
+      pkgCount: amountMode === 'package' ? pkgCount : null,
+      receivedQuantity, quantity: receivedQuantity - shortageQuantity - scrapQuantity - secondaryQuantity + extraQuantity,
+      shortageQuantity, extraQuantity, scrapQuantity, secondaryQuantity, quantityUnit,
       date: dateVal,
     });
   });
@@ -2593,7 +2779,7 @@ function processImportRows(rows) {
       newMaterialCount++;
       newRowCount += groupRows.length;
     }
-    groupInfos.push({ category, brand, material, beadType, size, colorSeries, colorCode, colorTag: groupRows[0].colorTag || '', rows: groupRows, existingId: existing ? existing.id : null });
+    groupInfos.push({ category, brand, material, beadType, size, colorSeries, colorCode, colorTag: groupRows[0].colorTag || '', note: groupRows[0].note || '', rows: groupRows, existingId: existing ? existing.id : null });
   }
 
   importParsedGroups = groupInfos;
@@ -2628,7 +2814,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
       checkOption(g.beadType, 'beadTypes');
       for (const r of g.rows) {
         checkOption(r.quantityUnit, 'stockUnits');
-        if (r.packageSpecUnit) checkOption(r.packageSpecUnit, 'packageUnits');
+        if (r.pkgUnit) checkOption(r.pkgUnit, 'packageUnits');
       }
     }
     const optionUpdates = {};
@@ -2646,7 +2832,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
 
     for (const [groupIdx, g] of importParsedGroups.entries()) {
       let materialId = g.existingId;
-      let runningStock, runningCost, lastPurchaseDate;
+      let runningStock, runningSecondaryStock, runningCost, lastPurchaseDate;
 
       if (!materialId) {
         const newRef = doc(collection(db, 'materials'));
@@ -2656,42 +2842,49 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
         const materialCode = await getNextMaterialCode(g.category);
         ops.push({ ref: newRef, opType: 'set', data: {
           category: g.category, brand: g.brand, material: g.material, beadType: g.beadType,
-          size: g.size, colorSeries: g.colorSeries, colorCode: g.colorCode, colorTag: g.colorTag,
+          size: g.size, colorSeries: g.colorSeries, colorCode: g.colorCode, colorTag: g.colorTag, note: g.note,
           unit: g.rows[0].quantityUnit,
-          currentStock: 0, currentUnitCost: 0, archived: false, materialCode,
+          currentStock: 0, currentStockSecondary: 0, currentUnitCost: 0, archived: false, materialCode,
           createdAt: earliestTs, updatedAt: serverTimestamp(),
         }});
         runningStock = 0;
+        runningSecondaryStock = 0;
         runningCost = 0;
         lastPurchaseDate = null;
       } else {
         const existingMat = materials.find(m => m.id === materialId);
         runningStock = existingMat.currentStock || 0;
+        runningSecondaryStock = existingMat.currentStockSecondary || 0;
         runningCost = existingMat.currentUnitCost || 0;
         lastPurchaseDate = existingMat.lastPurchaseDate || null;
       }
 
       for (const r of g.rows) {
-        const converted = convertToTwd(r.amount, r.currency);
         let twdAmount, unitCost;
         if (r.amountMode === 'unit') {
-          unitCost = converted;
-          twdAmount = unitCost * r.quantity;
+          unitCost = convertToTwd(r.amount, r.currency);
+          twdAmount = unitCost * r.receivedQuantity;
+        } else if (r.amountMode === 'package') {
+          twdAmount = convertToTwd(r.amount * r.pkgCount, r.currency);
+          unitCost = twdAmount / r.receivedQuantity;
         } else {
-          twdAmount = converted;
-          unitCost = twdAmount / r.quantity;
+          twdAmount = convertToTwd(r.amount, r.currency);
+          unitCost = twdAmount / r.receivedQuantity;
         }
         const rateUsed = r.currency === 'TWD' ? 1 : (exchangeRates[r.currency] || 1);
         const histRef = doc(collection(db, 'materials', materialId, 'history'));
         ops.push({ ref: histRef, opType: 'set', data: {
           type: 'purchase', platform: r.platform, seller: r.seller, currency: r.currency,
           originalAmount: r.amount, amountMode: r.amountMode, exchangeRateUsed: rateUsed,
-          twdAmount, packageSpecValue: r.packageSpecValue, packageSpecUnit: r.packageSpecUnit,
-          quantity: r.quantity, quantityUnit: r.quantityUnit, unitCost,
+          twdAmount, pkgUnit: r.pkgUnit, pkgBaseQty: r.pkgBaseQty, pkgUnitQty: r.pkgUnitQty, pkgCount: r.pkgCount,
+          quantity: r.quantity, shortageQuantity: r.shortageQuantity, extraQuantity: r.extraQuantity,
+          scrapQuantity: r.scrapQuantity, secondaryQuantity: r.secondaryQuantity,
+          quantityUnit: r.quantityUnit, unitCost, note: r.purchaseNote,
           timestamp: Timestamp.fromDate(r.date),
         }});
 
         runningStock += r.quantity;
+        runningSecondaryStock += r.secondaryQuantity;
         runningCost = Math.max(runningCost, unitCost);
       }
 
@@ -2702,7 +2895,8 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
 
       const matRef = doc(db, 'materials', materialId);
       ops.push({ ref: matRef, opType: 'update', data: {
-        currentStock: runningStock, currentUnitCost: runningCost, lastPurchaseDate, updatedAt: serverTimestamp(),
+        currentStock: runningStock, currentStockSecondary: runningSecondaryStock,
+        currentUnitCost: runningCost, lastPurchaseDate, updatedAt: serverTimestamp(),
       }});
     }
 
@@ -2734,7 +2928,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
 });
 
 // ---------- 匯出資料 ----------
-const EXPORT_HISTORY_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','同色標籤','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','進貨包裝規格數字','進貨包裝規格單位','本次進貨數量','數量單位','換算台幣總額','換算單價(台幣)','換算人民幣總額','換算單價(人民幣)'];
+const EXPORT_HISTORY_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註','換算台幣總額','換算單價(台幣)','換算人民幣總額','換算單價(人民幣)'];
 
 function sanitizeSheetName(name) {
   let n = String(name || '未分類').replace(/[\\/?*[\]:]/g, '_');
@@ -2765,11 +2959,13 @@ document.getElementById('openExportBtn').addEventListener('click', async () => {
         const unitCost = log.unitCost || 0;
         historyRows.push([
           m.materialCode || '', m.category || '', m.brand || '', m.material || '', m.beadType || '', m.size || '',
-          m.colorSeries || '', m.colorCode || '', m.colorTag || '',
+          m.colorSeries || '', m.colorCode || '', m.colorTag || '', m.note || '',
           log.timestamp && log.timestamp.toDate ? log.timestamp.toDate().toISOString().slice(0, 10) : '',
           log.platform || '', log.seller || '', log.currency || '', log.amountMode || '',
-          log.originalAmount ?? '', log.packageSpecValue ?? '', log.packageSpecUnit || '',
+          log.originalAmount ?? '', log.pkgUnit || '', log.pkgBaseQty ?? '', log.pkgUnitQty ?? '', log.pkgCount ?? '',
           log.quantity ?? '', log.quantityUnit || '',
+          log.shortageQuantity ?? '', log.extraQuantity ?? '',
+          log.scrapQuantity ?? '', log.secondaryQuantity ?? '', log.note || '',
           Number(twdAmount.toFixed(2)), Number(unitCost.toFixed(4)),
           Number((twdAmount / cnyRate).toFixed(2)), Number((unitCost / cnyRate).toFixed(4)),
         ]);
