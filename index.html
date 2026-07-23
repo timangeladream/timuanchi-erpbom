@@ -986,6 +986,7 @@
       <div class="ta-radio-row">
         <label class="ta-radio-option"><input type="radio" name="adjustTarget" value="primary" id="adjustTargetPrimary" checked> 正品庫存</label>
         <label class="ta-radio-option"><input type="radio" name="adjustTarget" value="secondary" id="adjustTargetSecondary"> 次品庫存</label>
+        <label class="ta-radio-option"><input type="radio" name="adjustTarget" value="scrap" id="adjustTargetScrap"> 報廢登記</label>
       </div>
     </div>
     <div class="ta-form-row">
@@ -1027,6 +1028,7 @@
     <span class="ta-modal-close" data-close="importModal">✕</span>
     <h2>匯入資料</h2>
     <button class="ta-btn" id="downloadImportTemplateBtn">下載空白範例檔案</button>
+    <div class="ta-modal-text">提示：「略過」欄位填入任何文字，該列就不會被匯入，但仍會保留在檔案裡（不用刪除資料列）。</div>
     <div class="ta-form-row">
       <label>選擇進貨紀錄 Excel 檔案(.xlsx)</label>
       <input type="file" id="importFileInput" accept=".xlsx,.xls">
@@ -1100,7 +1102,7 @@ import {
   EmailAuthProvider, reauthenticateWithCredential
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, setDoc, deleteDoc,
+  getFirestore, collection, collectionGroup, doc, getDoc, getDocs, addDoc, updateDoc, setDoc, deleteDoc,
   query, where, orderBy, serverTimestamp, onSnapshot, Timestamp, writeBatch, runTransaction, deleteField,
   getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -2467,6 +2469,26 @@ async function getNextMaterialCode(category) {
   return code + String(seq).padStart(MATERIAL_CODE_SEQ_DIGITS, '0');
 }
 
+// 批次匯入用:一次交易預先保留每個分類代碼需要的整段流水號區間,
+// 避免像 getNextMaterialCode() 那樣對同一份計數器文件重複做上百次交易(容易撞到 Firestore 速率限制)
+// codeNeeds: { 分類代碼: 需要幾個新編號 } -> 回傳 { 分類代碼: 這次配置的起始序號 }
+async function reserveMaterialCodeBlock(codeNeeds) {
+  const counterRef = doc(db, 'settings', 'materialCounters');
+  return await runTransaction(db, async transaction => {
+    const snap = await transaction.get(counterRef);
+    const data = snap.exists() ? snap.data() : {};
+    const starts = {};
+    const updates = {};
+    for (const [code, count] of Object.entries(codeNeeds)) {
+      const current = data[code] || 0;
+      starts[code] = current + 1;
+      updates[code] = current + count;
+    }
+    transaction.set(counterRef, updates, { merge: true });
+    return starts;
+  });
+}
+
 document.getElementById('submitPurchaseBtn').addEventListener('click', submitPurchase);
 
 async function submitPurchase() {
@@ -2800,10 +2822,17 @@ function renderTimeline(logs, unit, materialId) {
         單價：${unitCostTags}
         ${log.note ? '<br>備註：' + escapeHtml(log.note) : ''}`;
     } else if (log.type === 'adjust') {
-      typeLabel = '人工盤點調整'; cls = 'adjust';
       const targetLabel = log.target === 'secondary' ? '次品庫存' : '正品庫存';
-      detail = `${targetLabel} 數量:${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff >= 0 ? '+' : ''}${log.diff})
-        ${log.reason ? '<br>原因:' + escapeHtml(log.reason) : ''}`;
+      if (log.scrapQuantity) {
+        typeLabel = '報廢登記'; cls = 'adjust';
+        detail = `${targetLabel} 數量:${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff})<br>
+          報廢：${log.scrapQuantity} ${escapeHtml(unit)}（損失約 NT$${(log.scrapQuantity * (log.unitCost||0)).toFixed(2)}）
+          ${log.reason ? '<br>原因:' + escapeHtml(log.reason) : ''}`;
+      } else {
+        typeLabel = '人工盤點調整'; cls = 'adjust';
+        detail = `${targetLabel} 數量:${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff >= 0 ? '+' : ''}${log.diff})
+          ${log.reason ? '<br>原因:' + escapeHtml(log.reason) : ''}`;
+      }
     } else if (log.type === 'edit') {
       typeLabel = '欄位修改'; cls = 'edit';
       detail = `${escapeHtml(log.field)}:「${escapeHtml(log.oldValue)}」→「${escapeHtml(log.newValue)}」`;
@@ -2916,11 +2945,17 @@ function updateAdjustCurrentDisplay() {
   if (!m) return;
   const unit = m.unit || '';
   const isSecondary = document.getElementById('adjustTargetSecondary').checked;
+  const isScrap = document.getElementById('adjustTargetScrap').checked;
   const current = isSecondary ? (m.currentStockSecondary || 0) : (m.currentStock || 0);
   const label = isSecondary ? '次品庫存' : '正品庫存';
   document.getElementById('adjustCurrent').value = `${current} ${unit}(${label})`;
-  document.getElementById('adjustQtyLabel').textContent = `調整後數量(${unit},${label})`;
-  document.getElementById('adjustNewQty').value = current;
+  if (isScrap) {
+    document.getElementById('adjustQtyLabel').textContent = `報廢數量(${unit},本次從正品庫存報廢幾個)`;
+    document.getElementById('adjustNewQty').value = '';
+  } else {
+    document.getElementById('adjustQtyLabel').textContent = `調整後數量(${unit},${label})`;
+    document.getElementById('adjustNewQty').value = current;
+  }
 }
 
 document.querySelectorAll('input[name="adjustTarget"]').forEach(radio => {
@@ -2929,21 +2964,41 @@ document.querySelectorAll('input[name="adjustTarget"]').forEach(radio => {
 
 document.getElementById('submitAdjustBtn').addEventListener('click', async () => {
   if (!adjustTargetMaterial) return;
-  const newQty = parseFloat(document.getElementById('adjustNewQty').value);
-  if (isNaN(newQty) || newQty < 0) { alert('請輸入正確的數量'); return; }
   const reason = document.getElementById('adjustReason').value.trim();
   const isSecondary = document.getElementById('adjustTargetSecondary').checked;
-  const stockField = isSecondary ? 'currentStockSecondary' : 'currentStock';
-  const before = adjustTargetMaterial[stockField] || 0;
+  const isScrap = document.getElementById('adjustTargetScrap').checked;
 
-  await addDoc(collection(db, 'materials', adjustTargetMaterial.id, 'history'), {
-    type: 'adjust', target: isSecondary ? 'secondary' : 'primary',
-    beforeQty: before, afterQty: newQty, diff: newQty - before, reason,
-    timestamp: serverTimestamp(),
-  });
-  await updateDoc(doc(db, 'materials', adjustTargetMaterial.id), {
-    [stockField]: newQty, updatedAt: serverTimestamp(),
-  });
+  if (isScrap) {
+    const scrapQty = parseFloat(document.getElementById('adjustNewQty').value);
+    const before = adjustTargetMaterial.currentStock || 0;
+    if (isNaN(scrapQty) || scrapQty <= 0) { alert('請輸入正確的報廢數量'); return; }
+    if (scrapQty > before) { alert('報廢數量不能超過目前正品庫存'); return; }
+    const after = before - scrapQty;
+
+    await addDoc(collection(db, 'materials', adjustTargetMaterial.id, 'history'), {
+      type: 'adjust', target: 'primary',
+      beforeQty: before, afterQty: after, diff: -scrapQty, reason,
+      scrapQuantity: scrapQty, unitCost: adjustTargetMaterial.currentUnitCost || 0,
+      timestamp: serverTimestamp(),
+    });
+    await updateDoc(doc(db, 'materials', adjustTargetMaterial.id), {
+      currentStock: after, updatedAt: serverTimestamp(),
+    });
+  } else {
+    const newQty = parseFloat(document.getElementById('adjustNewQty').value);
+    if (isNaN(newQty) || newQty < 0) { alert('請輸入正確的數量'); return; }
+    const stockField = isSecondary ? 'currentStockSecondary' : 'currentStock';
+    const before = adjustTargetMaterial[stockField] || 0;
+
+    await addDoc(collection(db, 'materials', adjustTargetMaterial.id, 'history'), {
+      type: 'adjust', target: isSecondary ? 'secondary' : 'primary',
+      beforeQty: before, afterQty: newQty, diff: newQty - before, reason,
+      timestamp: serverTimestamp(),
+    });
+    await updateDoc(doc(db, 'materials', adjustTargetMaterial.id), {
+      [stockField]: newQty, updatedAt: serverTimestamp(),
+    });
+  }
 
   closeModal('adjustModal');
   openDetail(adjustTargetMaterial.id);
@@ -3003,7 +3058,7 @@ document.getElementById('addCurrencyBtn').addEventListener('click', async () => 
 let importParsedGroups = null; // 驗證通過後暫存,供確認匯入時使用
 
 // 跟 processImportRows() 實際讀取的欄位名稱保持一致,兩邊有新增/異動欄位時務必同步修改
-const IMPORT_TEMPLATE_HEADERS = ['分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註'];
+const IMPORT_TEMPLATE_HEADERS = ['分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註','略過'];
 
 document.getElementById('downloadImportTemplateBtn').addEventListener('click', () => {
   const wb = XLSX.utils.book_new();
@@ -3040,7 +3095,7 @@ document.getElementById('importFileInput').addEventListener('change', async (e) 
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array', cellDates: true });
     const sheet = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', blankrows: true });
     processImportRows(rows);
   } catch (err) {
     document.getElementById('importSummary').innerHTML = '';
@@ -3082,9 +3137,12 @@ function processImportRows(rows) {
 
   const errors = [];
   const parsedRows = [];
+  let skippedCount = 0;
 
   rows.forEach((row, idx) => {
     const rowNum = idx + 2; // 對應 Excel 實際列號(含標題列)
+    if (Object.values(row).every(v => v === '' || v == null)) return; // 完全空白的列(資料間的空行),不算資料也不算錯誤
+    if (String(row['略過'] ?? '').trim()) { skippedCount++; return; }
     const category = String(row['分類'] ?? '').trim();
     const brand = String(row['品牌'] ?? '').trim();
     const material = String(row['材質'] ?? '').trim();
@@ -3192,9 +3250,17 @@ function processImportRows(rows) {
     errors.sort((a, b) => a.row - b.row);
     summaryEl.innerHTML = '';
     errorListEl.innerHTML = `<div class="ta-import-errors">
-      共 ${rows.length} 列資料,發現 ${errors.length} 列有問題,請修正後重新上傳(本次不會匯入任何資料):
+      共 ${rows.length} 列資料${skippedCount ? `(略過 ${skippedCount} 列)` : ''},發現 ${errors.length} 列有問題,請修正後重新上傳(本次不會匯入任何資料):
       <ul>${errors.map(e => `<li>第 ${e.row} 列:${e.messages.map(escapeHtml).join(';')}</li>`).join('')}</ul>
     </div>`;
+    document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+    importParsedGroups = null;
+    return;
+  }
+
+  if (!parsedRows.length) {
+    summaryEl.innerHTML = '';
+    errorListEl.innerHTML = `<div class="ta-import-errors">共 ${rows.length} 列資料,全部被標記略過,沒有資料可以匯入。</div>`;
     document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
     importParsedGroups = null;
     return;
@@ -3221,7 +3287,7 @@ function processImportRows(rows) {
 
   errorListEl.innerHTML = '';
   summaryEl.innerHTML = `<div class="ta-import-summary">
-    共讀取 ${rows.length} 列,全部通過驗證。<br>
+    共讀取 ${rows.length} 列,全部通過驗證${skippedCount ? `(另外略過 ${skippedCount} 列,不會匯入)` : ''}。<br>
     將新增 ${newMaterialCount} 款新材料(共 ${newRowCount} 筆進貨紀錄)。<br>
     將累加到 ${mergeMaterialCount} 款既有材料(共 ${mergeRowCount} 筆進貨紀錄)。
   </div>`;
@@ -3260,6 +3326,17 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
       await setDoc(doc(db, 'settings', 'options'), optionUpdates, { merge: true });
     }
 
+    // 統計這次匯入總共需要幾個新材料編號(依分類代碼分組),一次交易預先保留整段區間,
+    // 避免對同一份計數器文件重複做上百次交易(容易撞到 Firestore 速率限制)
+    const codeNeeds = {};
+    for (const g of importParsedGroups) {
+      if (!g.existingId) {
+        const code = (options.categoryCodes || {})[g.category];
+        if (code) codeNeeds[code] = (codeNeeds[code] || 0) + 1;
+      }
+    }
+    const codeCursors = Object.keys(codeNeeds).length ? await reserveMaterialCodeBlock(codeNeeds) : {};
+
     // 組裝所有寫入操作
     const ops = []; // { ref, data, opType }
     let totalRows = 0;
@@ -3274,7 +3351,8 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
         materialId = newRef.id;
         // 同一批匯入若進貨日期相同,用 Excel 裡出現的先後順序疊加毫秒差,避免排序時序位不分
         const earliestTs = Timestamp.fromMillis(g.rows[0].date.getTime() + groupIdx);
-        const materialCode = await getNextMaterialCode(g.category);
+        const code = (options.categoryCodes || {})[g.category];
+        const materialCode = code ? code + String(codeCursors[code]++).padStart(MATERIAL_CODE_SEQ_DIGITS, '0') : null;
         ops.push({ ref: newRef, opType: 'set', data: {
           category: g.category, brand: g.brand, material: g.material, beadType: g.beadType,
           size: g.size, colorSeries: g.colorSeries, colorCode: g.colorCode, colorTag: g.colorTag, note: g.note,
@@ -3475,9 +3553,15 @@ document.getElementById('wipeScopeSelect').addEventListener('change', async () =
   confirmBtn.classList.add('ta-is-hidden');
 
   let historyCount = 0;
-  for (const m of targetMaterials) {
-    const countSnap = await getCountFromServer(collection(db, 'materials', m.id, 'history'));
-    historyCount += countSnap.data().count;
+  if (scope === '__ALL__') {
+    // 全部分類本來就需要讀完所有材料的歷史紀錄,用集合群組查詢1次算完,不用逐款材料分開問
+    const countSnap = await getCountFromServer(collectionGroup(db, 'history'));
+    historyCount = countSnap.data().count;
+  } else {
+    for (const m of targetMaterials) {
+      const countSnap = await getCountFromServer(collection(db, 'materials', m.id, 'history'));
+      historyCount += countSnap.data().count;
+    }
   }
 
   const scopeLabel = scope === '__ALL__' ? '全部分類' : `「${scope}」`;
@@ -3529,10 +3613,17 @@ document.getElementById('confirmWipeBtn').addEventListener('click', async () => 
     const targetMaterials = (scope === '__ALL__' ? materials : materials.filter(m => m.category === scope)).slice();
     const ops = [];
     let historyCount = 0;
-    for (const m of targetMaterials) {
-      const histSnap = await getDocs(collection(db, 'materials', m.id, 'history'));
+    if (scope === '__ALL__') {
+      // 全部分類本來就需要讀完所有材料的歷史紀錄,用集合群組查詢1次抓完,不用逐款材料分開問
+      const histSnap = await getDocs(collectionGroup(db, 'history'));
       histSnap.docs.forEach(d => { ops.push(d.ref); historyCount++; });
-      ops.push(doc(db, 'materials', m.id));
+      targetMaterials.forEach(m => ops.push(doc(db, 'materials', m.id)));
+    } else {
+      for (const m of targetMaterials) {
+        const histSnap = await getDocs(collection(db, 'materials', m.id, 'history'));
+        histSnap.docs.forEach(d => { ops.push(d.ref); historyCount++; });
+        ops.push(doc(db, 'materials', m.id));
+      }
     }
 
     const CHUNK_SIZE = 400;
