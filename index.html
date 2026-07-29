@@ -516,6 +516,10 @@
         <label>顏色(選填)</label>
         <input type="text" id="pColorCode">
       </div>
+      <div class="ta-form-row">
+        <label>供應商原始顏色名稱/代號(選填,記錄這筆進貨供應商自己怎麼稱呼這個顏色)</label>
+        <input type="text" id="pSupplierColorName">
+      </div>
       <div class="ta-form-row ta-form-row--full">
         <label>同色標籤(選填,填一樣的字,不同品牌/供應商的材料就會在詳情頁互相顯示成「同色替代品」)</label>
         <input type="text" id="pColorTag">
@@ -683,6 +687,10 @@
       <div class="ta-form-row">
         <label>供應商名稱</label>
         <input type="text" id="eprSeller">
+      </div>
+      <div class="ta-form-row">
+        <label>供應商原始顏色名稱/代號(選填)</label>
+        <input type="text" id="eprSupplierColorName">
       </div>
       <div class="ta-form-row">
         <label>幣別</label>
@@ -1528,6 +1536,17 @@ document.getElementById('categoryFormSaveBtn').addEventListener('click', async (
   const codeConflictName = Object.keys(codes).find(n => n !== oldName && codes[n] === codeInput);
   if (codeConflictName) { alert(`這個代碼已經被分類「${codeConflictName}」使用了,請換一個`); return; }
 
+  if (isEdit && codes[oldName] && codes[oldName] !== codeInput) {
+    const affectedCount = materials.filter(m => m.category === oldName).length;
+    if (affectedCount > 0) {
+      const ok = await showConfirmModal({
+        title: '確定要修改分類代碼嗎？',
+        text: `「${oldName}」已經有 ${affectedCount} 款材料，修改代碼不會影響它們既有的編號，之後新增的材料會用新代碼「${codeInput}」重新從第1號開始編號。確定要繼續嗎？`,
+      });
+      if (!ok) return;
+    }
+  }
+
   const btn = document.getElementById('categoryFormSaveBtn');
   btn.disabled = true;
   try {
@@ -2024,7 +2043,7 @@ document.getElementById('openPurchaseBtn').addEventListener('click', () => {
 
 function resetPurchaseForm() {
   ['pCategory','pBrand','pMaterial','pBeadType','pQuantityUnit','pPkgUnit'].forEach(id => document.getElementById(id).value = '');
-  ['pSize','pColorSeries','pColorCode','pColorTag','pNote','pPlatform','pSeller','pQuantity',
+  ['pSize','pColorSeries','pColorCode','pSupplierColorName','pColorTag','pNote','pPlatform','pSeller','pQuantity',
    'pUnitPrice','pTotalAmount','pPkgUnitPrice','pPkgUnitQty','pPkgCount',
    'pShortageQty','pExtraQty','pScrapQty','pSecondaryQty','pPurchaseNote'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('pPkgBaseQty').value = '1';
@@ -2304,6 +2323,7 @@ function openEditPurchaseModal(materialId, historyId, log, unit) {
     ? log.timestamp.toDate().toISOString().slice(0, 10) : '';
   document.getElementById('eprPlatform').value = log.platform || '';
   document.getElementById('eprSeller').value = log.seller || '';
+  document.getElementById('eprSupplierColorName').value = log.supplierColorName || '';
   document.getElementById('eprCurrency').value = log.currency || 'TWD';
   document.getElementById('eprQuantityUnit').value = unit || '';
   document.getElementById('eprShortageQty').value = log.shortageQuantity || 0;
@@ -2365,6 +2385,7 @@ document.getElementById('submitEditPurchaseBtn').addEventListener('click', async
 
   const platform = document.getElementById('eprPlatform').value.trim();
   const seller = document.getElementById('eprSeller').value.trim();
+  const supplierColorName = document.getElementById('eprSupplierColorName').value.trim();
   const currency = document.getElementById('eprCurrency').value;
   const amountMode = document.querySelector('input[name="eprAmountMode"]:checked').value;
   const purchaseDateStr = document.getElementById('eprPurchaseDate').value;
@@ -2428,7 +2449,7 @@ document.getElementById('submitEditPurchaseBtn').addEventListener('click', async
   btn.disabled = true;
   try {
     const newData = {
-      platform, seller, currency, originalAmount, amountMode, exchangeRateUsed: rateUsed,
+      platform, seller, supplierColorName, currency, originalAmount, amountMode, exchangeRateUsed: rateUsed,
       twdAmount, pkgUnit, pkgBaseQty, pkgUnitQty, pkgCount,
       quantity: goodQty, receivedQuantity, shortageQuantity: shortageQty, extraQuantity: extraQty,
       scrapQuantity: scrapQty, secondaryQuantity: secondaryQty,
@@ -2440,13 +2461,15 @@ document.getElementById('submitEditPurchaseBtn').addEventListener('click', async
     // 記錄修改前後對照,方便之後追溯庫存/成本為什麼變動
     const changedFields = [];
     const compareLabels = {
-      platform: '進貨國家/平台', seller: '供應商名稱', currency: '幣別', originalAmount: '金額',
+      platform: '進貨國家/平台', seller: '供應商名稱', supplierColorName: '供應商原始顏色名稱/代號',
+      currency: '幣別', originalAmount: '金額',
       quantity: '正品入庫數量', shortageQuantity: '短少數量', extraQuantity: '多給數量',
       scrapQuantity: '報廢數量', secondaryQuantity: '次品數量', note: '進貨備註',
     };
+    const textFields = ['note', 'supplierColorName'];
     for (const [field, label] of Object.entries(compareLabels)) {
-      const oldVal = original[field] ?? (field === 'note' ? '' : 0);
-      const newVal = newData[field] ?? (field === 'note' ? '' : 0);
+      const oldVal = original[field] ?? (textFields.includes(field) ? '' : 0);
+      const newVal = newData[field] ?? (textFields.includes(field) ? '' : 0);
       if (String(oldVal) !== String(newVal)) changedFields.push({ field: label, oldVal, newVal });
     }
     if (changedFields.length) {
@@ -2519,6 +2542,7 @@ async function submitPurchase() {
 
   const platform = document.getElementById('pPlatform').value.trim();
   const seller = document.getElementById('pSeller').value.trim();
+  const supplierColorName = document.getElementById('pSupplierColorName').value.trim();
   const currency = document.getElementById('pCurrency').value;
   const amountMode = document.querySelector('input[name="pAmountMode"]:checked').value;
   const quantityUnitInput = document.getElementById('pQuantityUnit').value.trim();
@@ -2610,7 +2634,7 @@ async function submitPurchase() {
 
     await addDoc(collection(db, 'materials', materialId, 'history'), {
       type: 'purchase',
-      platform, seller, currency, originalAmount, amountMode, exchangeRateUsed: rateUsed,
+      platform, seller, supplierColorName, currency, originalAmount, amountMode, exchangeRateUsed: rateUsed,
       twdAmount,
       pkgUnit, pkgBaseQty, pkgUnitQty, pkgCount,
       quantity: goodQty, receivedQuantity, shortageQuantity: shortageQty, extraQuantity: extraQty,
@@ -2826,6 +2850,7 @@ function renderTimeline(logs, unit, materialId) {
           return `<span class="ta-tag ta-tag--money">${escapeHtml(code)} ${((log.unitCost||0) / rate).toFixed(4)} / ${escapeHtml(logUnit)}</span>`;
         })).join(' ');
       detail = `${escapeHtml(log.platform || '')} ${log.seller ? ' / ' + escapeHtml(log.seller) : ''}<br>
+        ${log.supplierColorName ? '供應商原始顏色名稱：' + escapeHtml(log.supplierColorName) + '<br>' : ''}
         ${amountLine}
         ${log.packageSpecValue ? '　包裝規格：' + log.packageSpecValue + escapeHtml(log.packageSpecUnit || '') : ''}<br>
         進貨數量：+${log.quantity} ${escapeHtml(logUnit)}<br>
@@ -3073,7 +3098,7 @@ document.getElementById('addCurrencyBtn').addEventListener('click', async () => 
 let importParsedGroups = null; // 驗證通過後暫存,供確認匯入時使用
 
 // 跟 processImportRows() 實際讀取的欄位名稱保持一致,兩邊有新增/異動欄位時務必同步修改
-const IMPORT_TEMPLATE_HEADERS = ['分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註','略過'];
+const IMPORT_TEMPLATE_HEADERS = ['分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','供應商原始顏色名稱/代號','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註','略過'];
 
 document.getElementById('downloadImportTemplateBtn').addEventListener('click', () => {
   const wb = XLSX.utils.book_new();
@@ -3170,6 +3195,7 @@ function processImportRows(rows) {
     const purchaseNote = String(row['進貨備註'] ?? '').trim();
     const platform = String(row['進貨國家/平台'] ?? '').trim();
     const seller = String(row['供應商名稱'] ?? '').trim();
+    const supplierColorName = String(row['供應商原始顏色名稱/代號'] ?? '').trim();
     const currency = String(row['幣別'] ?? '').trim().toUpperCase();
     const amountMode = String(row['金額類型'] ?? '').trim().toLowerCase();
     const amount = row['金額'];
@@ -3225,7 +3251,7 @@ function processImportRows(rows) {
 
     parsedRows.push({
       rowNum, category, brand, material, beadType, size, colorSeries, colorCode, colorTag, note,
-      platform, seller, currency, amountMode, amount: Number(amount), purchaseNote,
+      platform, seller, supplierColorName, currency, amountMode, amount: Number(amount), purchaseNote,
       pkgUnit: amountMode === 'package' ? pkgUnit : null,
       pkgBaseQty: amountMode === 'package' ? pkgBaseQty : null,
       pkgUnitQty: amountMode === 'package' ? pkgUnitQty : null,
@@ -3402,7 +3428,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
         const rateUsed = r.currency === 'TWD' ? 1 : (exchangeRates[r.currency] || 1);
         const histRef = doc(collection(db, 'materials', materialId, 'history'));
         ops.push({ ref: histRef, opType: 'set', data: {
-          type: 'purchase', platform: r.platform, seller: r.seller, currency: r.currency,
+          type: 'purchase', platform: r.platform, seller: r.seller, supplierColorName: r.supplierColorName, currency: r.currency,
           originalAmount: r.amount, amountMode: r.amountMode, exchangeRateUsed: rateUsed,
           twdAmount, pkgUnit: r.pkgUnit, pkgBaseQty: r.pkgBaseQty, pkgUnitQty: r.pkgUnitQty, pkgCount: r.pkgCount,
           quantity: r.quantity, receivedQuantity: r.receivedQuantity, shortageQuantity: r.shortageQuantity, extraQuantity: r.extraQuantity,
@@ -3456,7 +3482,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
 });
 
 // ---------- 匯出資料 ----------
-const EXPORT_HISTORY_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註','換算台幣總額','換算單價(台幣)','換算人民幣總額','換算單價(人民幣)'];
+const EXPORT_HISTORY_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','供應商原始顏色名稱/代號','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註','換算台幣總額','換算單價(台幣)','換算人民幣總額','換算單價(人民幣)'];
 
 // ---------- 定期匯出提醒(每月,純前端判斷,不需要後端) ----------
 const EXPORT_REMINDER_DAYS = 30;
@@ -3514,7 +3540,7 @@ document.getElementById('openExportBtn').addEventListener('click', async () => {
         const unitCost = log.unitCost || 0;
         historyRows.push([
           m.materialCode || '', m.category || '', m.brand || '', m.material || '', m.beadType || '', m.size || '',
-          m.colorSeries || '', m.colorCode || '', m.colorTag || '', m.note || '',
+          m.colorSeries || '', m.colorCode || '', log.supplierColorName || '', m.colorTag || '', m.note || '',
           log.timestamp && log.timestamp.toDate ? log.timestamp.toDate().toISOString().slice(0, 10) : '',
           log.platform || '', log.seller || '', log.currency || '', log.amountMode || '',
           log.originalAmount ?? '', log.pkgUnit || '', log.pkgBaseQty ?? '', log.pkgUnitQty ?? '', log.pkgCount ?? '',
