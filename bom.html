@@ -537,7 +537,8 @@ import {
   getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore, collection, collectionGroup, doc, getDoc, getDocs, addDoc, updateDoc, setDoc, deleteDoc,
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, collectionGroup, doc, getDoc, getDocs, addDoc, updateDoc, setDoc, deleteDoc,
   query, where, orderBy, serverTimestamp, onSnapshot, Timestamp, writeBatch, runTransaction, deleteField,
   getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -553,7 +554,12 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+// 開啟本機離線快取:重新整理頁面時先讀瀏覽器本機的舊資料,伺服器只需要傳這期間的變動,
+// 不用每次都整批重讀全部材料,大幅降低 Firestore 讀取次數。用「多分頁」模式,
+// 這樣材料系統/BOM系統(或同一個系統開兩個分頁)同時開著也不會互相搶快取。
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
