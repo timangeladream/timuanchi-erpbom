@@ -71,7 +71,140 @@
     background: #fff; cursor: pointer; font-size: 13px; color: var(--text);
   }
   .ta-btn:hover { border-color: var(--primary); color: var(--primary-dark); }
+  .ta-btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .ta-btn-primary:hover { background: #fff; }
+  .ta-btn-danger { color: var(--danger); }
+  .ta-btn-sm { padding: 6px 8px; font-size: 10px; }
   .ta-hamburger-btn { font-size: 16px; padding: 8px 12px; line-height: 1; }
+
+  .ta-is-hidden.ta-modal-overlay { display: none; }
+  .ta-modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    align-items: center; justify-content: center; z-index: 200; padding: 20px;
+  }
+  .ta-modal-overlay.ta-is-open { display: flex; }
+  .ta-modal {
+    position: relative;
+    background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 560px;
+    max-height: 88vh; overflow-y: auto;
+  }
+  .ta-modal h2 { margin: 0 0 16px; font-size: 17px; color: var(--primary-dark); }
+  .ta-modal--wide { max-width: 720px; }
+  .ta-modal-text { font-size: 13px; color: var(--text); line-height: 1.6; margin-bottom: 14px; }
+  .ta-modal-close { position: absolute; top: 16px; right: 20px; cursor: pointer; font-size: 18px; color: var(--text-muted); }
+
+  .ta-form-row { margin-bottom: 12px; }
+  .ta-form-row label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+  .ta-form-row input, .ta-form-row select, .ta-form-row textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
+  }
+  .ta-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .ta-input-uppercase { text-transform: uppercase; }
+
+  .ta-category-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .ta-category-row--disabled { opacity: 0.5; }
+  .ta-category-row-order { display: flex; gap: 4px; }
+  .ta-category-row-info {
+    flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ta-category-row-name { flex: 1; }
+  .ta-tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #e8edf3; color: var(--text-muted); }
+  .ta-empty-hint { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
+
+  .ta-category-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .ta-category-tab {
+    padding: 6px 14px; border-radius: 16px; border: 1px solid var(--border); background: #fff;
+    font-size: 12px; cursor: pointer; color: var(--text-muted);
+  }
+  .ta-category-tab:hover { border-color: var(--primary); color: var(--primary-dark); }
+  .ta-category-tab.ta-is-active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .ta-category-tab--disabled { opacity: 0.5; }
+
+  .ta-filter-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+  .ta-filter-bar input[type=text] { padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+
+  .ta-table-scroll { overflow-x: auto; }
+  table { width: 100%; min-width: 600px; margin: 0 auto; border-collapse: collapse; background: var(--card-bg); border-radius: 10px; overflow: hidden; }
+  thead th {
+    text-align: left; font-size: 12px; color: #fff; font-weight: 500; white-space: nowrap;
+    padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--primary);
+  }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 12px; white-space: nowrap; }
+  tbody tr:hover { background: #eff3f7; cursor: pointer; }
+  tbody tr.ta-row--archived { opacity: 0.5; }
+  .ta-col-right { text-align: right; }
+  .ta-col-center { text-align: center; }
+
+  .ta-detail-header { display: flex; flex-direction: column; align-items: flex-start; margin-bottom: 6px; padding-right: 32px; gap: 8px; }
+  .ta-detail-title { font-size: 16px; font-weight: 600; color: var(--primary-dark); }
+  .ta-detail-category { margin-bottom: 8px; }
+  .ta-detail-stats { display: flex; gap: 20px; margin: 12px 0; flex-wrap: wrap; }
+  .ta-detail-stats .ta-stat-label { font-size: 12px; color: var(--text-muted); }
+  .ta-detail-stats .ta-stat-value { font-size: 16px; margin-top: 0; font-weight: 600; color: var(--primary-dark); }
+  .ta-section-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+  .ta-cost-change-notice {
+    background: #fbf3e8; border: 1px solid #b8894a; color: #8a5a2d;
+    border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 12.5px;
+  }
+
+  .ta-recipe-search-wrap { position: relative; }
+  .ta-recipe-search-results {
+    position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px; z-index: 10;
+    background: #fff; border: 1px solid var(--border); border-radius: 8px;
+    max-height: 280px; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  }
+  .ta-recipe-search-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .ta-recipe-search-item:last-child { border-bottom: none; }
+  .ta-recipe-search-item:hover { background: #eff3f7; }
+  .ta-recipe-search-item-main { font-size: 13px; color: var(--text); }
+  .ta-recipe-search-item-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  .ta-recipe-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .ta-recipe-row-name { flex: 1; font-size: 13px; }
+  .ta-recipe-row-qty { width: 80px; }
+  .ta-recipe-row-qty input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .ta-recipe-row-unit { width: 40px; font-size: 12px; color: var(--text-muted); }
+  .ta-recipe-row-subtotal { width: 100px; text-align: right; font-size: 13px; }
+  .ta-recipe-row-del { cursor: pointer; color: var(--danger); font-size: 12px; white-space: nowrap; }
+  .ta-recipe-total { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 0 0; font-size: 15px; font-weight: 600; color: var(--primary-dark); }
+
+  .ta-pc-grid { display: grid; gap: 12px 16px; margin-bottom: 1rem; }
+  .ta-pc-grid-2 { grid-template-columns: repeat(2,1fr); }
+  .ta-pc-grid-3 { grid-template-columns: repeat(3,1fr); }
+  .ta-pc-grid-4 { grid-template-columns: repeat(2,1fr); }
+  .ta-pc-field label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+  .ta-pc-field input[type=number], .ta-pc-field input[type=text] {
+    width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
+  }
+  .ta-pc-field input:disabled { background: #eef1f5; color: var(--text-muted); }
+  .ta-pc-toggle-row {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 10px 12px;
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; color: var(--text-muted);
+  }
+  .ta-switch { position: relative; display: inline-block; width: 34px; height: 20px; flex-shrink: 0; cursor: pointer; }
+  .ta-switch input { opacity: 0; width: 0; height: 0; }
+  .ta-switch .track { position: absolute; inset: 0; background: var(--border); border-radius: 20px; transition: 0.15s; }
+  .ta-switch input:checked + .track { background: var(--primary); }
+  .ta-switch .thumb { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; background: #fff; border-radius: 50%; transition: 0.15s; }
+  .ta-switch input:checked ~ .thumb { left: 17px; }
+  .ta-pc-item-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .ta-pc-item-row.ta-is-disabled { opacity: 0.4; }
+  .ta-pc-item-row input[type=text] { width: 110px; height: 34px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .ta-pc-item-row input[type=number] { width: 15%; height: 34px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .ta-pc-item-unit { font-size: 12px; color: var(--text-muted); }
+  .ta-pc-standalone-label { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-muted); margin-left: 6px; white-space: nowrap; }
+  .ta-pc-list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .ta-pc-cards { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 16px; }
+  .ta-pc-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.1rem; }
+  .ta-pc-card-label { font-size: 13px; color: var(--text-muted); margin: 0 0 10px; }
+  .ta-pc-card-small { font-size: 11px; color: var(--text-muted); margin: 0; }
+  .ta-pc-card-val { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+  .ta-pc-card-val-hero { font-size: 22px; font-weight: 700; margin: 0 0 10px; color: var(--primary-dark); }
+  @media (max-width: 640px) {
+    .ta-pc-grid-3, .ta-pc-cards { grid-template-columns: repeat(1,1fr); }
+  }
 
   .ta-drawer-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 150;
@@ -131,14 +264,31 @@
   <header class="ta-topbar">
     <h1>成品組合 BOM</h1>
     <div class="ta-topbar-right">
+      <button class="ta-btn ta-btn-primary" id="openProductAddBtn">＋ 新增成品</button>
       <button class="ta-btn ta-hamburger-btn" id="openMenuBtn" aria-label="選單">☰</button>
     </div>
   </header>
 
-  <div class="ta-placeholder">
-    <h2>即將推出</h2>
-    <p>成品組合(BOM)模組還在規劃中,之後會在這裡用材料組成成品、計算成品成本。</p>
+  <div class="ta-category-tabs" id="productCategoryTabs"></div>
+
+  <div class="ta-filter-bar">
+    <input type="text" id="productSearchInput" placeholder="搜尋成品名稱 / 編號">
   </div>
+
+  <div class="ta-table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th data-col="productCode">編號</th>
+        <th data-col="category">分類</th>
+        <th data-col="name">成品名稱</th>
+        <th class="ta-col-center" data-col="status">狀態</th>
+      </tr>
+    </thead>
+    <tbody id="productsTbody"></tbody>
+  </table>
+  </div>
+  <div class="ta-empty-hint ta-is-hidden" id="productEmptyHint">目前沒有成品資料,點右上角「新增成品」開始建立</div>
 </div>
 
 <!-- 右側選單 -->
@@ -153,14 +303,223 @@
     <a href="bom.html" class="ta-drawer-link ta-is-active">成品組合 BOM</a>
   </nav>
   <div class="ta-drawer-divider"></div>
+  <button class="ta-drawer-item" id="openProductCategoryManageBtn">分類管理</button>
+  <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item ta-drawer-item--danger" id="logoutBtn">登出</button>
 </aside>
+
+<!-- 通用確認 Modal -->
+<div class="ta-modal-overlay" id="confirmModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="confirmModal">✕</span>
+    <h2 id="confirmModalTitle">請確認</h2>
+    <div class="ta-modal-text" id="confirmModalText"></div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="confirmModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="confirmModalOkBtn">確定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 成品分類管理 Modal -->
+<div class="ta-modal-overlay" id="productCategoryManageModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="productCategoryManageModal">✕</span>
+    <h2>成品分類管理</h2>
+    <div id="productCategoryManageList"></div>
+    <button class="ta-btn" id="openProductCategoryAddBtn">＋ 新增分類</button>
+    <div class="ta-modal-actions">
+      <button class="ta-btn ta-btn-primary" data-close="productCategoryManageModal">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增/編輯成品分類 Modal -->
+<div class="ta-modal-overlay" id="productCategoryFormModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="productCategoryFormModal">✕</span>
+    <h2 id="productCategoryFormTitle">新增分類</h2>
+    <div class="ta-form-row">
+      <label>分類名稱</label>
+      <input type="text" id="productCategoryFormName">
+    </div>
+    <div class="ta-form-row">
+      <label>代碼(用於成品編號,僅限大寫英文字母與數字,例如 EAR)</label>
+      <input type="text" id="productCategoryFormCode" class="ta-input-uppercase">
+    </div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="productCategoryFormModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="productCategoryFormSaveBtn">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增/編輯成品 Modal -->
+<div class="ta-modal-overlay" id="productFormModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="productFormModal">✕</span>
+    <h2 id="productFormTitle">新增成品</h2>
+    <div class="ta-form-row">
+      <label>分類</label>
+      <select id="pfCategory"></select>
+    </div>
+    <div class="ta-form-row">
+      <label>成品名稱</label>
+      <input type="text" id="pfName">
+    </div>
+    <div class="ta-form-row">
+      <label>備註(選填)</label>
+      <textarea id="pfNote" rows="2"></textarea>
+    </div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="productFormModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="productFormSaveBtn">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 成品詳情 Modal -->
+<div class="ta-modal-overlay" id="productDetailModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="productDetailModal">✕</span>
+    <div id="productDetailBody"></div>
+  </div>
+</div>
+
+<!-- 刪除成品確認 Modal -->
+<div class="ta-modal-overlay" id="deleteProductModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="deleteProductModal">✕</span>
+    <h2>刪除成品</h2>
+    <div class="ta-modal-text" id="deleteProductWarningText"></div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="deleteProductModal">取消</button>
+      <button class="ta-btn ta-btn-primary" style="background:var(--danger);border-color:var(--danger);" id="confirmDeleteProductBtn">確定刪除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 編輯配方 Modal -->
+<div class="ta-modal-overlay" id="productRecipeModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="productRecipeModal">✕</span>
+    <h2>編輯配方</h2>
+    <div class="ta-form-row">
+      <label>先選材料分類(選填,縮小搜尋範圍)</label>
+      <select id="recipeCategoryFilter"><option value="">全部分類</option></select>
+    </div>
+    <div class="ta-form-row ta-recipe-search-wrap">
+      <label>搜尋材料(名稱/編號/分類/品牌/材質/尺寸/色系/顏色/同色標籤)</label>
+      <input type="text" id="recipeSearchInput" placeholder="輸入關鍵字搜尋..." autocomplete="off">
+      <div class="ta-recipe-search-results ta-is-hidden" id="recipeSearchResults"></div>
+    </div>
+    <hr class="ta-section-divider">
+    <div id="recipeList"></div>
+    <div class="ta-recipe-total" id="recipeTotalCost">材料總成本：NT$0.00</div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="productRecipeModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="recipeSaveBtn">儲存配方</button>
+    </div>
+  </div>
+</div>
+
+<!-- 定價試算 Modal -->
+<div class="ta-modal-overlay" id="pricingModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="pricingModal">✕</span>
+    <h2>定價試算</h2>
+    <p class="ta-modal-text" style="margin-top:-10px;">成本欄位已自動帶入這個成品目前的材料成本,「成本項目」「手續費項目」是全事業共用的設定,改了會套用到所有成品。</p>
+
+    <div class="ta-pc-toggle-row">
+      <label class="ta-switch">
+        <input type="checkbox" id="pcCurrencyModeToggle">
+        <span class="track"></span><span class="thumb"></span>
+      </label>
+      <span id="pcCurrencyModeLabel">目前輸入幣別：台幣</span>
+    </div>
+
+    <div class="ta-pc-grid ta-pc-grid-4">
+      <div class="ta-pc-field">
+        <label for="pcRmb" id="pcRmbLabel">商品的進價或成本(人民幣)</label>
+        <input type="number" id="pcRmb" value="0" step="0.01" disabled>
+      </div>
+      <div class="ta-pc-field">
+        <label for="pcRate">匯率</label>
+        <input type="number" id="pcRate" value="5" step="0.1">
+      </div>
+      <div class="ta-pc-field">
+        <label id="pcTwdLabel">商品的進價或成本(台幣)</label>
+        <input type="number" id="pcTwd" value="0" step="0.01">
+      </div>
+      <div class="ta-pc-field">
+        <label for="pcQ">倍數</label>
+        <input type="number" id="pcQ" value="5" step="0.01">
+      </div>
+    </div>
+
+    <div class="ta-pc-toggle-row">
+      <label class="ta-switch">
+        <input type="checkbox" id="pcMarginModeToggle">
+        <span class="track"></span><span class="thumb"></span>
+      </label>
+      <span id="pcMarginModeLabel">目前輸入:倍數(自動換算毛利率)</span>
+    </div>
+
+    <div class="ta-pc-grid ta-pc-grid-2">
+      <div class="ta-pc-field">
+        <label for="pcR">包裝成本</label>
+        <input type="number" id="pcR" value="10" step="1">
+      </div>
+      <div class="ta-pc-field">
+        <label id="pcULabel">毛利率%(自動算出)</label>
+        <input type="number" id="pcU" value="80" step="0.1" disabled>
+      </div>
+    </div>
+
+    <div class="ta-pc-list-header">
+      <p class="ta-modal-text" style="margin:0;font-weight:600;">成本項目</p>
+      <button class="ta-btn ta-btn-sm" id="pcAddCostBtn">＋ 新增項目</button>
+    </div>
+    <div id="pcCostList" style="margin-bottom:1rem;"></div>
+
+    <div class="ta-pc-list-header">
+      <p class="ta-modal-text" style="margin:0;font-weight:600;">手續費 / 抽成比例項目</p>
+      <button class="ta-btn ta-btn-sm" id="pcAddFeeBtn">＋ 新增項目</button>
+    </div>
+    <p class="ta-modal-text" style="margin-top:-8px;">勾選「獨立售價」的項目(如寄櫃)不會併入稅後售價的手續費加總,而是另外算出一個獨立售價</p>
+    <div id="pcFeeList" style="margin-bottom:1rem;"></div>
+
+    <p class="ta-modal-text" style="font-weight:600;">設計成本(三種比較情境)</p>
+    <div class="ta-pc-grid ta-pc-grid-3">
+      <input type="number" id="pcAa1" value="100" step="1">
+      <input type="number" id="pcAa2" value="50" step="1">
+      <input type="number" id="pcAa3" value="0" step="1">
+    </div>
+
+    <div class="ta-pc-cards" id="pcCards"></div>
+
+    <div class="ta-form-row">
+      <label>售價(確認後可以存回這個成品)</label>
+      <input type="number" id="pcSellingPrice" step="1">
+    </div>
+
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="pricingModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="pcSaveBtn">儲存售價到成品</button>
+    </div>
+  </div>
+</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
   getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import {
+  getFirestore, collection, collectionGroup, doc, getDoc, getDocs, addDoc, updateDoc, setDoc, deleteDoc,
+  query, where, orderBy, serverTimestamp, onSnapshot, Timestamp, writeBatch, runTransaction, deleteField,
+  getCountFromServer
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDgeqH5KrIVj6xVlA7gPXa8Mg4sQO73QL4",
@@ -173,6 +532,11 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
 document.getElementById('loginBtn').addEventListener('click', doLogin);
 document.getElementById('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -201,12 +565,938 @@ document.getElementById('openMenuBtn').addEventListener('click', openDrawer);
 document.getElementById('closeDrawerBtn').addEventListener('click', closeDrawer);
 document.getElementById('drawerOverlay').addEventListener('click', closeDrawer);
 
+// ---------- Modal 開關 ----------
+document.querySelectorAll('[data-close]').forEach(el => {
+  el.addEventListener('click', () => closeModal(el.dataset.close));
+});
+let modalZCounter = 210; // 起始值需高於右側選單(z-index 151)跟一般彈窗(200),避免收合動畫途中被蓋到
+function openModal(id) {
+  const el = document.getElementById(id);
+  modalZCounter += 1;
+  el.style.zIndex = modalZCounter;
+  el.classList.add('ta-is-open');
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  el.classList.remove('ta-is-open');
+  el.style.zIndex = '';
+}
+
+// 通用確認視窗,取代 window.confirm,回傳 Promise<boolean>
+function showConfirmModal({ title = '請確認', text = '' } = {}) {
+  return new Promise(resolve => {
+    document.getElementById('confirmModalTitle').textContent = title;
+    document.getElementById('confirmModalText').textContent = text;
+    openModal('confirmModal');
+
+    const closeEls = document.querySelectorAll('#confirmModal [data-close]');
+    const okBtn = document.getElementById('confirmModalOkBtn');
+
+    const cleanup = () => {
+      okBtn.removeEventListener('click', onOk);
+      closeEls.forEach(el => el.removeEventListener('click', onCancel));
+    };
+    const onOk = () => { cleanup(); closeModal('confirmModal'); resolve(true); };
+    const onCancel = () => { cleanup(); resolve(false); };
+
+    okBtn.addEventListener('click', onOk);
+    closeEls.forEach(el => el.addEventListener('click', onCancel));
+  });
+}
+
+// ---------- 初始化資料 ----------
+let materials = []; // 材料清單(之後配方材料選擇器會用到)
+let products = [];  // 成品清單(第3步才會真正建立寫入邏輯,這裡先宣告好讓分類管理可以查詢引用數量)
+let productOptions = { categories: [], categoryCodes: {}, disabledCategories: [] };
+
+function initData() {
+  onSnapshot(collection(db, 'materials'), snap => {
+    materials = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  });
+
+  onSnapshot(collection(db, 'products'), snap => {
+    products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderProductCategoryManageList();
+    renderProductTable();
+  });
+
+  const productOptRef = doc(db, 'settings', 'productOptions');
+  onSnapshot(productOptRef, snap => {
+    const base = { categories: [], categoryCodes: {}, disabledCategories: [] };
+    if (snap.exists()) {
+      productOptions = { ...base, ...snap.data() };
+    } else {
+      productOptions = base;
+      setDoc(productOptRef, base);
+    }
+    renderProductCategoryManageList();
+    renderProductCategoryTabs();
+    renderProductTable();
+    const enabledCategories = (productOptions.categories || []).filter(c => !(productOptions.disabledCategories || []).includes(c));
+    fillProductCategorySelect('pfCategory', enabledCategories);
+  });
+
+  const pricingConfigRef = doc(db, 'settings', 'pricingConfig');
+  onSnapshot(pricingConfigRef, snap => {
+    if (snap.exists()) {
+      pricingConfig = { costItems: [], feeItems: [], ...snap.data() };
+    } else {
+      pricingConfig = {
+        costItems: [
+          { id: 1, name: '官網成本', value: 50, enabled: true },
+          { id: 2, name: '物流成本', value: 60, enabled: true },
+        ],
+        feeItems: [
+          { id: 1, name: '金流費', percent: 3, enabled: true, standalone: false },
+          { id: 2, name: '營業稅', percent: 5, enabled: true, standalone: false },
+        ],
+      };
+      setDoc(pricingConfigRef, pricingConfig);
+    }
+    pcNextCostId = Math.max(0, ...pricingConfig.costItems.map(c => c.id)) + 1;
+    pcNextFeeId = Math.max(0, ...pricingConfig.feeItems.map(f => f.id)) + 1;
+    if (document.getElementById('pricingModal').classList.contains('ta-is-open')) {
+      renderPcCostList();
+      renderPcFeeList();
+      renderPcCards();
+    }
+  });
+}
+
+function fillProductCategorySelect(selectId, list) {
+  const sel = document.getElementById(selectId);
+  const current = sel.value;
+  sel.innerHTML = '<option value="">(未選擇)</option>' + list.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  if (list.includes(current)) sel.value = current;
+}
+
+// ---------- 成品分類管理(比照材料系統的分類管理,分類+代碼+啟用/停用) ----------
+let productCategoryFormEditIdx = null;
+
+document.getElementById('openProductCategoryManageBtn').addEventListener('click', () => {
+  closeDrawer();
+  renderProductCategoryManageList();
+  openModal('productCategoryManageModal');
+});
+
+document.getElementById('openProductCategoryAddBtn').addEventListener('click', () => {
+  productCategoryFormEditIdx = null;
+  document.getElementById('productCategoryFormTitle').textContent = '新增分類';
+  document.getElementById('productCategoryFormName').value = '';
+  document.getElementById('productCategoryFormCode').value = '';
+  openModal('productCategoryFormModal');
+});
+
+function renderProductCategoryManageList() {
+  const wrap = document.getElementById('productCategoryManageList');
+  if (!wrap) return;
+  const cats = productOptions.categories || [];
+  const disabledSet = new Set(productOptions.disabledCategories || []);
+  wrap.innerHTML = '';
+  if (!cats.length) {
+    wrap.innerHTML = '<div class="ta-empty-hint">尚無分類</div>';
+    return;
+  }
+  cats.forEach((name, idx) => {
+    const isDisabled = disabledSet.has(name);
+    const code = (productOptions.categoryCodes || {})[name] || '(未設定代碼)';
+    const row = document.createElement('div');
+    row.className = 'ta-category-row' + (isDisabled ? ' ta-category-row--disabled' : '');
+    row.innerHTML = `
+      <div class="ta-category-row-order">
+        <button type="button" class="ta-btn ta-btn-sm ta-category-move-up" ${idx === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="ta-btn ta-btn-sm ta-category-move-down" ${idx === cats.length - 1 ? 'disabled' : ''}>↓</button>
+      </div>
+      <div class="ta-category-row-info">
+        <span class="ta-category-row-name">${escapeHtml(name)}</span>
+        <span class="ta-tag">${escapeHtml(code)}</span>
+        ${isDisabled ? '<span class="ta-tag">已停用</span>' : ''}
+      </div>
+      <button type="button" class="ta-btn ta-btn-sm ta-category-edit-btn">編輯</button>
+      <button type="button" class="ta-btn ta-btn-sm ta-category-toggle-btn">${isDisabled ? '啟用' : '停用'}</button>
+    `;
+    row.querySelector('.ta-category-move-up').addEventListener('click', () => moveProductCategoryOption(idx, -1));
+    row.querySelector('.ta-category-move-down').addEventListener('click', () => moveProductCategoryOption(idx, 1));
+    row.querySelector('.ta-category-edit-btn').addEventListener('click', () => openProductCategoryEditForm(idx));
+    row.querySelector('.ta-category-toggle-btn').addEventListener('click', () => toggleProductCategoryDisabled(name));
+    wrap.appendChild(row);
+  });
+}
+
+function openProductCategoryEditForm(idx) {
+  productCategoryFormEditIdx = idx;
+  const name = productOptions.categories[idx];
+  document.getElementById('productCategoryFormTitle').textContent = '編輯分類';
+  document.getElementById('productCategoryFormName').value = name;
+  document.getElementById('productCategoryFormCode').value = (productOptions.categoryCodes || {})[name] || '';
+  openModal('productCategoryFormModal');
+}
+
+async function moveProductCategoryOption(idx, delta) {
+  const list = [...(productOptions.categories || [])];
+  const newIdx = idx + delta;
+  if (newIdx < 0 || newIdx >= list.length) return;
+  [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
+  productOptions.categories = list;
+  await setDoc(doc(db, 'settings', 'productOptions'), { categories: list }, { merge: true });
+  renderProductCategoryManageList();
+}
+
+async function toggleProductCategoryDisabled(name) {
+  const disabledSet = new Set(productOptions.disabledCategories || []);
+  if (disabledSet.has(name)) disabledSet.delete(name); else disabledSet.add(name);
+  const list = [...disabledSet];
+  productOptions.disabledCategories = list;
+  await setDoc(doc(db, 'settings', 'productOptions'), { disabledCategories: list }, { merge: true });
+  renderProductCategoryManageList();
+}
+
+document.getElementById('productCategoryFormSaveBtn').addEventListener('click', async () => {
+  const name = document.getElementById('productCategoryFormName').value.trim();
+  const codeInput = document.getElementById('productCategoryFormCode').value.trim().toUpperCase();
+
+  if (!name) { alert('請輸入分類名稱'); return; }
+  if (!codeInput) { alert('請輸入分類代碼'); return; }
+  if (!/^[A-Z0-9]+$/.test(codeInput)) { alert('分類代碼只能是大寫英文字母或數字'); return; }
+
+  const cats = productOptions.categories || [];
+  const codes = productOptions.categoryCodes || {};
+  const isEdit = productCategoryFormEditIdx != null;
+  const oldName = isEdit ? cats[productCategoryFormEditIdx] : null;
+
+  if (cats.some((c, i) => c === name && i !== productCategoryFormEditIdx)) { alert('這個分類名稱已經存在了'); return; }
+  const codeConflictName = Object.keys(codes).find(n => n !== oldName && codes[n] === codeInput);
+  if (codeConflictName) { alert(`這個代碼已經被分類「${codeConflictName}」使用了,請換一個`); return; }
+
+  if (isEdit && codes[oldName] && codes[oldName] !== codeInput) {
+    const affectedCount = products.filter(p => p.category === oldName).length;
+    if (affectedCount > 0) {
+      const ok = await showConfirmModal({
+        title: '確定要修改分類代碼嗎？',
+        text: `「${oldName}」已經有 ${affectedCount} 款成品,修改代碼不會影響它們既有的編號,之後新增的成品會用新代碼「${codeInput}」重新從第1號開始編號。確定要繼續嗎？`,
+      });
+      if (!ok) return;
+    }
+  }
+
+  const btn = document.getElementById('productCategoryFormSaveBtn');
+  btn.disabled = true;
+  try {
+    if (!isEdit) {
+      const newList = [...cats, name];
+      const newCodes = { ...codes, [name]: codeInput };
+      productOptions.categories = newList;
+      productOptions.categoryCodes = newCodes;
+      await setDoc(doc(db, 'settings', 'productOptions'), {
+        categories: newList, categoryCodes: newCodes,
+      }, { merge: true });
+    } else {
+      const nameChanged = name !== oldName;
+
+      if (nameChanged) {
+        const newList = [...cats];
+        newList[productCategoryFormEditIdx] = name;
+        productOptions.categories = newList;
+        await setDoc(doc(db, 'settings', 'productOptions'), { categories: newList }, { merge: true });
+      }
+
+      const fieldUpdates = { [`categoryCodes.${name}`]: codeInput };
+      if (nameChanged) fieldUpdates[`categoryCodes.${oldName}`] = deleteField();
+      await updateDoc(doc(db, 'settings', 'productOptions'), fieldUpdates);
+      const newCodes = { ...(productOptions.categoryCodes || {}) };
+      if (nameChanged) delete newCodes[oldName];
+      newCodes[name] = codeInput;
+      productOptions.categoryCodes = newCodes;
+
+      if (nameChanged && (productOptions.disabledCategories || []).includes(oldName)) {
+        const newDisabled = productOptions.disabledCategories.map(n => n === oldName ? name : n);
+        productOptions.disabledCategories = newDisabled;
+        await setDoc(doc(db, 'settings', 'productOptions'), { disabledCategories: newDisabled }, { merge: true });
+      }
+
+      if (nameChanged) {
+        const affected = products.filter(p => p.category === oldName);
+        for (const p of affected) {
+          await updateDoc(doc(db, 'products', p.id), { category: name, updatedAt: serverTimestamp() });
+        }
+      }
+    }
+    closeModal('productCategoryFormModal');
+    renderProductCategoryManageList();
+  } catch (e) {
+    alert('儲存失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- 成品編號 ----------
+const PRODUCT_CODE_SEQ_DIGITS = 5;
+
+async function getNextProductCode(category) {
+  const code = (productOptions.categoryCodes || {})[category];
+  if (!code) return null;
+  const counterRef = doc(db, 'settings', 'productCounters');
+  const seq = await runTransaction(db, async transaction => {
+    const snap = await transaction.get(counterRef);
+    const current = (snap.exists() ? snap.data()[code] : 0) || 0;
+    const next = current + 1;
+    transaction.set(counterRef, { [code]: next }, { merge: true });
+    return next;
+  });
+  return code + String(seq).padStart(PRODUCT_CODE_SEQ_DIGITS, '0');
+}
+
+// ---------- 成品清單 ----------
+let productCategoryFilter = '';
+
+function renderProductCategoryTabs() {
+  const wrap = document.getElementById('productCategoryTabs');
+  if (!wrap) return;
+  const cats = productOptions.categories || [];
+  const disabledSet = new Set(productOptions.disabledCategories || []);
+
+  const allTab = document.createElement('div');
+  allTab.className = 'ta-category-tab' + (productCategoryFilter === '' ? ' ta-is-active' : '');
+  allTab.textContent = '全部';
+  allTab.addEventListener('click', () => { productCategoryFilter = ''; switchProductCategory(); });
+
+  const tabs = cats.map(c => {
+    const isDisabled = disabledSet.has(c);
+    const tab = document.createElement('div');
+    tab.className = 'ta-category-tab' + (productCategoryFilter === c ? ' ta-is-active' : '') + (isDisabled ? ' ta-category-tab--disabled' : '');
+    tab.textContent = c + (isDisabled ? '(已停用)' : '');
+    tab.addEventListener('click', () => { productCategoryFilter = c; switchProductCategory(); });
+    return tab;
+  });
+
+  wrap.innerHTML = '';
+  wrap.appendChild(allTab);
+  tabs.forEach(t => wrap.appendChild(t));
+}
+
+function switchProductCategory() {
+  renderProductCategoryTabs();
+  renderProductTable();
+}
+
+function renderProductTable() {
+  const tbody = document.getElementById('productsTbody');
+  if (!tbody) return;
+  const kw = (document.getElementById('productSearchInput').value || '').trim().toLowerCase();
+
+  const list = products.filter(p => {
+    if (productCategoryFilter && p.category !== productCategoryFilter) return false;
+    if (kw) {
+      const name = (p.name || '').toLowerCase();
+      if (!name.includes(kw) && !(p.productCode || '').toLowerCase().includes(kw)) return false;
+    }
+    return true;
+  });
+
+  tbody.innerHTML = '';
+  document.getElementById('productEmptyHint').classList.toggle('ta-is-hidden', list.length > 0);
+
+  for (const p of list) {
+    const tr = document.createElement('tr');
+    if (p.archived) tr.classList.add('ta-row--archived');
+    tr.innerHTML = `
+      <td>${escapeHtml(p.productCode)}</td>
+      <td>${escapeHtml(p.category)}</td>
+      <td>${escapeHtml(p.name)}</td>
+      <td class="ta-col-center">${p.archived ? '<span class="ta-tag">已下架</span>' : ''}</td>
+    `;
+    tr.addEventListener('click', () => openProductDetail(p.id));
+    tbody.appendChild(tr);
+  }
+}
+
+document.getElementById('productSearchInput').addEventListener('input', renderProductTable);
+
+// ---------- 新增/編輯成品 ----------
+let productFormEditId = null;
+
+document.getElementById('openProductAddBtn').addEventListener('click', () => {
+  productFormEditId = null;
+  document.getElementById('productFormTitle').textContent = '新增成品';
+  document.getElementById('pfCategory').value = '';
+  document.getElementById('pfName').value = '';
+  document.getElementById('pfNote').value = '';
+  openModal('productFormModal');
+});
+
+function openProductEditForm(p) {
+  productFormEditId = p.id;
+  document.getElementById('productFormTitle').textContent = '編輯成品屬性';
+  document.getElementById('pfCategory').value = p.category || '';
+  document.getElementById('pfName').value = p.name || '';
+  document.getElementById('pfNote').value = p.note || '';
+  openModal('productFormModal');
+}
+
+document.getElementById('productFormSaveBtn').addEventListener('click', async () => {
+  const category = document.getElementById('pfCategory').value.trim();
+  const name = document.getElementById('pfName').value.trim();
+  const note = document.getElementById('pfNote').value.trim();
+
+  if (!category) { alert('請選擇分類'); return; }
+  if (!name) { alert('請輸入成品名稱'); return; }
+  if (!(productOptions.categoryCodes || {})[category]) {
+    alert(`分類「${category}」還沒有設定成品編號用的代碼,請先到分類管理補上代碼`);
+    return;
+  }
+
+  const btn = document.getElementById('productFormSaveBtn');
+  btn.disabled = true;
+  try {
+    if (productFormEditId) {
+      await updateDoc(doc(db, 'products', productFormEditId), {
+        category, name, note, updatedAt: serverTimestamp(),
+      });
+      closeModal('productFormModal');
+      if (document.getElementById('productDetailModal').classList.contains('ta-is-open')) {
+        openProductDetail(productFormEditId); // 存檔後立刻刷新底下的成品詳情頁
+      }
+    } else {
+      const productCode = await getNextProductCode(category);
+      await addDoc(collection(db, 'products'), {
+        category, name, note, productCode, archived: false, recipe: [],
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      });
+      closeModal('productFormModal');
+    }
+  } catch (e) {
+    alert('儲存失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- 成品詳情 ----------
+function materialDisplayName(m) {
+  return [m.brand, m.material, m.beadType, m.size].filter(Boolean).join(' ') + (m.colorCode ? '－' + m.colorCode : '');
+}
+
+// 用配方即時算出材料總成本(用加權平均成本),不儲存固定數字,材料成本變動後永遠是最新值
+function calcRecipeCost(recipe) {
+  return (recipe || []).reduce((sum, r) => {
+    const m = materials.find(x => x.id === r.materialId);
+    if (!m) return sum;
+    return sum + (m.currentUnitCostWeightedAvg || 0) * (r.quantity || 0);
+  }, 0);
+}
+
+function openProductDetail(id) {
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+
+  const materialCost = calcRecipeCost(p.recipe);
+  const lastSeen = p.lastSeenMaterialCost;
+  const costChanged = lastSeen != null && Math.abs(materialCost - lastSeen) >= 0.01;
+  const costNotice = costChanged
+    ? `<div class="ta-cost-change-notice">⚠️ 材料成本已異動：NT$${lastSeen.toFixed(2)} → NT$${materialCost.toFixed(2)}</div>`
+    : '';
+
+  const body = document.getElementById('productDetailBody');
+  body.innerHTML = `
+    <div class="ta-detail-header">
+      <div class="ta-detail-title">${escapeHtml(p.name)}</div>
+      <div>
+        <button class="ta-btn ta-btn-sm" id="editRecipeBtn">編輯配方</button>
+        <button class="ta-btn ta-btn-sm" id="openPricingBtn">定價試算</button>
+        <button class="ta-btn ta-btn-sm" id="editProductBtn">編輯屬性</button>
+        <button class="ta-btn ta-btn-sm ${p.archived ? '' : 'ta-btn-danger'}" id="archiveProductBtn">${p.archived ? '上架' : '下架'}</button>
+        <button class="ta-btn ta-btn-sm ta-btn-danger" id="deleteProductBtn">刪除</button>
+      </div>
+    </div>
+    <div class="ta-detail-category"><span class="ta-tag">${escapeHtml(p.category || '未分類')}</span> <span class="ta-tag">${escapeHtml(p.productCode)}</span></div>
+    ${p.note ? `<div class="ta-modal-text">備註:${escapeHtml(p.note)}</div>` : ''}
+    ${costNotice}
+    <div class="ta-detail-stats">
+      <div><div class="ta-stat-label">材料成本(即時計算)</div><div class="ta-stat-value">NT$ ${materialCost.toFixed(2)}</div></div>
+      <div><div class="ta-stat-label">配方項目數</div><div class="ta-stat-value">${(p.recipe || []).length} 項</div></div>
+      ${p.sellingPrice != null ? `
+        <div><div class="ta-stat-label">售價</div><div class="ta-stat-value">NT$ ${Number(p.sellingPrice).toFixed(0)}</div></div>
+        <div><div class="ta-stat-label">毛利</div><div class="ta-stat-value">NT$ ${(Number(p.sellingPrice) - materialCost).toFixed(2)}</div></div>
+      ` : ''}
+    </div>
+  `;
+
+  document.getElementById('editRecipeBtn').addEventListener('click', () => openRecipeModal(p));
+  document.getElementById('openPricingBtn').addEventListener('click', () => openPricingModal(p));
+  document.getElementById('editProductBtn').addEventListener('click', () => openProductEditForm(p));
+  document.getElementById('archiveProductBtn').addEventListener('click', () => toggleProductArchive(p));
+  document.getElementById('deleteProductBtn').addEventListener('click', () => openDeleteProductModal(p));
+
+  openModal('productDetailModal');
+
+  // 更新「上次看到的成本」快照,純粹拿來下次比對用,不影響上面顯示的即時成本
+  if (lastSeen == null || Math.abs(materialCost - lastSeen) >= 0.01) {
+    updateDoc(doc(db, 'products', p.id), { lastSeenMaterialCost: materialCost }).catch(() => {});
+  }
+}
+
+async function toggleProductArchive(p) {
+  const newState = !p.archived;
+  const ok = await showConfirmModal({
+    title: newState ? '下架成品' : '上架成品',
+    text: newState ? '確定要下架這個成品嗎?下架後不會出現在清單裡,但資料會完整保留。' : '確定要重新上架這個成品嗎?',
+  });
+  if (!ok) return;
+  await updateDoc(doc(db, 'products', p.id), { archived: newState, updatedAt: serverTimestamp() });
+  closeModal('productDetailModal');
+}
+
+let deleteProductTarget = null;
+function openDeleteProductModal(p) {
+  deleteProductTarget = p;
+  document.getElementById('deleteProductWarningText').textContent = `確定要刪除「${p.name}」嗎?此操作無法復原。`;
+  openModal('deleteProductModal');
+}
+
+document.getElementById('confirmDeleteProductBtn').addEventListener('click', async () => {
+  if (!deleteProductTarget) return;
+  const btn = document.getElementById('confirmDeleteProductBtn');
+  btn.disabled = true;
+  try {
+    await deleteDoc(doc(db, 'products', deleteProductTarget.id));
+    closeModal('deleteProductModal');
+    closeModal('productDetailModal');
+  } catch (e) {
+    alert('刪除失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- 編輯配方 ----------
+let currentRecipe = []; // 目前編輯中的配方(尚未儲存): [{materialId, quantity}]
+let recipeEditProductId = null;
+
+function openRecipeModal(p) {
+  recipeEditProductId = p.id;
+  currentRecipe = (p.recipe || []).map(r => ({ ...r }));
+  document.getElementById('recipeSearchInput').value = '';
+  document.getElementById('recipeSearchResults').classList.add('ta-is-hidden');
+  fillRecipeCategoryFilter();
+  document.getElementById('recipeCategoryFilter').value = '';
+  renderRecipeList();
+  openModal('productRecipeModal');
+}
+
+// 材料分類選單依目前實際載入的材料清單動態產生,全部在瀏覽器端運算,不會有額外的 Firestore 讀取
+function fillRecipeCategoryFilter() {
+  const sel = document.getElementById('recipeCategoryFilter');
+  const current = sel.value;
+  const cats = [...new Set(materials.map(m => m.category).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">全部分類</option>' + cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if (cats.includes(current)) sel.value = current;
+}
+
+// 依「其他同分類成品的配方」統計出常用材料,方便還沒打字就能快速選取
+function getFrequentMaterialsForProduct(p, categoryFilter) {
+  const counts = {};
+  products.filter(other => other.category === p.category && other.id !== p.id).forEach(other => {
+    (other.recipe || []).forEach(r => { counts[r.materialId] = (counts[r.materialId] || 0) + 1; });
+  });
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([materialId]) => materials.find(m => m.id === materialId))
+    .filter(Boolean)
+    .filter(m => !categoryFilter || m.category === categoryFilter)
+    .slice(0, 8);
+}
+
+// 全部在瀏覽器端篩選已經載入的材料清單,不會產生額外的 Firestore 讀取
+function searchMaterials(kw, categoryFilter) {
+  const q = kw.trim().toLowerCase();
+  if (!q) return [];
+  return materials.filter(m => {
+    if (categoryFilter && m.category !== categoryFilter) return false;
+    const fields = [materialDisplayName(m), m.materialCode, m.category, m.brand, m.material, m.beadType, m.size, m.colorSeries, m.colorCode, m.colorTag];
+    return fields.some(f => (f || '').toLowerCase().includes(q));
+  }).slice(0, 20);
+}
+
+function renderSearchResults(list) {
+  const wrap = document.getElementById('recipeSearchResults');
+  if (!list.length) { wrap.classList.add('ta-is-hidden'); wrap.innerHTML = ''; return; }
+  wrap.innerHTML = list.map(m => `
+    <div class="ta-recipe-search-item" data-material-id="${escapeHtml(m.id)}">
+      <div class="ta-recipe-search-item-main">${escapeHtml(materialDisplayName(m))}</div>
+      <div class="ta-recipe-search-item-sub">${escapeHtml(m.materialCode || '')} · ${escapeHtml(m.category || '')} · 庫存${(m.currentStock || 0).toLocaleString()}${escapeHtml(m.unit || '')}</div>
+    </div>
+  `).join('');
+  wrap.classList.remove('ta-is-hidden');
+  wrap.querySelectorAll('.ta-recipe-search-item').forEach(el => {
+    el.addEventListener('click', () => addMaterialToRecipe(el.dataset.materialId));
+  });
+}
+
+function runRecipeSearch() {
+  const kw = document.getElementById('recipeSearchInput').value;
+  const categoryFilter = document.getElementById('recipeCategoryFilter').value;
+  if (kw.trim()) { renderSearchResults(searchMaterials(kw, categoryFilter)); return; }
+  const p = products.find(x => x.id === recipeEditProductId);
+  renderSearchResults(p ? getFrequentMaterialsForProduct(p, categoryFilter) : []);
+}
+
+document.getElementById('recipeSearchInput').addEventListener('input', runRecipeSearch);
+document.getElementById('recipeSearchInput').addEventListener('focus', runRecipeSearch);
+document.getElementById('recipeCategoryFilter').addEventListener('change', runRecipeSearch);
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#recipeSearchInput') && !e.target.closest('#recipeSearchResults')) {
+    document.getElementById('recipeSearchResults').classList.add('ta-is-hidden');
+  }
+});
+
+function addMaterialToRecipe(materialId) {
+  if (currentRecipe.some(r => r.materialId === materialId)) {
+    alert('這款材料已經在配方裡了');
+    return;
+  }
+  currentRecipe.push({ materialId, quantity: 1 });
+  document.getElementById('recipeSearchInput').value = '';
+  document.getElementById('recipeSearchResults').classList.add('ta-is-hidden');
+  renderRecipeList();
+}
+
+// 論重量/長度買的材料才允許配方用量有小數,其他(顆/個/對/組...)一律整數
+const CONTINUOUS_UNITS = ['克', '公克', 'g', 'kg', '公斤', '公分', 'cm', '公尺', 'm', 'mm', '吋'];
+function isContinuousUnit(unit) {
+  return CONTINUOUS_UNITS.includes((unit || '').trim());
+}
+
+function renderRecipeList() {
+  const wrap = document.getElementById('recipeList');
+  if (!currentRecipe.length) {
+    wrap.innerHTML = '<div class="ta-empty-hint">尚未加入任何材料</div>';
+  } else {
+    wrap.innerHTML = currentRecipe.map((r, idx) => {
+      const m = materials.find(x => x.id === r.materialId);
+      if (!m) {
+        return `<div class="ta-recipe-row">
+          <div class="ta-recipe-row-name" style="color:var(--danger);">材料已刪除(無法顯示名稱)</div>
+          <span class="ta-recipe-row-del" data-idx="${idx}">移除</span>
+        </div>`;
+      }
+      const cost = m.currentUnitCostWeightedAvg || 0;
+      const subtotal = cost * (r.quantity || 0);
+      const step = isContinuousUnit(m.unit) ? '0.01' : '1';
+      return `<div class="ta-recipe-row">
+        <div class="ta-recipe-row-name">${escapeHtml(materialDisplayName(m))}</div>
+        <div class="ta-recipe-row-qty"><input type="number" min="0" step="${step}" value="${r.quantity}" data-idx="${idx}"></div>
+        <div class="ta-recipe-row-unit">${escapeHtml(m.unit || '')}</div>
+        <div class="ta-recipe-row-subtotal" data-idx="${idx}">NT$${subtotal.toFixed(2)}</div>
+        <span class="ta-recipe-row-del" data-idx="${idx}">移除</span>
+      </div>`;
+    }).join('');
+  }
+  wrap.querySelectorAll('.ta-recipe-row-qty input').forEach(input => {
+    input.addEventListener('input', () => {
+      const idx = Number(input.dataset.idx);
+      currentRecipe[idx].quantity = parseFloat(input.value) || 0;
+      const m = materials.find(x => x.id === currentRecipe[idx].materialId);
+      const cost = m ? (m.currentUnitCostWeightedAvg || 0) : 0;
+      const subtotal = cost * currentRecipe[idx].quantity;
+      const subtotalEl = wrap.querySelector(`.ta-recipe-row-subtotal[data-idx="${idx}"]`);
+      if (subtotalEl) subtotalEl.textContent = `NT$${subtotal.toFixed(2)}`;
+      renderRecipeTotal();
+    });
+    // 離開欄位時,計數單位(顆/個等)強制四捨五入成整數,論重量/長度的單位維持小數
+    input.addEventListener('blur', () => {
+      const idx = Number(input.dataset.idx);
+      const m = materials.find(x => x.id === currentRecipe[idx].materialId);
+      if (m && !isContinuousUnit(m.unit)) {
+        const rounded = Math.round(currentRecipe[idx].quantity || 0);
+        currentRecipe[idx].quantity = rounded;
+        input.value = rounded;
+        const cost = m.currentUnitCostWeightedAvg || 0;
+        const subtotalEl = wrap.querySelector(`.ta-recipe-row-subtotal[data-idx="${idx}"]`);
+        if (subtotalEl) subtotalEl.textContent = `NT$${(cost * rounded).toFixed(2)}`;
+        renderRecipeTotal();
+      }
+    });
+  });
+  wrap.querySelectorAll('.ta-recipe-row-del').forEach(el => {
+    el.addEventListener('click', () => {
+      currentRecipe.splice(Number(el.dataset.idx), 1);
+      renderRecipeList();
+    });
+  });
+  renderRecipeTotal();
+}
+
+function renderRecipeTotal() {
+  document.getElementById('recipeTotalCost').textContent = `材料總成本：NT$${calcRecipeCost(currentRecipe).toFixed(2)}`;
+}
+
+document.getElementById('recipeSaveBtn').addEventListener('click', async () => {
+  if (!recipeEditProductId) return;
+  const savedProductId = recipeEditProductId;
+  const btn = document.getElementById('recipeSaveBtn');
+  btn.disabled = true;
+  try {
+    await updateDoc(doc(db, 'products', savedProductId), { recipe: currentRecipe, updatedAt: serverTimestamp() });
+    closeModal('productRecipeModal');
+    openProductDetail(savedProductId); // 存檔後立刻刷新底下的成品詳情頁,不用手動關掉重開才看得到最新配方/成本
+  } catch (e) {
+    alert('儲存失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- 定價試算(從獨立的定價試算器整合進來,成本項目/手續費項目全事業共用,存在雲端) ----------
+let pricingConfig = { costItems: [], feeItems: [] };
+let pcNextCostId = 1, pcNextFeeId = 1;
+let pricingEditProductId = null;
+
+async function savePricingConfig() {
+  await setDoc(doc(db, 'settings', 'pricingConfig'), {
+    costItems: pricingConfig.costItems, feeItems: pricingConfig.feeItems,
+  }, { merge: true });
+}
+
+function pcSwitchHtml(dataAttr, id, checked) {
+  return '<label class="ta-switch">' +
+    '<input type="checkbox" ' + dataAttr + '="' + id + '" ' + (checked ? 'checked' : '') + '>' +
+    '<span class="track"></span><span class="thumb"></span>' +
+    '</label>';
+}
+
+function renderPcCostList() {
+  document.getElementById('pcCostList').innerHTML = pricingConfig.costItems.map(it => (
+    '<div class="ta-pc-item-row' + (it.enabled ? '' : ' ta-is-disabled') + '">' +
+    pcSwitchHtml('data-cost-toggle', it.id, it.enabled) +
+    '<input type="text" data-cost-name="' + it.id + '" value="' + escapeHtml(it.name) + '">' +
+    '<input type="number" data-cost-value="' + it.id + '" value="' + it.value + '">' +
+    '<span class="ta-pc-item-unit">元(台幣)</span>' +
+    '<button type="button" class="ta-btn ta-btn-sm ta-btn-danger" data-cost-del="' + it.id + '">刪除</button>' +
+    '</div>'
+  )).join('');
+}
+
+function renderPcFeeList() {
+  document.getElementById('pcFeeList').innerHTML = pricingConfig.feeItems.map(it => (
+    '<div class="ta-pc-item-row' + (it.enabled ? '' : ' ta-is-disabled') + '">' +
+    pcSwitchHtml('data-fee-toggle', it.id, it.enabled) +
+    '<input type="text" data-fee-name="' + it.id + '" value="' + escapeHtml(it.name) + '">' +
+    '<input type="number" data-fee-value="' + it.id + '" value="' + it.percent + '">' +
+    '<span class="ta-pc-item-unit">%</span>' +
+    '<label class="ta-pc-standalone-label"><input type="checkbox" data-fee-standalone="' + it.id + '" ' + (it.standalone ? 'checked' : '') + '> 獨立售價</label>' +
+    '<button type="button" class="ta-btn ta-btn-sm ta-btn-danger" data-fee-del="' + it.id + '">刪除</button>' +
+    '</div>'
+  )).join('');
+}
+
+function pcCalcOne(L, Q, R, AA) {
+  const M = L;
+  const S = M + R;
+  const T = S * Q;
+  const costSum = pricingConfig.costItems.filter(c => c.enabled).reduce((s, c) => s + (parseFloat(c.value) || 0), 0);
+  const AB = T + costSum + AA;
+  const feeRate = pricingConfig.feeItems.filter(f => f.enabled && !f.standalone).reduce((s, f) => s + (parseFloat(f.percent) || 0), 0) / 100;
+  const AI = AB * feeRate;
+  const AJ = feeRate < 1 ? AB / (1 - feeRate) : AB;
+  const AK = Math.ceil(AJ / 10) * 10;
+  const AP = AJ - AI - AA - costSum - S;
+  const standalones = pricingConfig.feeItems.filter(f => f.enabled && f.standalone).map(f => {
+    const r2 = (parseFloat(f.percent) || 0) / 100;
+    return { name: f.name, price: r2 < 1 ? AB / (1 - r2) : AB };
+  });
+  return { S, T, AJ, AK, AP, standalones };
+}
+
+function pcFmt(n) { return 'NT$' + Number(n).toLocaleString('zh-TW', { maximumFractionDigits: 1 }); }
+
+function renderPcCards() {
+  const twdMode = document.getElementById('pcCurrencyModeToggle').checked;
+  const twdInput = document.getElementById('pcTwd');
+  let L;
+  if (twdMode) {
+    L = parseFloat(twdInput.value) || 0;
+    const rate = parseFloat(document.getElementById('pcRate').value) || 0;
+    document.getElementById('pcRmb').value = rate ? (L / rate).toFixed(2) : '0.00';
+  } else {
+    const K = parseFloat(document.getElementById('pcRmb').value) || 0;
+    const rate = parseFloat(document.getElementById('pcRate').value) || 0;
+    L = K * rate;
+    twdInput.value = L.toFixed(2);
+  }
+  const marginMode = document.getElementById('pcMarginModeToggle').checked;
+  const qInput = document.getElementById('pcQ');
+  const uInput = document.getElementById('pcU');
+  let Q;
+  if (marginMode) {
+    const Uratio = (parseFloat(uInput.value) || 0) / 100;
+    Q = Uratio < 1 ? 1 / (1 - Uratio) : 0;
+    qInput.value = Q.toFixed(2);
+  } else {
+    Q = parseFloat(qInput.value) || 0;
+    const Uratio = Q ? (Q - 1) / Q : 0;
+    uInput.value = (Uratio * 100).toFixed(1);
+  }
+  const R = parseFloat(document.getElementById('pcR').value) || 0;
+  const AA1 = parseFloat(document.getElementById('pcAa1').value) || 0;
+  const AA2 = parseFloat(document.getElementById('pcAa2').value) || 0;
+  const AA3 = parseFloat(document.getElementById('pcAa3').value) || 0;
+
+  const results = [
+    { label: '設計成本 ' + AA1, r: pcCalcOne(L, Q, R, AA1) },
+    { label: '設計成本 ' + AA2, r: pcCalcOne(L, Q, R, AA2) },
+    { label: '設計成本 ' + AA3, r: pcCalcOne(L, Q, R, AA3) },
+  ];
+
+  document.getElementById('pcCards').innerHTML = results.map(({ label, r }) => {
+    let html = '<div class="ta-pc-card">' +
+      '<p class="ta-pc-card-label">' + escapeHtml(label) + '</p>' +
+      '<p class="ta-pc-card-small">稅後售價</p>' +
+      '<p class="ta-pc-card-val">' + pcFmt(r.AJ.toFixed(1)) + '</p>' +
+      '<p class="ta-pc-card-small">一般售價</p>' +
+      '<p class="ta-pc-card-val-hero">' + pcFmt(r.AK.toFixed(0)) + '</p>';
+    r.standalones.forEach(s => {
+      html += '<p class="ta-pc-card-small">' + escapeHtml(s.name) + '售價</p><p class="ta-pc-card-val">' + pcFmt(s.price.toFixed(1)) + '</p>';
+    });
+    html += '<p class="ta-pc-card-small">扣除各成本淨利</p><p class="ta-pc-card-val">' + pcFmt(r.AP.toFixed(1)) + '</p></div>';
+    return html;
+  }).join('');
+}
+
+document.getElementById('pcAddCostBtn').addEventListener('click', async () => {
+  pricingConfig.costItems.push({ id: pcNextCostId++, name: '新項目', value: 0, enabled: true });
+  renderPcCostList(); renderPcCards();
+  await savePricingConfig();
+});
+document.getElementById('pcAddFeeBtn').addEventListener('click', async () => {
+  pricingConfig.feeItems.push({ id: pcNextFeeId++, name: '新項目', percent: 0, enabled: true, standalone: false });
+  renderPcFeeList(); renderPcCards();
+  await savePricingConfig();
+});
+
+document.getElementById('pcCostList').addEventListener('input', (e) => {
+  const t = e.target;
+  if (t.dataset.costName) { pricingConfig.costItems.find(c => c.id == t.dataset.costName).name = t.value; savePricingConfig(); }
+  if (t.dataset.costValue) { pricingConfig.costItems.find(c => c.id == t.dataset.costValue).value = t.value; renderPcCards(); savePricingConfig(); }
+});
+document.getElementById('pcCostList').addEventListener('click', async (e) => {
+  const delBtn = e.target.closest('[data-cost-del]');
+  if (delBtn) {
+    pricingConfig.costItems = pricingConfig.costItems.filter(c => c.id != delBtn.dataset.costDel);
+    renderPcCostList(); renderPcCards();
+    await savePricingConfig();
+  }
+});
+document.getElementById('pcCostList').addEventListener('change', async (e) => {
+  const t = e.target;
+  if (t.dataset.costToggle) {
+    pricingConfig.costItems.find(c => c.id == t.dataset.costToggle).enabled = t.checked;
+    renderPcCostList(); renderPcCards();
+    await savePricingConfig();
+  }
+});
+
+document.getElementById('pcFeeList').addEventListener('input', (e) => {
+  const t = e.target;
+  if (t.dataset.feeName) { pricingConfig.feeItems.find(f => f.id == t.dataset.feeName).name = t.value; savePricingConfig(); }
+  if (t.dataset.feeValue) { pricingConfig.feeItems.find(f => f.id == t.dataset.feeValue).percent = t.value; renderPcCards(); savePricingConfig(); }
+});
+document.getElementById('pcFeeList').addEventListener('click', async (e) => {
+  const delBtn = e.target.closest('[data-fee-del]');
+  if (delBtn) {
+    pricingConfig.feeItems = pricingConfig.feeItems.filter(f => f.id != delBtn.dataset.feeDel);
+    renderPcFeeList(); renderPcCards();
+    await savePricingConfig();
+  }
+});
+document.getElementById('pcFeeList').addEventListener('change', async (e) => {
+  const t = e.target;
+  if (t.dataset.feeToggle) {
+    pricingConfig.feeItems.find(f => f.id == t.dataset.feeToggle).enabled = t.checked;
+    renderPcFeeList(); renderPcCards();
+    await savePricingConfig();
+  }
+  if (t.dataset.feeStandalone) {
+    pricingConfig.feeItems.find(f => f.id == t.dataset.feeStandalone).standalone = t.checked;
+    renderPcCards();
+    await savePricingConfig();
+  }
+});
+
+function pcApplyCurrencyMode() {
+  const twdMode = document.getElementById('pcCurrencyModeToggle').checked;
+  document.getElementById('pcRmb').disabled = twdMode;
+  document.getElementById('pcTwd').disabled = !twdMode;
+  document.getElementById('pcCurrencyModeLabel').textContent = twdMode
+    ? '目前輸入幣別：台幣(自動換算成人民幣)'
+    : '目前輸入幣別：人民幣(自動換算成台幣)';
+}
+document.getElementById('pcCurrencyModeToggle').addEventListener('change', () => { pcApplyCurrencyMode(); renderPcCards(); });
+
+function pcApplyMarginMode() {
+  const marginMode = document.getElementById('pcMarginModeToggle').checked;
+  document.getElementById('pcQ').disabled = marginMode;
+  document.getElementById('pcU').disabled = !marginMode;
+  document.getElementById('pcMarginModeLabel').textContent = marginMode
+    ? '目前輸入：毛利率(自動換算倍數)'
+    : '目前輸入：倍數(自動換算毛利率)';
+}
+document.getElementById('pcMarginModeToggle').addEventListener('change', () => { pcApplyMarginMode(); renderPcCards(); });
+
+['pcRmb', 'pcRate', 'pcQ', 'pcR', 'pcAa1', 'pcAa2', 'pcAa3', 'pcTwd', 'pcU'].forEach(id => {
+  document.getElementById(id).addEventListener('input', renderPcCards);
+});
+
+function openPricingModal(p) {
+  pricingEditProductId = p.id;
+  // 成本欄位自動帶入這個成品目前的材料成本(台幣),不用手動輸入,但還是可以自己改
+  document.getElementById('pcCurrencyModeToggle').checked = true;
+  document.getElementById('pcTwd').value = calcRecipeCost(p.recipe).toFixed(2);
+  document.getElementById('pcRate').value = 5;
+  document.getElementById('pcQ').value = 5;
+  document.getElementById('pcMarginModeToggle').checked = false;
+  document.getElementById('pcR').value = 10;
+  document.getElementById('pcAa1').value = 100;
+  document.getElementById('pcAa2').value = 50;
+  document.getElementById('pcAa3').value = 0;
+  document.getElementById('pcSellingPrice').value = p.sellingPrice != null ? p.sellingPrice : '';
+
+  pcApplyCurrencyMode();
+  pcApplyMarginMode();
+  renderPcCostList();
+  renderPcFeeList();
+  renderPcCards();
+
+  openModal('pricingModal');
+}
+
+document.getElementById('pcSaveBtn').addEventListener('click', async () => {
+  if (!pricingEditProductId) return;
+  const savedProductId = pricingEditProductId;
+  const priceVal = parseFloat(document.getElementById('pcSellingPrice').value);
+  if (isNaN(priceVal) || priceVal < 0) { alert('請輸入正確的售價'); return; }
+  const btn = document.getElementById('pcSaveBtn');
+  btn.disabled = true;
+  try {
+    await updateDoc(doc(db, 'products', savedProductId), { sellingPrice: priceVal, updatedAt: serverTimestamp() });
+    closeModal('pricingModal');
+    if (document.getElementById('productDetailModal').classList.contains('ta-is-open')) {
+      openProductDetail(savedProductId); // 存檔後立刻刷新底下的成品詳情頁,才看得到最新售價/毛利
+    }
+  } catch (e) {
+    alert('儲存失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 onAuthStateChanged(auth, user => {
   document.getElementById('authLoading').classList.add('ta-is-hidden');
   if (user) {
     document.getElementById('loginScreen').classList.add('ta-is-hidden');
     document.getElementById('app').classList.remove('ta-is-hidden');
     document.getElementById('userEmail').textContent = user.email;
+    initData();
   } else {
     document.getElementById('loginScreen').classList.remove('ta-is-hidden');
     document.getElementById('app').classList.add('ta-is-hidden');

@@ -95,6 +95,11 @@
   .ta-export-reminder span#exportReminderText { flex: 1; }
   .ta-export-reminder-close { cursor: pointer; color: var(--warn); font-size: 14px; padding: 0 4px; }
 
+  .ta-backfill-progress {
+    background: #e9f1fa; border: 1px solid var(--primary); color: var(--primary-dark);
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px;
+  }
+
   .ta-summary-bar {
     display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;
   }
@@ -416,6 +421,8 @@
     <button class="ta-btn ta-btn-sm ta-btn-primary" id="exportReminderBtn">立即匯出</button>
     <span class="ta-export-reminder-close" id="exportReminderCloseBtn">✕</span>
   </div>
+
+  <div class="ta-backfill-progress ta-is-hidden" id="backfillProgressBanner"></div>
 
   <div class="ta-summary-bar">
     <div class="ta-summary-card">
@@ -1193,6 +1200,7 @@ function initData() {
     renderTable();
     renderSummary();
     backfillLastPurchaseDates();
+    backfillWeightedAvgCost();
   });
 
   const optRef = doc(db, 'settings', 'options');
@@ -1355,6 +1363,27 @@ async function backfillLastPurchaseDates() {
     }
   } finally {
     backfillInProgress = false;
+  }
+}
+
+// 舊資料背景補算「加權平均成本」欄位:只處理目前還缺這個欄位的材料(加權平均成本功能上線前就存在的材料),
+// 直接借用 recalculateMaterialStock() 重播歷史算出正確值,補過一次之後不會再重算
+let weightedAvgBackfillInProgress = false;
+async function backfillWeightedAvgCost() {
+  if (weightedAvgBackfillInProgress) return;
+  const targets = materials.filter(m => m.currentUnitCostWeightedAvg == null);
+  if (!targets.length) return;
+  weightedAvgBackfillInProgress = true;
+  const banner = document.getElementById('backfillProgressBanner');
+  banner.classList.remove('ta-is-hidden');
+  try {
+    for (let i = 0; i < targets.length; i++) {
+      banner.textContent = `背景補算加權平均成本中... ${i + 1} / ${targets.length}（可以繼續操作系統,不會受影響）`;
+      await recalculateMaterialStock(targets[i].id);
+    }
+  } finally {
+    weightedAvgBackfillInProgress = false;
+    banner.classList.add('ta-is-hidden');
   }
 }
 
@@ -1552,10 +1581,11 @@ document.getElementById('categoryFormSaveBtn').addEventListener('click', async (
   try {
     if (!isEdit) {
       const newList = [...cats, name];
+      const newCodes = { ...codes, [name]: codeInput };
       options.categories = newList;
-      options.categoryCodes = { ...codes, [name]: codeInput };
+      options.categoryCodes = newCodes;
       await setDoc(doc(db, 'settings', 'options'), {
-        categories: newList, [`categoryCodes.${name}`]: codeInput,
+        categories: newList, categoryCodes: newCodes,
       }, { merge: true });
     } else {
       const nameChanged = name !== oldName;
@@ -2356,14 +2386,17 @@ function openEditPurchaseModal(materialId, historyId, log, unit) {
   openModal('editPurchaseModal');
 }
 
-// 重新播放這款材料的全部歷史紀錄(進貨+人工盤點調整),依時間先後重算庫存/次品庫存/進價
+// 重新播放這款材料的全部歷史紀錄(進貨+人工盤點調整),依時間先後重算庫存/次品庫存/進價/加權平均成本
 async function recalculateMaterialStock(materialId) {
   const histSnap = await getDocs(query(collection(db, 'materials', materialId, 'history'), orderBy('timestamp', 'asc')));
-  let stock = 0, secondaryStock = 0, unitCost = 0, lastPurchaseDate = null;
+  let stock = 0, secondaryStock = 0, unitCost = 0, weightedAvg = 0, lastPurchaseDate = null;
   histSnap.docs.forEach(d => {
     const log = d.data();
     if (log.type === 'purchase') {
-      stock += log.quantity || 0;
+      const qty = log.quantity || 0;
+      const denom = stock + qty;
+      weightedAvg = denom > 0 ? (stock * weightedAvg + qty * (log.unitCost || 0)) / denom : weightedAvg;
+      stock += qty;
       secondaryStock += log.secondaryQuantity || 0;
       unitCost = Math.max(unitCost, log.unitCost || 0);
       const ts = log.timestamp;
@@ -2375,6 +2408,7 @@ async function recalculateMaterialStock(materialId) {
   });
   await updateDoc(doc(db, 'materials', materialId), {
     currentStock: stock, currentStockSecondary: secondaryStock, currentUnitCost: unitCost,
+    currentUnitCostWeightedAvg: weightedAvg,
     lastPurchaseDate, updatedAt: serverTimestamp(),
   });
 }
@@ -2648,10 +2682,15 @@ async function submitPurchase() {
     const cur = snap.data();
     const lastPurchaseDate = (cur.lastPurchaseDate && cur.lastPurchaseDate.toMillis() > purchaseTimestamp.toMillis())
       ? cur.lastPurchaseDate : purchaseTimestamp;
+    const oldStock = cur.currentStock || 0;
+    const oldWeightedAvg = cur.currentUnitCostWeightedAvg || 0;
+    const weightedAvgDenom = oldStock + goodQty;
+    const newWeightedAvg = weightedAvgDenom > 0 ? (oldStock * oldWeightedAvg + goodQty * unitCost) / weightedAvgDenom : oldWeightedAvg;
     await updateDoc(matRef, {
-      currentStock: (cur.currentStock || 0) + goodQty,
+      currentStock: oldStock + goodQty,
       currentStockSecondary: (cur.currentStockSecondary || 0) + secondaryQty,
       currentUnitCost: Math.max(cur.currentUnitCost || 0, unitCost),
+      currentUnitCostWeightedAvg: newWeightedAvg,
       lastPurchaseDate,
       updatedAt: serverTimestamp(),
     });
@@ -2684,6 +2723,7 @@ async function openDetail(id) {
   const stock = m.currentStock || 0;
   const secondaryStock = m.currentStockSecondary || 0;
   const cost = m.currentUnitCost || 0;
+  const weightedAvgCost = m.currentUnitCostWeightedAvg || 0;
   const unit = m.unit || '';
   const value = stock * cost;
 
@@ -2727,6 +2767,7 @@ async function openDetail(id) {
       <div><div class="ta-stat-label">目前庫存</div><div class="ta-stat-value">${stock.toLocaleString()} ${escapeHtml(unit)}</div></div>
       <div><div class="ta-stat-label">次品庫存</div><div class="ta-stat-value">${secondaryStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
       <div><div class="ta-stat-label">目前進價(歷史最高單價)</div><div class="ta-stat-value">NT$ ${cost.toFixed(2)} / ${escapeHtml(unit)}</div></div>
+      <div><div class="ta-stat-label">加權平均成本(BOM成本用這個)</div><div class="ta-stat-value">NT$ ${weightedAvgCost.toFixed(4)} / ${escapeHtml(unit)}</div></div>
       <div><div class="ta-stat-label">庫存價值</div><div class="ta-stat-value">NT$ ${value.toFixed(2)}</div></div>
     </div>
     <div class="ta-detail-stats">
@@ -2775,22 +2816,44 @@ async function openDetail(id) {
 
 let deleteTargetMaterial = null;
 let deleteTargetHistCount = 0;
+let deleteTargetRequiresConfirmName = false;
 
 async function deleteMaterial(m) {
   const histSnap = await getDocs(collection(db, 'materials', m.id, 'history'));
   deleteTargetMaterial = m;
   deleteTargetHistCount = histSnap.size;
 
+  // 順便檢查有沒有被 BOM 成品的配方引用中(成品組合系統存在另一個 products 集合裡)
+  let referencingProducts = [];
+  try {
+    const productsSnap = await getDocs(collection(db, 'products'));
+    referencingProducts = productsSnap.docs
+      .map(d => d.data())
+      .filter(p => (p.recipe || []).some(r => r.materialId === m.id));
+  } catch (e) {
+    // 讀取失敗不擋刪除流程,只是少了這項提醒
+  }
+
   const name = displayName(m);
   const warnEl = document.getElementById('deleteWarningText');
   const confirmRow = document.getElementById('deleteConfirmRow');
   document.getElementById('deleteConfirmInput').value = '';
 
-  if (histSnap.empty) {
+  const messages = [];
+  if (histSnap.size) {
+    messages.push(`已經有 ${histSnap.size} 筆歷史紀錄(進貨/調整/修改),刪除後這些紀錄會一併永久消失`);
+  }
+  if (referencingProducts.length) {
+    const names = referencingProducts.map(p => p.name).join('、');
+    messages.push(`目前被 ${referencingProducts.length} 個成品的配方使用中(${names}),刪除後這些成品的配方會找不到這款材料`);
+  }
+
+  deleteTargetRequiresConfirmName = messages.length > 0;
+  if (!messages.length) {
     warnEl.textContent = `確定要刪除「${name}」嗎?此操作無法復原。`;
     confirmRow.classList.add('ta-is-hidden');
   } else {
-    warnEl.textContent = `「${name}」已經有 ${histSnap.size} 筆歷史紀錄(進貨/調整/修改),刪除後這些紀錄會一併永久消失,無法復原。`;
+    warnEl.textContent = `「${name}」${messages.join('；')}，無法復原。`;
     confirmRow.classList.remove('ta-is-hidden');
   }
   openModal('deleteModal');
@@ -2800,7 +2863,7 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async () =
   const m = deleteTargetMaterial;
   if (!m) return;
 
-  if (deleteTargetHistCount > 0) {
+  if (deleteTargetRequiresConfirmName) {
     const typed = document.getElementById('deleteConfirmInput').value.trim();
     if (typed !== displayName(m)) { alert('輸入的名稱不符，請重新輸入。'); return; }
   }
@@ -3385,7 +3448,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
 
     for (const [groupIdx, g] of importParsedGroups.entries()) {
       let materialId = g.existingId;
-      let runningStock, runningSecondaryStock, runningCost, lastPurchaseDate;
+      let runningStock, runningSecondaryStock, runningCost, runningWeightedAvg, lastPurchaseDate;
 
       if (!materialId) {
         const newRef = doc(collection(db, 'materials'));
@@ -3398,18 +3461,20 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
           category: g.category, brand: g.brand, material: g.material, beadType: g.beadType,
           size: g.size, colorSeries: g.colorSeries, colorCode: g.colorCode, colorTag: g.colorTag, note: g.note,
           unit: g.rows[0].quantityUnit,
-          currentStock: 0, currentStockSecondary: 0, currentUnitCost: 0, archived: false, materialCode,
+          currentStock: 0, currentStockSecondary: 0, currentUnitCost: 0, currentUnitCostWeightedAvg: 0, archived: false, materialCode,
           createdAt: earliestTs, updatedAt: serverTimestamp(),
         }});
         runningStock = 0;
         runningSecondaryStock = 0;
         runningCost = 0;
+        runningWeightedAvg = 0;
         lastPurchaseDate = null;
       } else {
         const existingMat = materials.find(m => m.id === materialId);
         runningStock = existingMat.currentStock || 0;
         runningSecondaryStock = existingMat.currentStockSecondary || 0;
         runningCost = existingMat.currentUnitCost || 0;
+        runningWeightedAvg = existingMat.currentUnitCostWeightedAvg || 0;
         lastPurchaseDate = existingMat.lastPurchaseDate || null;
       }
 
@@ -3437,6 +3502,8 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
           timestamp: Timestamp.fromDate(r.date),
         }});
 
+        const weightedAvgDenom = runningStock + r.quantity;
+        runningWeightedAvg = weightedAvgDenom > 0 ? (runningStock * runningWeightedAvg + r.quantity * unitCost) / weightedAvgDenom : runningWeightedAvg;
         runningStock += r.quantity;
         runningSecondaryStock += r.secondaryQuantity;
         runningCost = Math.max(runningCost, unitCost);
@@ -3450,7 +3517,8 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
       const matRef = doc(db, 'materials', materialId);
       ops.push({ ref: matRef, opType: 'update', data: {
         currentStock: runningStock, currentStockSecondary: runningSecondaryStock,
-        currentUnitCost: runningCost, lastPurchaseDate, updatedAt: serverTimestamp(),
+        currentUnitCost: runningCost, currentUnitCostWeightedAvg: runningWeightedAvg,
+        lastPurchaseDate, updatedAt: serverTimestamp(),
       }});
     }
 
