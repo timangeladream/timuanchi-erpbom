@@ -399,11 +399,19 @@
   </div>
 </div>
 
-<!-- 編輯配方 Modal -->
+<!-- 編輯配方 / 設定分類必備材料組合 Modal(共用同一套介面) -->
 <div class="ta-modal-overlay" id="productRecipeModal">
   <div class="ta-modal ta-modal--wide">
     <span class="ta-modal-close" data-close="productRecipeModal">✕</span>
-    <h2>編輯配方</h2>
+    <h2 id="recipeModalTitle">編輯配方</h2>
+    <div class="ta-form-row ta-is-hidden" id="recipeComboNameRow">
+      <label>組合名稱(例如:耳針+開口圈組合)</label>
+      <input type="text" id="recipeComboName">
+    </div>
+    <div class="ta-form-row ta-is-hidden" id="requiredCombosApplySection">
+      <label>可套用的必備材料組合</label>
+      <div id="requiredCombosApplyList"></div>
+    </div>
     <div class="ta-form-row">
       <label>先選材料分類(選填,縮小搜尋範圍)</label>
       <select id="recipeCategoryFilter"><option value="">全部分類</option></select>
@@ -419,6 +427,19 @@
     <div class="ta-modal-actions">
       <button class="ta-btn" data-close="productRecipeModal">取消</button>
       <button class="ta-btn ta-btn-primary" id="recipeSaveBtn">儲存配方</button>
+    </div>
+  </div>
+</div>
+
+<!-- 必備材料組合管理 Modal -->
+<div class="ta-modal-overlay" id="requiredMaterialsManageModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="requiredMaterialsManageModal">✕</span>
+    <h2 id="requiredMaterialsManageTitle">必備材料組合管理</h2>
+    <div id="requiredMaterialsManageList"></div>
+    <button class="ta-btn" id="openRequiredComboAddBtn">＋ 新增組合</button>
+    <div class="ta-modal-actions">
+      <button class="ta-btn ta-btn-primary" data-close="requiredMaterialsManageModal">關閉</button>
     </div>
   </div>
 </div>
@@ -607,7 +628,7 @@ function showConfirmModal({ title = '請確認', text = '' } = {}) {
 // ---------- 初始化資料 ----------
 let materials = []; // 材料清單(之後配方材料選擇器會用到)
 let products = [];  // 成品清單(第3步才會真正建立寫入邏輯,這裡先宣告好讓分類管理可以查詢引用數量)
-let productOptions = { categories: [], categoryCodes: {}, disabledCategories: [] };
+let productOptions = { categories: [], categoryCodes: {}, disabledCategories: [], requiredMaterials: {} };
 
 function initData() {
   onSnapshot(collection(db, 'materials'), snap => {
@@ -622,7 +643,7 @@ function initData() {
 
   const productOptRef = doc(db, 'settings', 'productOptions');
   onSnapshot(productOptRef, snap => {
-    const base = { categories: [], categoryCodes: {}, disabledCategories: [] };
+    const base = { categories: [], categoryCodes: {}, disabledCategories: [], requiredMaterials: {} };
     if (snap.exists()) {
       productOptions = { ...base, ...snap.data() };
     } else {
@@ -655,11 +676,9 @@ function initData() {
     }
     pcNextCostId = Math.max(0, ...pricingConfig.costItems.map(c => c.id)) + 1;
     pcNextFeeId = Math.max(0, ...pricingConfig.feeItems.map(f => f.id)) + 1;
-    if (document.getElementById('pricingModal').classList.contains('ta-is-open')) {
-      renderPcCostList();
-      renderPcFeeList();
-      renderPcCards();
-    }
+    // 注意:彈窗開著的時候故意不在這裡重新整理清單畫面——
+    // 每個編輯操作(新增/刪除/勾選/輸入)都已經自己呼叫過 render,這裡如果也跟著重繪,
+    // 會在使用者打字打到一半時把輸入框整個摧毀重建,游標跳掉、像是打字異常
   });
 }
 
@@ -712,11 +731,13 @@ function renderProductCategoryManageList() {
         <span class="ta-tag">${escapeHtml(code)}</span>
         ${isDisabled ? '<span class="ta-tag">已停用</span>' : ''}
       </div>
+      <button type="button" class="ta-btn ta-btn-sm ta-category-required-btn">必備材料</button>
       <button type="button" class="ta-btn ta-btn-sm ta-category-edit-btn">編輯</button>
       <button type="button" class="ta-btn ta-btn-sm ta-category-toggle-btn">${isDisabled ? '啟用' : '停用'}</button>
     `;
     row.querySelector('.ta-category-move-up').addEventListener('click', () => moveProductCategoryOption(idx, -1));
     row.querySelector('.ta-category-move-down').addEventListener('click', () => moveProductCategoryOption(idx, 1));
+    row.querySelector('.ta-category-required-btn').addEventListener('click', () => openRequiredMaterialsManageModal(name));
     row.querySelector('.ta-category-edit-btn').addEventListener('click', () => openProductCategoryEditForm(idx));
     row.querySelector('.ta-category-toggle-btn').addEventListener('click', () => toggleProductCategoryDisabled(name));
     wrap.appendChild(row);
@@ -1069,13 +1090,121 @@ document.getElementById('confirmDeleteProductBtn').addEventListener('click', asy
   }
 });
 
-// ---------- 編輯配方 ----------
+// ---------- 編輯配方 / 設定分類必備材料(共用同一套彈窗+搜尋邏輯) ----------
 let currentRecipe = []; // 目前編輯中的配方(尚未儲存): [{materialId, quantity}]
-let recipeEditProductId = null;
+// recipeEditContext: { mode: 'product', productId } 或 { mode: 'category', category }
+let recipeEditContext = null;
 
 function openRecipeModal(p) {
-  recipeEditProductId = p.id;
+  recipeEditContext = { mode: 'product', productId: p.id };
   currentRecipe = (p.recipe || []).map(r => ({ ...r }));
+  document.getElementById('recipeModalTitle').textContent = '編輯配方';
+  document.getElementById('recipeSaveBtn').textContent = '儲存配方';
+  document.getElementById('recipeComboNameRow').classList.add('ta-is-hidden');
+
+  const combos = (productOptions.requiredMaterials || {})[p.category] || [];
+  const applySection = document.getElementById('requiredCombosApplySection');
+  if (combos.length) {
+    document.getElementById('requiredCombosApplyList').innerHTML = combos.map(combo => `
+      <div class="ta-category-row">
+        <div class="ta-category-row-info"><span class="ta-category-row-name">${escapeHtml(combo.name)}(${combo.items.length}項)</span></div>
+        <button type="button" class="ta-btn ta-btn-sm" data-apply-combo="${escapeHtml(combo.id)}">加入</button>
+      </div>
+    `).join('');
+    applySection.classList.remove('ta-is-hidden');
+    applySection.querySelectorAll('[data-apply-combo]').forEach(btn => {
+      btn.addEventListener('click', () => applyRequiredCombo(btn.dataset.applyCombo));
+    });
+  } else {
+    applySection.classList.add('ta-is-hidden');
+  }
+
+  document.getElementById('recipeSearchInput').value = '';
+  document.getElementById('recipeSearchResults').classList.add('ta-is-hidden');
+  fillRecipeCategoryFilter();
+  document.getElementById('recipeCategoryFilter').value = '';
+  renderRecipeList();
+  openModal('productRecipeModal');
+}
+
+function applyRequiredCombo(comboId) {
+  if (!recipeEditContext || recipeEditContext.mode !== 'product') return;
+  const p = products.find(x => x.id === recipeEditContext.productId);
+  if (!p) return;
+  const combos = (productOptions.requiredMaterials || {})[p.category] || [];
+  const combo = combos.find(c => c.id === comboId);
+  if (!combo) return;
+  let addedCount = 0;
+  combo.items.forEach(r => {
+    if (!currentRecipe.some(existing => existing.materialId === r.materialId)) {
+      currentRecipe.push({ ...r });
+      addedCount++;
+    }
+  });
+  renderRecipeList();
+  if (!addedCount) alert(`「${combo.name}」裡的材料都已經在配方裡了`);
+}
+
+// ---------- 必備材料組合管理 ----------
+let requiredComboManageCategory = null;
+
+function openRequiredMaterialsManageModal(category) {
+  requiredComboManageCategory = category;
+  document.getElementById('requiredMaterialsManageTitle').textContent = `「${category}」必備材料組合管理`;
+  renderRequiredMaterialsManageList();
+  openModal('requiredMaterialsManageModal');
+}
+
+function renderRequiredMaterialsManageList() {
+  const wrap = document.getElementById('requiredMaterialsManageList');
+  const combos = (productOptions.requiredMaterials || {})[requiredComboManageCategory] || [];
+  if (!combos.length) {
+    wrap.innerHTML = '<div class="ta-empty-hint">尚無組合</div>';
+    return;
+  }
+  wrap.innerHTML = combos.map(combo => `
+    <div class="ta-category-row">
+      <div class="ta-category-row-info"><span class="ta-category-row-name">${escapeHtml(combo.name)}</span><span class="ta-tag">${combo.items.length}項材料</span></div>
+      <button type="button" class="ta-btn ta-btn-sm" data-combo-edit="${escapeHtml(combo.id)}">編輯</button>
+      <button type="button" class="ta-btn ta-btn-sm ta-btn-danger" data-combo-del="${escapeHtml(combo.id)}">刪除</button>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('[data-combo-edit]').forEach(btn => {
+    btn.addEventListener('click', () => openComboEditor(requiredComboManageCategory, btn.dataset.comboEdit));
+  });
+  wrap.querySelectorAll('[data-combo-del]').forEach(btn => {
+    btn.addEventListener('click', () => deleteRequiredCombo(requiredComboManageCategory, btn.dataset.comboDel));
+  });
+}
+
+document.getElementById('openRequiredComboAddBtn').addEventListener('click', () => {
+  openComboEditor(requiredComboManageCategory, null);
+});
+
+async function deleteRequiredCombo(category, comboId) {
+  const ok = await showConfirmModal({ title: '刪除組合', text: '確定要刪除這個必備材料組合嗎?此操作無法復原。' });
+  if (!ok) return;
+  const combos = (productOptions.requiredMaterials || {})[category] || [];
+  const newCombos = combos.filter(c => c.id !== comboId);
+  const newRequired = { ...(productOptions.requiredMaterials || {}), [category]: newCombos };
+  productOptions.requiredMaterials = newRequired;
+  await setDoc(doc(db, 'settings', 'productOptions'), { requiredMaterials: newRequired }, { merge: true });
+  renderRequiredMaterialsManageList();
+}
+
+// 新增組合傳 comboId=null,編輯現有組合傳既有的 comboId
+function openComboEditor(category, comboId) {
+  const combos = (productOptions.requiredMaterials || {})[category] || [];
+  const existing = comboId ? combos.find(c => c.id === comboId) : null;
+  recipeEditContext = { mode: 'combo', category, comboId };
+  currentRecipe = existing ? existing.items.map(r => ({ ...r })) : [];
+
+  document.getElementById('recipeModalTitle').textContent = existing ? `編輯組合：${existing.name}` : `新增組合(${category})`;
+  document.getElementById('recipeSaveBtn').textContent = '儲存組合';
+  document.getElementById('recipeComboName').value = existing ? existing.name : '';
+  document.getElementById('recipeComboNameRow').classList.remove('ta-is-hidden');
+  document.getElementById('requiredCombosApplySection').classList.add('ta-is-hidden');
+
   document.getElementById('recipeSearchInput').value = '';
   document.getElementById('recipeSearchResults').classList.add('ta-is-hidden');
   fillRecipeCategoryFilter();
@@ -1137,8 +1266,12 @@ function runRecipeSearch() {
   const kw = document.getElementById('recipeSearchInput').value;
   const categoryFilter = document.getElementById('recipeCategoryFilter').value;
   if (kw.trim()) { renderSearchResults(searchMaterials(kw, categoryFilter)); return; }
-  const p = products.find(x => x.id === recipeEditProductId);
-  renderSearchResults(p ? getFrequentMaterialsForProduct(p, categoryFilter) : []);
+  if (recipeEditContext && recipeEditContext.mode === 'product') {
+    const p = products.find(x => x.id === recipeEditContext.productId);
+    renderSearchResults(p ? getFrequentMaterialsForProduct(p, categoryFilter) : []);
+  } else {
+    renderSearchResults([]); // 設定分類必備材料時,還沒打字先不顯示建議
+  }
 }
 
 document.getElementById('recipeSearchInput').addEventListener('input', runRecipeSearch);
@@ -1232,14 +1365,40 @@ function renderRecipeTotal() {
 }
 
 document.getElementById('recipeSaveBtn').addEventListener('click', async () => {
-  if (!recipeEditProductId) return;
-  const savedProductId = recipeEditProductId;
+  if (!recipeEditContext) return;
+  const context = recipeEditContext;
+
+  if (context.mode === 'combo') {
+    const comboName = document.getElementById('recipeComboName').value.trim();
+    if (!comboName) { alert('請輸入組合名稱'); return; }
+    if (!currentRecipe.length) { alert('請至少加入一項材料'); return; }
+  }
+
   const btn = document.getElementById('recipeSaveBtn');
   btn.disabled = true;
   try {
-    await updateDoc(doc(db, 'products', savedProductId), { recipe: currentRecipe, updatedAt: serverTimestamp() });
-    closeModal('productRecipeModal');
-    openProductDetail(savedProductId); // 存檔後立刻刷新底下的成品詳情頁,不用手動關掉重開才看得到最新配方/成本
+    if (context.mode === 'product') {
+      await updateDoc(doc(db, 'products', context.productId), { recipe: currentRecipe, updatedAt: serverTimestamp() });
+      closeModal('productRecipeModal');
+      openProductDetail(context.productId); // 存檔後立刻刷新底下的成品詳情頁,不用手動關掉重開才看得到最新配方/成本
+    } else {
+      const comboName = document.getElementById('recipeComboName').value.trim();
+      const combos = (productOptions.requiredMaterials || {})[context.category] || [];
+      let newCombos;
+      if (context.comboId) {
+        newCombos = combos.map(c => c.id === context.comboId ? { ...c, name: comboName, items: currentRecipe } : c);
+      } else {
+        const newId = 'combo_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        newCombos = [...combos, { id: newId, name: comboName, items: currentRecipe }];
+      }
+      const newRequired = { ...(productOptions.requiredMaterials || {}), [context.category]: newCombos };
+      productOptions.requiredMaterials = newRequired;
+      await setDoc(doc(db, 'settings', 'productOptions'), { requiredMaterials: newRequired }, { merge: true });
+      closeModal('productRecipeModal');
+      if (document.getElementById('requiredMaterialsManageModal').classList.contains('ta-is-open')) {
+        renderRequiredMaterialsManageList();
+      }
+    }
   } catch (e) {
     alert('儲存失敗:' + e.message);
   } finally {
@@ -1256,6 +1415,13 @@ async function savePricingConfig() {
   await setDoc(doc(db, 'settings', 'pricingConfig'), {
     costItems: pricingConfig.costItems, feeItems: pricingConfig.feeItems,
   }, { merge: true });
+}
+
+// 打字時(名稱/數字欄位)先等停手一陣子才真的存檔,避免每打一個字就寫入一次雲端
+let pcSaveDebounceTimer = null;
+function savePricingConfigDebounced() {
+  clearTimeout(pcSaveDebounceTimer);
+  pcSaveDebounceTimer = setTimeout(() => { savePricingConfig(); }, 600);
 }
 
 function pcSwitchHtml(dataAttr, id, checked) {
@@ -1376,8 +1542,8 @@ document.getElementById('pcAddFeeBtn').addEventListener('click', async () => {
 
 document.getElementById('pcCostList').addEventListener('input', (e) => {
   const t = e.target;
-  if (t.dataset.costName) { pricingConfig.costItems.find(c => c.id == t.dataset.costName).name = t.value; savePricingConfig(); }
-  if (t.dataset.costValue) { pricingConfig.costItems.find(c => c.id == t.dataset.costValue).value = t.value; renderPcCards(); savePricingConfig(); }
+  if (t.dataset.costName) { pricingConfig.costItems.find(c => c.id == t.dataset.costName).name = t.value; savePricingConfigDebounced(); }
+  if (t.dataset.costValue) { pricingConfig.costItems.find(c => c.id == t.dataset.costValue).value = t.value; renderPcCards(); savePricingConfigDebounced(); }
 });
 document.getElementById('pcCostList').addEventListener('click', async (e) => {
   const delBtn = e.target.closest('[data-cost-del]');
@@ -1398,8 +1564,8 @@ document.getElementById('pcCostList').addEventListener('change', async (e) => {
 
 document.getElementById('pcFeeList').addEventListener('input', (e) => {
   const t = e.target;
-  if (t.dataset.feeName) { pricingConfig.feeItems.find(f => f.id == t.dataset.feeName).name = t.value; savePricingConfig(); }
-  if (t.dataset.feeValue) { pricingConfig.feeItems.find(f => f.id == t.dataset.feeValue).percent = t.value; renderPcCards(); savePricingConfig(); }
+  if (t.dataset.feeName) { pricingConfig.feeItems.find(f => f.id == t.dataset.feeName).name = t.value; savePricingConfigDebounced(); }
+  if (t.dataset.feeValue) { pricingConfig.feeItems.find(f => f.id == t.dataset.feeValue).percent = t.value; renderPcCards(); savePricingConfigDebounced(); }
 });
 document.getElementById('pcFeeList').addEventListener('click', async (e) => {
   const delBtn = e.target.closest('[data-fee-del]');
