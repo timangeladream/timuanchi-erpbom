@@ -179,6 +179,10 @@
     width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
   }
   .ta-pc-field input:disabled { background: #eef1f5; color: var(--text-muted); }
+  .ta-pc-status {
+    display: inline-block; font-size: 12px; color: var(--primary-dark); background: #eef2fb;
+    border: 1px solid #cdd8f2; border-radius: 6px; padding: 4px 10px; margin: 0 0 14px;
+  }
   .ta-pc-toggle-row {
     display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 10px 12px;
     background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; color: var(--text-muted);
@@ -449,7 +453,8 @@
   <div class="ta-modal ta-modal--wide">
     <span class="ta-modal-close" data-close="pricingModal">✕</span>
     <h2>定價試算</h2>
-    <p class="ta-modal-text" style="margin-top:-10px;">成本欄位已自動帶入這個成品目前的材料成本,「成本項目」「手續費項目」是全事業共用的設定,改了會套用到所有成品。</p>
+    <p class="ta-modal-text" style="margin-top:-10px;">成本欄位已自動帶入這個成品目前的材料成本;其餘欄位(含成本項目/手續費項目)都是這個成品自己的設定,編輯時不會即時存檔,要按下方按鈕才會真正寫入。</p>
+    <p class="ta-pc-status" id="pcStatusLabel"></p>
 
     <div class="ta-pc-toggle-row">
       <label class="ta-switch">
@@ -526,6 +531,9 @@
 
     <div class="ta-modal-actions">
       <button class="ta-btn" data-close="pricingModal">取消</button>
+      <button class="ta-btn ta-btn-danger" id="pcResetBlankBtn">恢復初始空白</button>
+      <button class="ta-btn ta-btn-primary" id="pcSaveInputsBtn">儲存個別設定</button>
+      <button class="ta-btn ta-btn-primary" id="pcApplyGlobalBtn">全區套用</button>
       <button class="ta-btn ta-btn-primary" id="pcSaveBtn">儲存售價到成品</button>
     </div>
   </div>
@@ -663,29 +671,6 @@ function initData() {
     fillProductCategorySelect('pfCategory', enabledCategories);
   });
 
-  const pricingConfigRef = doc(db, 'settings', 'pricingConfig');
-  onSnapshot(pricingConfigRef, snap => {
-    if (snap.exists()) {
-      pricingConfig = { costItems: [], feeItems: [], ...snap.data() };
-    } else {
-      pricingConfig = {
-        costItems: [
-          { id: 1, name: '官網成本', value: 50, enabled: true },
-          { id: 2, name: '物流成本', value: 60, enabled: true },
-        ],
-        feeItems: [
-          { id: 1, name: '金流費', percent: 3, enabled: true, standalone: false },
-          { id: 2, name: '營業稅', percent: 5, enabled: true, standalone: false },
-        ],
-      };
-      setDoc(pricingConfigRef, pricingConfig);
-    }
-    pcNextCostId = Math.max(0, ...pricingConfig.costItems.map(c => c.id)) + 1;
-    pcNextFeeId = Math.max(0, ...pricingConfig.feeItems.map(f => f.id)) + 1;
-    // 注意:彈窗開著的時候故意不在這裡重新整理清單畫面——
-    // 每個編輯操作(新增/刪除/勾選/輸入)都已經自己呼叫過 render,這裡如果也跟著重繪,
-    // 會在使用者打字打到一半時把輸入框整個摧毀重建,游標跳掉、像是打字異常
-  });
 }
 
 function fillProductCategorySelect(selectId, list) {
@@ -1412,22 +1397,48 @@ document.getElementById('recipeSaveBtn').addEventListener('click', async () => {
   }
 });
 
-// ---------- 定價試算(從獨立的定價試算器整合進來,成本項目/手續費項目全事業共用,存在雲端) ----------
-let pricingConfig = { costItems: [], feeItems: [] };
+// ---------- 定價試算(從獨立的定價試算器整合進來;每個成品各自獨立設定,編輯時只改本地狀態,
+// 按「儲存個別設定」或「全區套用」才會真正寫入 Firestore,避免每個操作都打一次雲端) ----------
+let pcCurrentInputs = null; // 目前彈窗編輯中的完整設定(本地暫存,尚未存檔)
 let pcNextCostId = 1, pcNextFeeId = 1;
 let pricingEditProductId = null;
 
-async function savePricingConfig() {
-  await setDoc(doc(db, 'settings', 'pricingConfig'), {
-    costItems: pricingConfig.costItems, feeItems: pricingConfig.feeItems,
-  }, { merge: true });
+function pcBlankInputs() {
+  return { rate: 0, marginMode: false, q: 0, u: 0, r: 0, aa1: 0, aa2: 0, aa3: 0, costItems: [], feeItems: [] };
 }
 
-// 打字時(名稱/數字欄位)先等停手一陣子才真的存檔,避免每打一個字就寫入一次雲端
-let pcSaveDebounceTimer = null;
-function savePricingConfigDebounced() {
-  clearTimeout(pcSaveDebounceTimer);
-  pcSaveDebounceTimer = setTimeout(() => { savePricingConfig(); }, 600);
+function pcGatherCurrentInputs() {
+  return {
+    rate: parseFloat(document.getElementById('pcRate').value) || 0,
+    marginMode: document.getElementById('pcMarginModeToggle').checked,
+    q: parseFloat(document.getElementById('pcQ').value) || 0,
+    u: parseFloat(document.getElementById('pcU').value) || 0,
+    r: parseFloat(document.getElementById('pcR').value) || 0,
+    aa1: parseFloat(document.getElementById('pcAa1').value) || 0,
+    aa2: parseFloat(document.getElementById('pcAa2').value) || 0,
+    aa3: parseFloat(document.getElementById('pcAa3').value) || 0,
+    costItems: pcCurrentInputs.costItems,
+    feeItems: pcCurrentInputs.feeItems,
+  };
+}
+
+function pcFormatDate(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function renderPcStatusLabel(p) {
+  const pi = p.pricingInputs;
+  let text;
+  if (!pi) {
+    text = '尚未設定,目前為空白,請自行輸入';
+  } else if (pi.source === 'global') {
+    text = '全區套用(' + pcFormatDate(pi.savedAt) + ' 套用)';
+  } else {
+    text = '個別設定(' + pcFormatDate(pi.savedAt) + ' 設定)';
+  }
+  document.getElementById('pcStatusLabel').textContent = text;
 }
 
 function pcSwitchHtml(dataAttr, id, checked) {
@@ -1438,7 +1449,7 @@ function pcSwitchHtml(dataAttr, id, checked) {
 }
 
 function renderPcCostList() {
-  document.getElementById('pcCostList').innerHTML = pricingConfig.costItems.map(it => (
+  document.getElementById('pcCostList').innerHTML = pcCurrentInputs.costItems.map(it => (
     '<div class="ta-pc-item-row' + (it.enabled ? '' : ' ta-is-disabled') + '">' +
     pcSwitchHtml('data-cost-toggle', it.id, it.enabled) +
     '<input type="text" data-cost-name="' + it.id + '" value="' + escapeHtml(it.name) + '">' +
@@ -1450,7 +1461,7 @@ function renderPcCostList() {
 }
 
 function renderPcFeeList() {
-  document.getElementById('pcFeeList').innerHTML = pricingConfig.feeItems.map(it => (
+  document.getElementById('pcFeeList').innerHTML = pcCurrentInputs.feeItems.map(it => (
     '<div class="ta-pc-item-row' + (it.enabled ? '' : ' ta-is-disabled') + '">' +
     pcSwitchHtml('data-fee-toggle', it.id, it.enabled) +
     '<input type="text" data-fee-name="' + it.id + '" value="' + escapeHtml(it.name) + '">' +
@@ -1466,14 +1477,14 @@ function pcCalcOne(L, Q, R, AA) {
   const M = L;
   const S = M + R;
   const T = S * Q;
-  const costSum = pricingConfig.costItems.filter(c => c.enabled).reduce((s, c) => s + (parseFloat(c.value) || 0), 0);
+  const costSum = pcCurrentInputs.costItems.filter(c => c.enabled).reduce((s, c) => s + (parseFloat(c.value) || 0), 0);
   const AB = T + costSum + AA;
-  const feeRate = pricingConfig.feeItems.filter(f => f.enabled && !f.standalone).reduce((s, f) => s + (parseFloat(f.percent) || 0), 0) / 100;
+  const feeRate = pcCurrentInputs.feeItems.filter(f => f.enabled && !f.standalone).reduce((s, f) => s + (parseFloat(f.percent) || 0), 0) / 100;
   const AI = AB * feeRate;
   const AJ = feeRate < 1 ? AB / (1 - feeRate) : AB;
   const AK = Math.ceil(AJ / 10) * 10;
   const AP = AJ - AI - AA - costSum - S;
-  const standalones = pricingConfig.feeItems.filter(f => f.enabled && f.standalone).map(f => {
+  const standalones = pcCurrentInputs.feeItems.filter(f => f.enabled && f.standalone).map(f => {
     const r2 = (parseFloat(f.percent) || 0) / 100;
     return { name: f.name, price: r2 < 1 ? AB / (1 - r2) : AB };
   });
@@ -1535,63 +1546,56 @@ function renderPcCards() {
   }).join('');
 }
 
-document.getElementById('pcAddCostBtn').addEventListener('click', async () => {
-  pricingConfig.costItems.push({ id: pcNextCostId++, name: '新項目', value: 0, enabled: true });
+document.getElementById('pcAddCostBtn').addEventListener('click', () => {
+  pcCurrentInputs.costItems.push({ id: pcNextCostId++, name: '新項目', value: 0, enabled: true });
   renderPcCostList(); renderPcCards();
-  await savePricingConfig();
 });
-document.getElementById('pcAddFeeBtn').addEventListener('click', async () => {
-  pricingConfig.feeItems.push({ id: pcNextFeeId++, name: '新項目', percent: 0, enabled: true, standalone: false });
+document.getElementById('pcAddFeeBtn').addEventListener('click', () => {
+  pcCurrentInputs.feeItems.push({ id: pcNextFeeId++, name: '新項目', percent: 0, enabled: true, standalone: false });
   renderPcFeeList(); renderPcCards();
-  await savePricingConfig();
 });
 
 document.getElementById('pcCostList').addEventListener('input', (e) => {
   const t = e.target;
-  if (t.dataset.costName) { pricingConfig.costItems.find(c => c.id == t.dataset.costName).name = t.value; savePricingConfigDebounced(); }
-  if (t.dataset.costValue) { pricingConfig.costItems.find(c => c.id == t.dataset.costValue).value = t.value; renderPcCards(); savePricingConfigDebounced(); }
+  if (t.dataset.costName) { pcCurrentInputs.costItems.find(c => c.id == t.dataset.costName).name = t.value; }
+  if (t.dataset.costValue) { pcCurrentInputs.costItems.find(c => c.id == t.dataset.costValue).value = t.value; renderPcCards(); }
 });
-document.getElementById('pcCostList').addEventListener('click', async (e) => {
+document.getElementById('pcCostList').addEventListener('click', (e) => {
   const delBtn = e.target.closest('[data-cost-del]');
   if (delBtn) {
-    pricingConfig.costItems = pricingConfig.costItems.filter(c => c.id != delBtn.dataset.costDel);
+    pcCurrentInputs.costItems = pcCurrentInputs.costItems.filter(c => c.id != delBtn.dataset.costDel);
     renderPcCostList(); renderPcCards();
-    await savePricingConfig();
   }
 });
-document.getElementById('pcCostList').addEventListener('change', async (e) => {
+document.getElementById('pcCostList').addEventListener('change', (e) => {
   const t = e.target;
   if (t.dataset.costToggle) {
-    pricingConfig.costItems.find(c => c.id == t.dataset.costToggle).enabled = t.checked;
+    pcCurrentInputs.costItems.find(c => c.id == t.dataset.costToggle).enabled = t.checked;
     renderPcCostList(); renderPcCards();
-    await savePricingConfig();
   }
 });
 
 document.getElementById('pcFeeList').addEventListener('input', (e) => {
   const t = e.target;
-  if (t.dataset.feeName) { pricingConfig.feeItems.find(f => f.id == t.dataset.feeName).name = t.value; savePricingConfigDebounced(); }
-  if (t.dataset.feeValue) { pricingConfig.feeItems.find(f => f.id == t.dataset.feeValue).percent = t.value; renderPcCards(); savePricingConfigDebounced(); }
+  if (t.dataset.feeName) { pcCurrentInputs.feeItems.find(f => f.id == t.dataset.feeName).name = t.value; }
+  if (t.dataset.feeValue) { pcCurrentInputs.feeItems.find(f => f.id == t.dataset.feeValue).percent = t.value; renderPcCards(); }
 });
-document.getElementById('pcFeeList').addEventListener('click', async (e) => {
+document.getElementById('pcFeeList').addEventListener('click', (e) => {
   const delBtn = e.target.closest('[data-fee-del]');
   if (delBtn) {
-    pricingConfig.feeItems = pricingConfig.feeItems.filter(f => f.id != delBtn.dataset.feeDel);
+    pcCurrentInputs.feeItems = pcCurrentInputs.feeItems.filter(f => f.id != delBtn.dataset.feeDel);
     renderPcFeeList(); renderPcCards();
-    await savePricingConfig();
   }
 });
-document.getElementById('pcFeeList').addEventListener('change', async (e) => {
+document.getElementById('pcFeeList').addEventListener('change', (e) => {
   const t = e.target;
   if (t.dataset.feeToggle) {
-    pricingConfig.feeItems.find(f => f.id == t.dataset.feeToggle).enabled = t.checked;
+    pcCurrentInputs.feeItems.find(f => f.id == t.dataset.feeToggle).enabled = t.checked;
     renderPcFeeList(); renderPcCards();
-    await savePricingConfig();
   }
   if (t.dataset.feeStandalone) {
-    pricingConfig.feeItems.find(f => f.id == t.dataset.feeStandalone).standalone = t.checked;
+    pcCurrentInputs.feeItems.find(f => f.id == t.dataset.feeStandalone).standalone = t.checked;
     renderPcCards();
-    await savePricingConfig();
   }
 });
 
@@ -1621,16 +1625,26 @@ document.getElementById('pcMarginModeToggle').addEventListener('change', () => {
 
 function openPricingModal(p) {
   pricingEditProductId = p.id;
-  // 成本欄位自動帶入這個成品目前的材料成本(台幣),不用手動輸入,但還是可以自己改
+  const pi = p.pricingInputs;
+  pcCurrentInputs = pi
+    ? { ...pcBlankInputs(), ...pi, costItems: (pi.costItems || []).map(it => ({ ...it })), feeItems: (pi.feeItems || []).map(it => ({ ...it })) }
+    : pcBlankInputs();
+  pcNextCostId = Math.max(0, ...pcCurrentInputs.costItems.map(c => c.id)) + 1;
+  pcNextFeeId = Math.max(0, ...pcCurrentInputs.feeItems.map(f => f.id)) + 1;
+
+  // 成本欄位一律自動帶入這個成品「目前」的材料成本(台幣),不套用之前儲存的舊值,
+  // 這樣配方材料漲價時才能馬上反映最新真實成本;連帶幣別模式也固定用台幣輸入,
+  // 避免跟自動帶入的成本互相覆蓋(見人民幣模式下 renderPcCards 會用人民幣欄位反推台幣)
   document.getElementById('pcCurrencyModeToggle').checked = true;
   document.getElementById('pcTwd').value = calcRecipeCost(p.recipe).toFixed(2);
-  document.getElementById('pcRate').value = 5;
-  document.getElementById('pcQ').value = 5;
-  document.getElementById('pcMarginModeToggle').checked = false;
-  document.getElementById('pcR').value = 10;
-  document.getElementById('pcAa1').value = 100;
-  document.getElementById('pcAa2').value = 50;
-  document.getElementById('pcAa3').value = 0;
+  document.getElementById('pcRate').value = pcCurrentInputs.rate;
+  document.getElementById('pcQ').value = pcCurrentInputs.q;
+  document.getElementById('pcU').value = pcCurrentInputs.u;
+  document.getElementById('pcMarginModeToggle').checked = pcCurrentInputs.marginMode;
+  document.getElementById('pcR').value = pcCurrentInputs.r;
+  document.getElementById('pcAa1').value = pcCurrentInputs.aa1;
+  document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
+  document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
   document.getElementById('pcSellingPrice').value = p.sellingPrice != null ? p.sellingPrice : '';
 
   pcApplyCurrencyMode();
@@ -1638,9 +1652,80 @@ function openPricingModal(p) {
   renderPcCostList();
   renderPcFeeList();
   renderPcCards();
+  renderPcStatusLabel(p);
 
   openModal('pricingModal');
 }
+
+document.getElementById('pcResetBlankBtn').addEventListener('click', () => {
+  pcCurrentInputs = pcBlankInputs();
+  pcNextCostId = 1;
+  pcNextFeeId = 1;
+  document.getElementById('pcRate').value = 0;
+  document.getElementById('pcQ').value = 0;
+  document.getElementById('pcU').value = 0;
+  document.getElementById('pcMarginModeToggle').checked = false;
+  document.getElementById('pcR').value = 0;
+  document.getElementById('pcAa1').value = 0;
+  document.getElementById('pcAa2').value = 0;
+  document.getElementById('pcAa3').value = 0;
+  pcApplyMarginMode();
+  renderPcCostList();
+  renderPcFeeList();
+  renderPcCards();
+});
+
+document.getElementById('pcSaveInputsBtn').addEventListener('click', async () => {
+  if (!pricingEditProductId) return;
+  const btn = document.getElementById('pcSaveInputsBtn');
+  btn.disabled = true;
+  try {
+    const pricingInputs = { ...pcGatherCurrentInputs(), source: 'individual', savedAt: Timestamp.now() };
+    await updateDoc(doc(db, 'products', pricingEditProductId), { pricingInputs, updatedAt: serverTimestamp() });
+    const p = products.find(x => x.id === pricingEditProductId);
+    if (p) p.pricingInputs = pricingInputs;
+    renderPcStatusLabel({ pricingInputs });
+    const originalLabel = btn.textContent;
+    btn.textContent = '已儲存!';
+    setTimeout(() => { btn.textContent = originalLabel; }, 1200);
+  } catch (e) {
+    alert('儲存失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('pcApplyGlobalBtn').addEventListener('click', async () => {
+  if (!pricingEditProductId) return;
+  const individualCount = products.filter(p => p.pricingInputs && p.pricingInputs.source === 'individual' && p.id !== pricingEditProductId).length;
+  const ok = await showConfirmModal({
+    title: '全區套用',
+    text: `即將把目前畫面上的設定套用到全部 ${products.length} 款成品(其中 ${individualCount} 款目前是個別設定,套用後會被覆蓋),確定要繼續嗎?`,
+  });
+  if (!ok) return;
+
+  const btn = document.getElementById('pcApplyGlobalBtn');
+  btn.disabled = true;
+  try {
+    const pricingInputs = { ...pcGatherCurrentInputs(), source: 'global', savedAt: Timestamp.now() };
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < products.length; i += CHUNK_SIZE) {
+      const chunk = products.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach(p => batch.update(doc(db, 'products', p.id), { pricingInputs, updatedAt: serverTimestamp() }));
+      await batch.commit();
+      chunk.forEach(p => { p.pricingInputs = pricingInputs; });
+    }
+    renderPcStatusLabel({ pricingInputs });
+    const originalLabel = btn.textContent;
+    btn.textContent = '已套用!';
+    setTimeout(() => { btn.textContent = originalLabel; }, 1200);
+  } catch (e) {
+    alert('套用失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 document.getElementById('pcSaveBtn').addEventListener('click', async () => {
   if (!pricingEditProductId) return;
