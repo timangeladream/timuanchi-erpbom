@@ -335,6 +335,11 @@
     font-size: 12.5px; color: var(--danger); margin: 14px 0; max-height: 220px; overflow-y: auto;
   }
   .ta-import-errors ul { margin: 6px 0 0; padding-left: 18px; }
+  .ta-import-info {
+    padding: 12px 14px; border-radius: 8px; background: #eef2fb; border: 1px solid #cdd8f2;
+    font-size: 12.5px; color: var(--text-muted); margin: 14px 0; max-height: 220px; overflow-y: auto;
+  }
+  .ta-import-info ul { margin: 6px 0 0; padding-left: 18px; }
   .ta-import-progress { font-size: 13px; color: var(--text-muted); margin: 14px 0; }
 
   @media (max-width:640px){
@@ -3405,25 +3410,20 @@ async function processImportRows(rows) {
   // 全部通過驗證,計算預覽摘要
   let newMaterialCount = 0, mergeMaterialCount = 0, newRowCount = 0, mergeRowCount = 0;
   const groupInfos = [];
-  const duplicateWarnings = [];
+  const duplicateInfos = [];
   for (const [key, groupRows] of groups) {
     const [category, brand, material, beadType, size, colorSeries, colorCode] = key.split('');
     const existing = findMatchingMaterial(category, brand, material, beadType, size, colorSeries, colorCode);
     groupRows.sort((a, b) => a.date - b.date);
-    if (existing) {
-      mergeMaterialCount++;
-      mergeRowCount += groupRows.length;
-    } else {
-      newMaterialCount++;
-      newRowCount += groupRows.length;
-    }
-    groupInfos.push({ category, brand, material, beadType, size, colorSeries, colorCode, colorTag: groupRows[0].colorTag || '', note: groupRows[0].note || '', rows: groupRows, existingId: existing ? existing.id : null });
 
-    // 只有「累加到既有材料」的情境才需要查重,全新材料不可能撞到舊進貨紀錄
+    // 只有「累加到既有材料」的情境才需要查重,全新材料不可能撞到舊進貨紀錄。
+    // 判定為重複的列會自動排除、不寫入資料庫,這樣同一份持續累加的 Excel 整份重傳時,
+    // 已經匯入過的舊資料不用手動在 Excel 填「略過」。
+    let rowsToImport = groupRows;
     if (existing) {
       const histSnap = await getDocs(query(collection(db, 'materials', existing.id, 'history'), where('type', '==', 'purchase')));
       const existingPurchases = histSnap.docs.map(d => d.data());
-      groupRows.forEach(r => {
+      rowsToImport = groupRows.filter(r => {
         const rDateStr = r.date.toISOString().slice(0, 10);
         const isDup = existingPurchases.some(p => {
           const pDateStr = p.timestamp && p.timestamp.toDate ? p.timestamp.toDate().toISOString().slice(0, 10) : null;
@@ -3431,22 +3431,40 @@ async function processImportRows(rows) {
             Number(p.originalAmount) === Number(r.amount) && Number(p.receivedQuantity) === Number(r.receivedQuantity);
         });
         if (isDup) {
-          duplicateWarnings.push(`第 ${r.rowNum} 列:${rDateStr}／${r.seller || '(無供應商)'}／金額${r.amount}／數量${r.receivedQuantity},跟現有的一筆進貨紀錄完全相符`);
+          duplicateInfos.push(`第 ${r.rowNum} 列:${rDateStr}／${r.seller || '(無供應商)'}／金額${r.amount}／數量${r.receivedQuantity}`);
         }
+        return !isDup;
       });
+      if (!rowsToImport.length) continue;
     }
+
+    if (existing) {
+      mergeMaterialCount++;
+      mergeRowCount += rowsToImport.length;
+    } else {
+      newMaterialCount++;
+      newRowCount += rowsToImport.length;
+    }
+    groupInfos.push({ category, brand, material, beadType, size, colorSeries, colorCode, colorTag: groupRows[0].colorTag || '', note: groupRows[0].note || '', rows: rowsToImport, existingId: existing ? existing.id : null });
+  }
+
+  errorListEl.innerHTML = '';
+
+  if (!groupInfos.length) {
+    summaryEl.innerHTML = `<div class="ta-import-summary">共讀取 ${rows.length} 列,經過重複比對後全部都是已匯入過的資料,沒有新的紀錄可以匯入。</div>`;
+    document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+    importParsedGroups = null;
+    return;
   }
 
   importParsedGroups = groupInfos;
-
-  errorListEl.innerHTML = '';
   summaryEl.innerHTML = `<div class="ta-import-summary">
     共讀取 ${rows.length} 列,全部通過驗證${skippedCount ? `(另外略過 ${skippedCount} 列,不會匯入)` : ''}。<br>
     將新增 ${newMaterialCount} 款新材料(共 ${newRowCount} 筆進貨紀錄)。<br>
     將累加到 ${mergeMaterialCount} 款既有材料(共 ${mergeRowCount} 筆進貨紀錄)。
-  </div>${duplicateWarnings.length ? `<div class="ta-import-errors">
-    ⚠️ 以下 ${duplicateWarnings.length} 列疑似重複匯入(跟現有進貨紀錄的日期/供應商/金額/數量完全相同),請確認不是誤匯入,如果要排除請在 Excel 裡填「略過」欄位後重新上傳:
-    <ul>${duplicateWarnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul>
+  </div>${duplicateInfos.length ? `<div class="ta-import-info">
+    ℹ️ 另外偵測到 ${duplicateInfos.length} 列跟現有進貨紀錄的日期/供應商/金額/數量完全相同,判斷為重複資料,將自動略過不匯入:
+    <ul>${duplicateInfos.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul>
   </div>` : ''}`;
   document.getElementById('confirmImportBtn').classList.remove('ta-is-hidden');
 }
