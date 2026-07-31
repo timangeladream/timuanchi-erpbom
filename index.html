@@ -3192,6 +3192,14 @@ function resetImportModal() {
   importParsedGroups = null;
 }
 
+// 把整份檔案的內容算成一個指紋值(SHA-256),用來偵測「這份檔案是不是已經匯入過」
+async function computeFileHash(buf) {
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+let pendingImportFileHash = null;
+
 document.getElementById('importFileInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -3199,13 +3207,31 @@ document.getElementById('importFileInput').addEventListener('change', async (e) 
   document.getElementById('importErrorList').innerHTML = '';
   document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
   importParsedGroups = null;
+  pendingImportFileHash = null;
 
   try {
     const buf = await file.arrayBuffer();
+    const hash = await computeFileHash(buf);
+
+    const hashDocSnap = await getDoc(doc(db, 'settings', 'importedFileHashes'));
+    const knownHashes = hashDocSnap.exists() ? (hashDocSnap.data().hashes || []) : [];
+    if (knownHashes.includes(hash)) {
+      const proceed = await showConfirmModal({
+        title: '這份檔案好像匯入過了',
+        text: '這份檔案的內容跟您之前成功匯入過的某一份檔案完全相同,再匯入一次很可能會造成進貨紀錄重複、庫存被灌水。確定要繼續匯入嗎?',
+      });
+      if (!proceed) {
+        document.getElementById('importSummary').innerHTML = '';
+        e.target.value = '';
+        return;
+      }
+    }
+    pendingImportFileHash = hash;
+
     const wb = XLSX.read(buf, { type: 'array', cellDates: true });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', blankrows: true });
-    processImportRows(rows);
+    await processImportRows(rows);
   } catch (err) {
     document.getElementById('importSummary').innerHTML = '';
     document.getElementById('importErrorList').innerHTML = `<div class="ta-import-errors">讀取檔案失敗:${escapeHtml(err.message)}</div>`;
@@ -3234,7 +3260,7 @@ function findMatchingMaterial(category, brand, material, beadType, size, colorSe
   );
 }
 
-function processImportRows(rows) {
+async function processImportRows(rows) {
   const summaryEl = document.getElementById('importSummary');
   const errorListEl = document.getElementById('importErrorList');
 
@@ -3379,6 +3405,7 @@ function processImportRows(rows) {
   // 全部通過驗證,計算預覽摘要
   let newMaterialCount = 0, mergeMaterialCount = 0, newRowCount = 0, mergeRowCount = 0;
   const groupInfos = [];
+  const duplicateWarnings = [];
   for (const [key, groupRows] of groups) {
     const [category, brand, material, beadType, size, colorSeries, colorCode] = key.split('');
     const existing = findMatchingMaterial(category, brand, material, beadType, size, colorSeries, colorCode);
@@ -3391,6 +3418,23 @@ function processImportRows(rows) {
       newRowCount += groupRows.length;
     }
     groupInfos.push({ category, brand, material, beadType, size, colorSeries, colorCode, colorTag: groupRows[0].colorTag || '', note: groupRows[0].note || '', rows: groupRows, existingId: existing ? existing.id : null });
+
+    // 只有「累加到既有材料」的情境才需要查重,全新材料不可能撞到舊進貨紀錄
+    if (existing) {
+      const histSnap = await getDocs(query(collection(db, 'materials', existing.id, 'history'), where('type', '==', 'purchase')));
+      const existingPurchases = histSnap.docs.map(d => d.data());
+      groupRows.forEach(r => {
+        const rDateStr = r.date.toISOString().slice(0, 10);
+        const isDup = existingPurchases.some(p => {
+          const pDateStr = p.timestamp && p.timestamp.toDate ? p.timestamp.toDate().toISOString().slice(0, 10) : null;
+          return pDateStr === rDateStr && (p.seller || '') === (r.seller || '') &&
+            Number(p.originalAmount) === Number(r.amount) && Number(p.receivedQuantity) === Number(r.receivedQuantity);
+        });
+        if (isDup) {
+          duplicateWarnings.push(`第 ${r.rowNum} 列:${rDateStr}／${r.seller || '(無供應商)'}／金額${r.amount}／數量${r.receivedQuantity},跟現有的一筆進貨紀錄完全相符`);
+        }
+      });
+    }
   }
 
   importParsedGroups = groupInfos;
@@ -3400,7 +3444,10 @@ function processImportRows(rows) {
     共讀取 ${rows.length} 列,全部通過驗證${skippedCount ? `(另外略過 ${skippedCount} 列,不會匯入)` : ''}。<br>
     將新增 ${newMaterialCount} 款新材料(共 ${newRowCount} 筆進貨紀錄)。<br>
     將累加到 ${mergeMaterialCount} 款既有材料(共 ${mergeRowCount} 筆進貨紀錄)。
-  </div>`;
+  </div>${duplicateWarnings.length ? `<div class="ta-import-errors">
+    ⚠️ 以下 ${duplicateWarnings.length} 列疑似重複匯入(跟現有進貨紀錄的日期/供應商/金額/數量完全相同),請確認不是誤匯入,如果要排除請在 Excel 裡填「略過」欄位後重新上傳:
+    <ul>${duplicateWarnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul>
+  </div>` : ''}`;
   document.getElementById('confirmImportBtn').classList.remove('ta-is-hidden');
 }
 
@@ -3541,6 +3588,16 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
       await batch.commit();
       committed += chunk.length;
       progressEl.textContent = `匯入中... 已寫入 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作`;
+    }
+
+    // 記錄這份檔案的指紋,下次選到內容一樣的檔案時可以提醒
+    if (pendingImportFileHash) {
+      const hashDocSnap = await getDoc(doc(db, 'settings', 'importedFileHashes'));
+      const knownHashes = hashDocSnap.exists() ? (hashDocSnap.data().hashes || []) : [];
+      if (!knownHashes.includes(pendingImportFileHash)) {
+        await setDoc(doc(db, 'settings', 'importedFileHashes'), { hashes: [...knownHashes, pendingImportFileHash] }, { merge: true });
+      }
+      pendingImportFileHash = null;
     }
 
     progressEl.textContent = `匯入完成!共處理 ${totalRows} 筆進貨紀錄。`;
