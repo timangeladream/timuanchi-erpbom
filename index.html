@@ -132,10 +132,6 @@
   .ta-options-row-input {
     flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
   }
-  .ta-options-row-code {
-    width: 90px; flex: none; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
-    font-size: 13px; text-transform: uppercase;
-  }
   .ta-input-uppercase { text-transform: uppercase; }
   .ta-currency-code { min-width: 50px; font-weight: 600; font-size: 13px; }
 
@@ -154,10 +150,6 @@
   .ta-filter-bar select, .ta-filter-bar input[type=text] {
     padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px;
   }
-
-  .ta-unit-row { display: flex; gap: 6px; }
-  .ta-unit-row input, .ta-unit-row select { flex: 1; min-width: 0; }
-  .ta-unit-row .ta-combo-add-btn { position: static; padding: 8px 10px; white-space: nowrap; }
 
   .ta-radio-row { display: flex; gap: 16px; flex-wrap: wrap; }
   .ta-radio-row--vertical { flex-direction: column; gap: 8px; }
@@ -255,8 +247,6 @@
   .ta-dup-hint.ta-is-visible { display: block; }
   .ta-dup-hint--found { background: #fdf3e8; color: var(--warn); border: 1px solid #f0dcc0; }
   .ta-dup-hint--clear { background: #eef6ef; color: var(--success); border: 1px solid #d6e9d9; }
-
-  .ta-calc-hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 
   .ta-timeline { margin-top: 16px; border-left: 2px solid var(--border); padding-left: 16px; }
   .ta-timeline-heading { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
@@ -1122,6 +1112,7 @@
   <button class="ta-drawer-item" id="openExchangeBtn">匯率設定</button>
   <button class="ta-drawer-item" id="openImportBtn">匯入資料</button>
   <button class="ta-drawer-item" id="openExportBtn">匯出資料</button>
+  <button class="ta-drawer-item" id="openHistoryCountBtn">查看進貨紀錄總筆數</button>
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item ta-drawer-item--danger" id="openWipeBtn">清除資料</button>
   <div class="ta-drawer-divider"></div>
@@ -3419,12 +3410,33 @@ async function processImportRows(rows) {
     // 只有「累加到既有材料」的情境才需要查重,全新材料不可能撞到舊進貨紀錄。
     // 判定為重複的列會自動排除、不寫入資料庫,這樣同一份持續累加的 Excel 整份重傳時,
     // 已經匯入過的舊資料不用手動在 Excel 填「略過」。
+    // 只查「Excel 裡實際出現過的日期」當天的進貨紀錄,不整款材料從以前到現在的歷史都讀,
+    // 讀取量只跟這次匯入牽涉到幾個日期成正比,跟材料完整歷史多長無關;
+    // 同一款材料若牽涉多個日期,查詢會平行(Promise.all)送出。
     let rowsToImport = groupRows;
     if (existing) {
-      const histSnap = await getDocs(query(collection(db, 'materials', existing.id, 'history'), where('type', '==', 'purchase')));
-      const existingPurchases = histSnap.docs.map(d => d.data());
+      const rowsByDate = new Map();
+      for (const r of groupRows) {
+        const dateStr = r.date.toISOString().slice(0, 10);
+        if (!rowsByDate.has(dateStr)) rowsByDate.set(dateStr, []);
+        rowsByDate.get(dateStr).push(r);
+      }
+      const dayResults = await Promise.all(Array.from(rowsByDate.keys()).map(async (dateStr) => {
+        const dayStart = new Date(dateStr + 'T00:00:00.000Z');
+        const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+        const daySnap = await getDocs(query(
+          collection(db, 'materials', existing.id, 'history'),
+          where('type', '==', 'purchase'),
+          where('timestamp', '>=', Timestamp.fromDate(dayStart)),
+          where('timestamp', '<', Timestamp.fromDate(dayEnd))
+        ));
+        return [dateStr, daySnap.docs.map(d => d.data())];
+      }));
+      const purchasesByDate = new Map(dayResults);
+
       rowsToImport = groupRows.filter(r => {
         const rDateStr = r.date.toISOString().slice(0, 10);
+        const existingPurchases = purchasesByDate.get(rDateStr) || [];
         const isDup = existingPurchases.some(p => {
           const pDateStr = p.timestamp && p.timestamp.toDate ? p.timestamp.toDate().toISOString().slice(0, 10) : null;
           return pDateStr === rDateStr && (p.seller || '') === (r.seller || '') &&
@@ -3726,6 +3738,24 @@ document.getElementById('openExportBtn').addEventListener('click', async () => {
     checkExportReminder();
   } catch (err) {
     alert('匯出失敗:' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+});
+
+// ---------- 查看進貨紀錄總筆數(只在按下按鈕時才查詢一次,不會在平常開頁面時自動查,省讀取次數) ----------
+document.getElementById('openHistoryCountBtn').addEventListener('click', async () => {
+  closeDrawer();
+  const btn = document.getElementById('openHistoryCountBtn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '查詢中...';
+  try {
+    const countSnap = await getCountFromServer(collectionGroup(db, 'history'));
+    alert(`目前全部材料累計共有 ${countSnap.data().count} 筆進貨紀錄。`);
+  } catch (err) {
+    alert('查詢失敗:' + err.message);
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
