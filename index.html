@@ -95,11 +95,6 @@
   .ta-export-reminder span#exportReminderText { flex: 1; }
   .ta-export-reminder-close { cursor: pointer; color: var(--warn); font-size: 14px; padding: 0 4px; }
 
-  .ta-backfill-progress {
-    background: #e9f1fa; border: 1px solid var(--primary); color: var(--primary-dark);
-    border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px;
-  }
-
   .ta-summary-bar {
     display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;
   }
@@ -416,8 +411,6 @@
     <button class="ta-btn ta-btn-sm ta-btn-primary" id="exportReminderBtn">立即匯出</button>
     <span class="ta-export-reminder-close" id="exportReminderCloseBtn">✕</span>
   </div>
-
-  <div class="ta-backfill-progress ta-is-hidden" id="backfillProgressBanner"></div>
 
   <div class="ta-summary-bar">
     <div class="ta-summary-card">
@@ -1201,8 +1194,6 @@ function initData() {
     renderFilters();
     renderTable();
     renderSummary();
-    backfillLastPurchaseDates();
-    backfillWeightedAvgCost();
   });
 
   const optRef = doc(db, 'settings', 'options');
@@ -1210,17 +1201,6 @@ function initData() {
     const base = { brands: [], materials: [], beadTypes: [], categories: [], packageUnits: [], stockUnits: [], categoryCodes: {}, disabledCategories: [] };
     if (snap.exists()) {
       options = { ...base, ...snap.data() };
-      // 舊資料補齊新欄位的預設值(僅在該欄位尚不存在時寫入)
-      const missing = {};
-      if (!snap.data().categories) missing.categories = DEFAULT_CATEGORIES;
-      if (!snap.data().packageUnits) missing.packageUnits = DEFAULT_PACKAGE_UNITS;
-      if (!snap.data().stockUnits) missing.stockUnits = DEFAULT_STOCK_UNITS;
-      if (!snap.data().categoryCodes) missing.categoryCodes = {};
-      if (!snap.data().disabledCategories) missing.disabledCategories = [];
-      if (Object.keys(missing).length) {
-        options = { ...options, ...missing };
-        setDoc(optRef, missing, { merge: true });
-      }
     } else {
       options = { ...base, categories: DEFAULT_CATEGORIES, packageUnits: DEFAULT_PACKAGE_UNITS, stockUnits: DEFAULT_STOCK_UNITS };
       setDoc(optRef, options);
@@ -1343,58 +1323,6 @@ document.getElementById('setColumnVisibilityDefaultBtn').addEventListener('click
   await setDoc(doc(db, 'settings', 'options'), { columnVisibilityDefault: columnVisibility }, { merge: true });
   alert('已設為這個帳號的預設欄位顯示設定');
 });
-
-// 舊資料背景補算「最新進貨日期」欄位:只處理目前還缺這個欄位的材料,補過一次之後不會再重算。
-// 注意:一定要用 === undefined(欄位真的不存在)判斷要不要處理,不能用 !m.lastPurchaseDate,
-// 因為找不到進貨紀錄時會把欄位寫成 null,若用 !m.lastPurchaseDate 判斷,null 一樣會被判定成「還沒補」,
-// 導致這款材料每次監聽觸發都被重新選中、重複查詢它的完整歷史,形成看不見的背景讀取迴圈。
-let backfillInProgress = false;
-async function backfillLastPurchaseDates() {
-  if (backfillInProgress) return;
-  const targets = materials.filter(m => m.lastPurchaseDate === undefined);
-  if (!targets.length) return;
-  backfillInProgress = true;
-  try {
-    let noHistoryCount = 0;
-    for (const m of targets) {
-      const histSnap = await getDocs(query(collection(db, 'materials', m.id, 'history'), where('type', '==', 'purchase')));
-      let latest = null;
-      histSnap.docs.forEach(d => {
-        const ts = d.data().timestamp;
-        if (ts && (!latest || ts.toMillis() > latest.toMillis())) latest = ts;
-      });
-      // 不管有沒有找到進貨紀錄,都要寫入欄位(沒有紀錄就寫 null),讓欄位「存在」,才不會被下次觸發時重新選中
-      await updateDoc(doc(db, 'materials', m.id), { lastPurchaseDate: latest });
-      if (!latest) noHistoryCount++;
-    }
-    if (noHistoryCount) {
-      console.log(`[背景補算] 這次有 ${noHistoryCount} 款材料沒有「進貨」類型的歷史紀錄(可能是純人工建立/調整的材料),已補寫 lastPurchaseDate 為 null,避免之後重複查詢`);
-    }
-  } finally {
-    backfillInProgress = false;
-  }
-}
-
-// 舊資料背景補算「加權平均成本」欄位:只處理目前還缺這個欄位的材料(加權平均成本功能上線前就存在的材料),
-// 直接借用 recalculateMaterialStock() 重播歷史算出正確值,補過一次之後不會再重算
-let weightedAvgBackfillInProgress = false;
-async function backfillWeightedAvgCost() {
-  if (weightedAvgBackfillInProgress) return;
-  const targets = materials.filter(m => m.currentUnitCostWeightedAvg == null);
-  if (!targets.length) return;
-  weightedAvgBackfillInProgress = true;
-  const banner = document.getElementById('backfillProgressBanner');
-  banner.classList.remove('ta-is-hidden');
-  try {
-    for (let i = 0; i < targets.length; i++) {
-      banner.textContent = `背景補算加權平均成本中... ${i + 1} / ${targets.length}（可以繼續操作系統,不會受影響）`;
-      await recalculateMaterialStock(targets[i].id);
-    }
-  } finally {
-    weightedAvgBackfillInProgress = false;
-    banner.classList.add('ta-is-hidden');
-  }
-}
 
 function fillCurrencySelect() {
   const codes = Object.keys(exchangeRates).sort();
