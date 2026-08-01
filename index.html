@@ -1344,14 +1344,18 @@ document.getElementById('setColumnVisibilityDefaultBtn').addEventListener('click
   alert('已設為這個帳號的預設欄位顯示設定');
 });
 
-// 舊資料背景補算「最新進貨日期」欄位:只處理目前還缺這個欄位的材料,補過一次之後不會再重算
+// 舊資料背景補算「最新進貨日期」欄位:只處理目前還缺這個欄位的材料,補過一次之後不會再重算。
+// 注意:一定要用 === undefined(欄位真的不存在)判斷要不要處理,不能用 !m.lastPurchaseDate,
+// 因為找不到進貨紀錄時會把欄位寫成 null,若用 !m.lastPurchaseDate 判斷,null 一樣會被判定成「還沒補」,
+// 導致這款材料每次監聽觸發都被重新選中、重複查詢它的完整歷史,形成看不見的背景讀取迴圈。
 let backfillInProgress = false;
 async function backfillLastPurchaseDates() {
   if (backfillInProgress) return;
-  const targets = materials.filter(m => !m.lastPurchaseDate);
+  const targets = materials.filter(m => m.lastPurchaseDate === undefined);
   if (!targets.length) return;
   backfillInProgress = true;
   try {
+    let noHistoryCount = 0;
     for (const m of targets) {
       const histSnap = await getDocs(query(collection(db, 'materials', m.id, 'history'), where('type', '==', 'purchase')));
       let latest = null;
@@ -1359,9 +1363,12 @@ async function backfillLastPurchaseDates() {
         const ts = d.data().timestamp;
         if (ts && (!latest || ts.toMillis() > latest.toMillis())) latest = ts;
       });
-      if (latest) {
-        await updateDoc(doc(db, 'materials', m.id), { lastPurchaseDate: latest });
-      }
+      // 不管有沒有找到進貨紀錄,都要寫入欄位(沒有紀錄就寫 null),讓欄位「存在」,才不會被下次觸發時重新選中
+      await updateDoc(doc(db, 'materials', m.id), { lastPurchaseDate: latest });
+      if (!latest) noHistoryCount++;
+    }
+    if (noHistoryCount) {
+      console.log(`[背景補算] 這次有 ${noHistoryCount} 款材料沒有「進貨」類型的歷史紀錄(可能是純人工建立/調整的材料),已補寫 lastPurchaseDate 為 null,避免之後重複查詢`);
     }
   } finally {
     backfillInProgress = false;
