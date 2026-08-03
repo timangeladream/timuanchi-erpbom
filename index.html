@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TimuAnchi 材料系統</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
 <meta name="theme-color" content="#2563a8">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="材料管理系統">
@@ -389,9 +391,11 @@
 <div id="loginScreen" class="ta-is-hidden">
   <div class="ta-login-box">
     <h1>TimuAnchi 材料系統</h1>
-    <input type="email" id="loginEmail" placeholder="Email">
-    <input type="password" id="loginPassword" placeholder="密碼">
-    <button id="loginBtn">登入</button>
+    <form id="loginForm" onsubmit="return false;">
+      <input type="email" id="loginEmail" placeholder="Email">
+      <input type="password" id="loginPassword" placeholder="密碼">
+      <button id="loginBtn">登入</button>
+    </form>
     <div id="loginError"></div>
   </div>
 </div>
@@ -1074,10 +1078,10 @@
       </select>
     </div>
     <div class="ta-modal-text ta-is-hidden" id="wipeScopePreview"></div>
-    <div class="ta-form-row ta-is-hidden" id="wipePasswordRow">
+    <form class="ta-form-row ta-is-hidden" id="wipePasswordRow" onsubmit="return false;">
       <label>密碼</label>
       <input type="password" id="wipePasswordInput">
-    </div>
+    </form>
     <div class="ta-modal-error ta-is-hidden" id="wipeErrorText"></div>
     <div class="ta-import-progress ta-is-hidden" id="wipeProgressText"></div>
     <div class="ta-modal-actions">

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TimuAnchi 成品組合 BOM</title>
+<link rel="icon" href="icons/icon-192.png">
 <style>
   :root {
     --primary: #2563a8;
@@ -257,9 +258,11 @@
 <div id="loginScreen" class="ta-is-hidden">
   <div class="ta-login-box">
     <h1>TimuAnchi 材料系統</h1>
-    <input type="email" id="loginEmail" placeholder="Email">
-    <input type="password" id="loginPassword" placeholder="密碼">
-    <button id="loginBtn">登入</button>
+    <form id="loginForm" onsubmit="return false;">
+      <input type="email" id="loginEmail" placeholder="Email">
+      <input type="password" id="loginPassword" placeholder="密碼">
+      <button id="loginBtn">登入</button>
+    </form>
     <div id="loginError"></div>
   </div>
 </div>
