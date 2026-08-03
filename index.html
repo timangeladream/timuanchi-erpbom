@@ -1125,9 +1125,9 @@ import {
   EmailAuthProvider, reauthenticateWithCredential
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  getFirestore,
   collection, collectionGroup, doc, getDoc, getDocs, addDoc, updateDoc, setDoc, deleteDoc,
-  query, where, orderBy, serverTimestamp, onSnapshot, Timestamp, writeBatch, runTransaction, deleteField,
+  query, where, orderBy, serverTimestamp, Timestamp, writeBatch, runTransaction, deleteField,
   getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -1142,12 +1142,10 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-// 開啟本機離線快取:重新整理頁面時先讀瀏覽器本機的舊資料,伺服器只需要傳這期間的變動,
-// 不用每次都整批重讀全部材料,大幅降低 Firestore 讀取次數。用「多分頁」模式,
-// 這樣材料系統/BOM系統(或同一個系統開兩個分頁)同時開著也不會互相搶快取。
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-});
+// 不使用離線持久化快取:多分頁協調機制(persistentMultipleTabManager)會在分頁
+// 切換焦點、或分頁閒置時的「主分頁」租約續約失敗時,整批取消並重新註冊所有監聽,
+// 造成不易預期的讀取量。改用預設的記憶體快取,兩個分頁各自獨立連線,不互相協調。
+const db = getFirestore(app);
 
 // ---------- 全域狀態 ----------
 let materials = [];       // 目前所有材料(含下架)
@@ -1193,53 +1191,125 @@ onAuthStateChanged(auth, user => {
 });
 
 // ---------- 初始化資料 ----------
-function initData() {
-  onSnapshot(collection(db, 'materials'), snap => {
-    materials = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderFilters();
-    renderTable();
-    renderSummary();
-  });
+// 材料、選項設定、匯率設定,只有這個系統自己會寫入,不會有其他系統或裝置同時修改,
+// 所以不需要用 onSnapshot 一直監聽伺服器變動——開頁時讀一次,之後每次自己寫入
+// 成功後,用 refreshMaterialLocal / refreshOptionsLocal / refreshExchangeRatesLocal
+// 重新讀「剛剛那一筆」資料回來更新畫面,不用整個集合持續監聽。
+async function initData() {
+  const matSnap = await getDocs(collection(db, 'materials'));
+  materials = matSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderFilters();
+  renderTable();
+  renderSummary();
 
-  const optRef = doc(db, 'settings', 'options');
-  onSnapshot(optRef, snap => {
-    const base = { brands: [], materials: [], beadTypes: [], categories: [], packageUnits: [], stockUnits: [], categoryCodes: {}, disabledCategories: [] };
-    if (snap.exists()) {
-      options = { ...base, ...snap.data() };
-    } else {
-      options = { ...base, categories: DEFAULT_CATEGORIES, packageUnits: DEFAULT_PACKAGE_UNITS, stockUnits: DEFAULT_STOCK_UNITS };
-      setDoc(optRef, options);
-    }
-    const enabledCategories = options.categories.filter(c => !(options.disabledCategories || []).includes(c));
-    fillComboOptions('pBrand', options.brands);
-    fillComboOptions('pMaterial', options.materials);
-    fillComboOptions('pBeadType', options.beadTypes);
-    fillComboOptions('pCategory', enabledCategories);
-    fillComboOptions('pPkgUnit', options.packageUnits);
-    fillComboOptions('pQuantityUnit', options.stockUnits);
-    fillComboOptions('eprPkgUnit', options.packageUnits);
-    fillComboOptions('eCategory', enabledCategories);
-    fillComboOptions('eBrand', options.brands);
-    fillComboOptions('eMaterial', options.materials);
-    fillComboOptions('eBeadType', options.beadTypes);
-    renderCategoryTabs();
-    loadColumnVisibility();
-    applyColumnVisibility();
-    checkExportReminder();
-  });
+  await refreshOptionsLocal();
 
   const rateRef = doc(db, 'settings', 'exchangeRates');
-  onSnapshot(rateRef, snap => {
+  const rateSnap = await getDoc(rateRef);
+  if (rateSnap.exists()) {
+    exchangeRates = rateSnap.data();
+  } else {
+    await setDoc(rateRef, exchangeRates);
+  }
+  fillCurrencySelect();
+  renderExchangeRateList();
+  renderCurrencyColumns();
+  renderTable();
+}
+
+// 寫入單一材料成功後呼叫:重新讀那一筆材料,更新畫面上的本機陣列(不用整個集合重讀)
+async function refreshMaterialLocal(materialId) {
+  const snap = await getDoc(doc(db, 'materials', materialId));
+  const idx = materials.findIndex(m => m.id === materialId);
+  if (snap.exists()) {
+    const updated = { id: snap.id, ...snap.data() };
+    if (idx >= 0) materials[idx] = updated;
+    else materials.push(updated);
+  } else if (idx >= 0) {
+    materials.splice(idx, 1);
+  }
+  renderFilters();
+  renderTable();
+  renderSummary();
+}
+
+// 一次寫入多筆材料(批次匯入/批次調整/分類改名連動)後呼叫
+async function refreshMaterialsLocal(materialIds) {
+  const uniqueIds = [...new Set(materialIds)];
+  await Promise.all(uniqueIds.map(async id => {
+    const snap = await getDoc(doc(db, 'materials', id));
+    const idx = materials.findIndex(m => m.id === id);
     if (snap.exists()) {
-      exchangeRates = snap.data();
-    } else {
-      setDoc(rateRef, exchangeRates);
+      const updated = { id: snap.id, ...snap.data() };
+      if (idx >= 0) materials[idx] = updated;
+      else materials.push(updated);
+    } else if (idx >= 0) {
+      materials.splice(idx, 1);
     }
-    fillCurrencySelect();
-    renderExchangeRateList();
-    renderCurrencyColumns();
-    renderTable();
-  });
+  }));
+  renderFilters();
+  renderTable();
+  renderSummary();
+}
+
+// 材料整批被刪除後呼叫:直接從本機陣列移除,不用重讀
+function removeMaterialsLocal(materialIds) {
+  const idSet = new Set(materialIds);
+  materials = materials.filter(m => !idSet.has(m.id));
+  renderFilters();
+  renderTable();
+  renderSummary();
+}
+
+// 全部材料整批重讀(找不到明確受影響的材料 id 清單時使用,例如大量匯入)
+async function reloadAllMaterialsLocal() {
+  const snap = await getDocs(collection(db, 'materials'));
+  materials = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderFilters();
+  renderTable();
+  renderSummary();
+}
+
+// 寫入 settings/options 成功後呼叫:重新讀那份設定,更新畫面
+async function refreshOptionsLocal() {
+  const optRef = doc(db, 'settings', 'options');
+  const snap = await getDoc(optRef);
+  const base = { brands: [], materials: [], beadTypes: [], categories: [], packageUnits: [], stockUnits: [], categoryCodes: {}, disabledCategories: [] };
+  if (snap.exists()) {
+    options = { ...base, ...snap.data() };
+  } else {
+    options = { ...base, categories: DEFAULT_CATEGORIES, packageUnits: DEFAULT_PACKAGE_UNITS, stockUnits: DEFAULT_STOCK_UNITS };
+    await setDoc(optRef, options);
+  }
+  const enabledCategories = options.categories.filter(c => !(options.disabledCategories || []).includes(c));
+  fillComboOptions('pBrand', options.brands);
+  fillComboOptions('pMaterial', options.materials);
+  fillComboOptions('pBeadType', options.beadTypes);
+  fillComboOptions('pCategory', enabledCategories);
+  fillComboOptions('pPkgUnit', options.packageUnits);
+  fillComboOptions('pQuantityUnit', options.stockUnits);
+  fillComboOptions('eprPkgUnit', options.packageUnits);
+  fillComboOptions('eCategory', enabledCategories);
+  fillComboOptions('eBrand', options.brands);
+  fillComboOptions('eMaterial', options.materials);
+  fillComboOptions('eBeadType', options.beadTypes);
+  renderCategoryTabs();
+  loadColumnVisibility();
+  applyColumnVisibility();
+  checkExportReminder();
+}
+
+// 寫入 settings/exchangeRates 成功後呼叫:重新讀那份設定,更新畫面
+async function refreshExchangeRatesLocal() {
+  const rateRef = doc(db, 'settings', 'exchangeRates');
+  const snap = await getDoc(rateRef);
+  if (snap.exists()) {
+    exchangeRates = snap.data();
+  }
+  fillCurrencySelect();
+  renderExchangeRateList();
+  renderCurrencyColumns();
+  renderTable();
 }
 
 // 依匯率設定裡目前有的幣別,動態產生對應的「進價(幣別)」表頭欄位
@@ -1326,6 +1396,7 @@ document.getElementById('openColumnVisibilityBtn').addEventListener('click', () 
 
 document.getElementById('setColumnVisibilityDefaultBtn').addEventListener('click', async () => {
   await setDoc(doc(db, 'settings', 'options'), { columnVisibilityDefault: columnVisibility }, { merge: true });
+  await refreshOptionsLocal();
   alert('已設為這個帳號的預設欄位顯示設定');
 });
 
@@ -1476,6 +1547,7 @@ async function moveCategoryOption(idx, delta) {
   [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
   options.categories = list;
   await setDoc(doc(db, 'settings', 'options'), { categories: list }, { merge: true });
+  await refreshOptionsLocal();
   renderCategoryManageList();
   renderCategoryTabs();
 }
@@ -1486,6 +1558,7 @@ async function toggleCategoryDisabled(name) {
   const list = [...disabledSet];
   options.disabledCategories = list;
   await setDoc(doc(db, 'settings', 'options'), { disabledCategories: list }, { merge: true });
+  await refreshOptionsLocal();
   renderCategoryManageList();
   renderCategoryTabs();
 }
@@ -1561,8 +1634,10 @@ document.getElementById('categoryFormSaveBtn').addEventListener('click', async (
             type: 'edit', field: '分類', oldValue: oldName, newValue: name, timestamp: serverTimestamp(),
           });
         }
+        if (affected.length) await refreshMaterialsLocal(affected.map(m => m.id));
       }
     }
+    await refreshOptionsLocal();
     closeModal('categoryFormModal');
     renderCategoryManageList();
     renderCategoryTabs();
@@ -1639,6 +1714,7 @@ async function moveOption(idx, delta) {
   [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
   options[optionsModalKey] = list;
   await setDoc(doc(db, 'settings', 'options'), { [optionsModalKey]: list }, { merge: true });
+  await refreshOptionsLocal();
   renderOptionsList();
 }
 
@@ -1663,7 +1739,9 @@ async function renameOption(idx, newVal) {
         type: 'edit', field: group.label, oldValue: oldVal, newValue: newVal, timestamp: serverTimestamp(),
       });
     }
+    if (affected.length) await refreshMaterialsLocal(affected.map(m => m.id));
   }
+  await refreshOptionsLocal();
   return { newVal };
 }
 
@@ -1674,6 +1752,7 @@ async function addOptionValue(newVal) {
   list.push(newVal);
   options[optionsModalKey] = list;
   await setDoc(doc(db, 'settings', 'options'), { [optionsModalKey]: list }, { merge: true });
+  await refreshOptionsLocal();
   return { newVal };
 }
 
@@ -1689,6 +1768,7 @@ async function deleteOptionValue(idx) {
   list.splice(idx, 1);
   options[optionsModalKey] = list;
   await setDoc(doc(db, 'settings', 'options'), { [optionsModalKey]: list }, { merge: true });
+  await refreshOptionsLocal();
   renderOptionsList();
 }
 
@@ -1994,6 +2074,7 @@ document.querySelectorAll('.ta-combo-add-btn').forEach(btn => {
     if (!options[key].includes(val)) {
       options[key] = [...options[key], val];
       await setDoc(doc(db, 'settings', 'options'), { [key]: options[key] }, { merge: true });
+      await refreshOptionsLocal();
     }
     document.getElementById(btn.dataset.target).value = val;
     if (btn.dataset.target === 'pPkgUnit' || btn.dataset.target === 'pQuantityUnit') updateAmountModeVisibility();
@@ -2353,6 +2434,7 @@ async function recalculateMaterialStock(materialId) {
     currentUnitCostWeightedAvg: weightedAvg,
     lastPurchaseDate, updatedAt: serverTimestamp(),
   });
+  await refreshMaterialLocal(materialId);
 }
 
 document.getElementById('submitEditPurchaseBtn').addEventListener('click', async () => {
@@ -2636,6 +2718,7 @@ async function submitPurchase() {
       lastPurchaseDate,
       updatedAt: serverTimestamp(),
     });
+    await refreshMaterialLocal(materialId);
 
     closeModal('purchaseModal');
   } catch (e) {
@@ -2818,6 +2901,7 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async () =
       await deleteDoc(doc(db, 'materials', m.id, 'history', d.id));
     }
     await deleteDoc(doc(db, 'materials', m.id));
+    removeMaterialsLocal([m.id]);
     closeModal('deleteModal');
     closeModal('detailModal');
   } catch (e) {
@@ -2917,6 +3001,7 @@ async function toggleArchive(m) {
   await addDoc(collection(db, 'materials', m.id, 'history'), {
     type: 'archive', archived: newState, timestamp: serverTimestamp(),
   });
+  await refreshMaterialLocal(m.id);
   openDetail(m.id);
 }
 
@@ -2965,7 +3050,7 @@ document.getElementById('submitEditBtn').addEventListener('click', async () => {
     for (const log of logs) {
       await addDoc(collection(db, 'materials', m.id, 'history'), log);
     }
-    Object.assign(m, updates);
+    await refreshMaterialLocal(m.id);
     closeModal('editModal');
     openDetail(m.id);
   } catch (e) {
@@ -3045,6 +3130,7 @@ document.getElementById('submitAdjustBtn').addEventListener('click', async () =>
     });
   }
 
+  await refreshMaterialLocal(adjustTargetMaterial.id);
   closeModal('adjustModal');
   openDetail(adjustTargetMaterial.id);
 });
@@ -3084,6 +3170,7 @@ async function saveExchangeRate(code, valueStr) {
   const val = parseFloat(valueStr);
   if (isNaN(val) || val <= 0) { alert('請輸入正確的匯率數字'); return; }
   await setDoc(doc(db, 'settings', 'exchangeRates'), { [code]: val }, { merge: true });
+  await refreshExchangeRatesLocal();
 }
 
 document.getElementById('addCurrencyBtn').addEventListener('click', async () => {
@@ -3097,6 +3184,7 @@ document.getElementById('addCurrencyBtn').addEventListener('click', async () => 
   const rate = parseFloat(rateInput);
   if (isNaN(rate) || rate <= 0) { alert('請輸入正確的匯率數字'); return; }
   await setDoc(doc(db, 'settings', 'exchangeRates'), { [code]: rate }, { merge: true });
+  await refreshExchangeRatesLocal();
 });
 
 // ---------- 匯入資料 ----------
@@ -3451,6 +3539,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
     }
     if (Object.keys(optionUpdates).length) {
       await setDoc(doc(db, 'settings', 'options'), optionUpdates, { merge: true });
+      await refreshOptionsLocal();
     }
 
     // 統計這次匯入總共需要幾個新材料編號(依分類代碼分組),一次交易預先保留整段區間,
@@ -3570,6 +3659,8 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
       pendingImportFileHash = null;
     }
 
+    await reloadAllMaterialsLocal();
+
     progressEl.textContent = `匯入完成!共處理 ${totalRows} 筆進貨紀錄。`;
     document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
     document.getElementById('importSummary').innerHTML = '';
@@ -3675,6 +3766,7 @@ document.getElementById('openExportBtn').addEventListener('click', async () => {
     XLSX.writeFile(wb, `材料資料匯出_${dateStr}.xlsx`);
 
     await setDoc(doc(db, 'settings', 'options'), { lastExportAt: serverTimestamp() }, { merge: true });
+    options.lastExportAt = Timestamp.now();
     checkExportReminder();
   } catch (err) {
     alert('匯出失敗:' + err.message);
@@ -3799,7 +3891,7 @@ document.getElementById('confirmWipeBtn').addEventListener('click', async () => 
 
   try {
     progressEl.textContent = '讀取資料中...';
-    // 先複製快照,避免刪除過程中即時監聽把陣列改掉
+    // 先複製快照,避免清除完成後更新本機陣列時,範圍判斷用到的清單中途被改掉
     const targetMaterials = (scope === '__ALL__' ? materials : materials.filter(m => m.category === scope)).slice();
     const ops = [];
     let historyCount = 0;
@@ -3834,6 +3926,8 @@ document.getElementById('confirmWipeBtn').addEventListener('click', async () => 
       const code = (options.categoryCodes || {})[scope];
       if (code) await setDoc(doc(db, 'settings', 'materialCounters'), { [code]: 0 }, { merge: true });
     }
+
+    removeMaterialsLocal(targetMaterials.map(m => m.id));
 
     const scopeLabel = scope === '__ALL__' ? '全部分類' : `「${scope}」`;
     progressEl.textContent = `清除完成！已清除${scopeLabel}共 ${targetMaterials.length} 筆材料、${historyCount} 筆歷史紀錄,對應的材料編號也已重新歸零。`;
