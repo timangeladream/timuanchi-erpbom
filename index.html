@@ -1190,14 +1190,93 @@ onAuthStateChanged(auth, user => {
   }
 });
 
+// ---------- 材料清單本機快取(localStorage) ----------
+// 材料集合有 1000 多筆,每次開頁/重新整理都整包重讀,即使沒人改過也要付出 1000 多次讀取的代價。
+// 改成:把材料清單存一份在瀏覽器的 localStorage,下次開頁時直接先用這份顯示,
+// 再去問伺服器「上次同步之後,有沒有材料被改過/被刪除」,只抓變動的部分。
+const MATERIALS_CACHE_KEY = 'ta_materials_cache_v1';
+const MATERIALS_SYNC_TIME_KEY = 'ta_materials_sync_time_v1';
+
+// Firestore Timestamp 存進 localStorage 前會被 JSON.stringify 轉成 {seconds, nanoseconds},
+// 讀回來時要用這個 reviver 轉回真正的 Timestamp 物件,不然 .toDate()/.toMillis() 會噴錯
+function materialsJsonReviver(key, value) {
+  if (value && typeof value === 'object' && typeof value.seconds === 'number' && typeof value.nanoseconds === 'number') {
+    return new Timestamp(value.seconds, value.nanoseconds);
+  }
+  return value;
+}
+
+// 回傳 true 代表本機有快取(materials 已經被填好);false 代表沒有快取,需要整包讀一次
+function loadMaterialsFromCache() {
+  try {
+    const cached = localStorage.getItem(MATERIALS_CACHE_KEY);
+    if (!cached) return false;
+    materials = JSON.parse(cached, materialsJsonReviver);
+    return true;
+  } catch (e) {
+    materials = [];
+    return false;
+  }
+}
+
+function saveMaterialsToCache() {
+  try {
+    localStorage.setItem(MATERIALS_CACHE_KEY, JSON.stringify(materials));
+  } catch (e) {
+    // 存不進去(例如容量爆了)不影響功能,只是下次會退回整包重讀
+  }
+}
+
+// 跟伺服器同步材料清單:有本機快取時,只查「上次同步之後」變動或被刪除的材料;
+// 沒有快取(第一次使用/清過瀏覽器資料)時,才整包讀一次全部材料
+async function syncMaterialsFromServer() {
+  const hasCache = loadMaterialsFromCache();
+  const lastSyncMillis = hasCache ? Number(localStorage.getItem(MATERIALS_SYNC_TIME_KEY) || 0) : 0;
+
+  if (!hasCache || !lastSyncMillis) {
+    const snap = await getDocs(collection(db, 'materials'));
+    materials = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    let maxSeen = 0;
+    snap.docs.forEach(d => {
+      const ts = d.data().updatedAt;
+      if (ts && ts.toMillis && ts.toMillis() > maxSeen) maxSeen = ts.toMillis();
+    });
+    localStorage.setItem(MATERIALS_SYNC_TIME_KEY, String(maxSeen || Date.now()));
+  } else {
+    const lastSync = Timestamp.fromMillis(lastSyncMillis);
+    const changedSnap = await getDocs(query(collection(db, 'materials'), where('updatedAt', '>', lastSync)));
+    let maxSeen = lastSyncMillis;
+    changedSnap.docs.forEach(d => {
+      const updated = { id: d.id, ...d.data() };
+      const idx = materials.findIndex(m => m.id === d.id);
+      if (idx >= 0) materials[idx] = updated; else materials.push(updated);
+      const ts = updated.updatedAt;
+      if (ts && ts.toMillis && ts.toMillis() > maxSeen) maxSeen = ts.toMillis();
+    });
+
+    const deletedSnap = await getDocs(query(collection(db, 'deletedMaterials'), where('deletedAt', '>', lastSync)));
+    if (deletedSnap.size) {
+      const deletedIds = new Set(deletedSnap.docs.map(d => d.id));
+      materials = materials.filter(m => !deletedIds.has(m.id));
+      deletedSnap.docs.forEach(d => {
+        const ts = d.data().deletedAt;
+        if (ts && ts.toMillis && ts.toMillis() > maxSeen) maxSeen = ts.toMillis();
+      });
+    }
+
+    localStorage.setItem(MATERIALS_SYNC_TIME_KEY, String(maxSeen));
+  }
+
+  saveMaterialsToCache();
+}
+
 // ---------- 初始化資料 ----------
 // 材料、選項設定、匯率設定,只有這個系統自己會寫入,不會有其他系統或裝置同時修改,
 // 所以不需要用 onSnapshot 一直監聽伺服器變動——開頁時讀一次,之後每次自己寫入
 // 成功後,用 refreshMaterialLocal / refreshOptionsLocal / refreshExchangeRatesLocal
 // 重新讀「剛剛那一筆」資料回來更新畫面,不用整個集合持續監聽。
 async function initData() {
-  const matSnap = await getDocs(collection(db, 'materials'));
-  materials = matSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  await syncMaterialsFromServer();
   renderFilters();
   renderTable();
   renderSummary();
@@ -1228,6 +1307,7 @@ async function refreshMaterialLocal(materialId) {
   } else if (idx >= 0) {
     materials.splice(idx, 1);
   }
+  saveMaterialsToCache();
   renderFilters();
   renderTable();
   renderSummary();
@@ -1247,6 +1327,7 @@ async function refreshMaterialsLocal(materialIds) {
       materials.splice(idx, 1);
     }
   }));
+  saveMaterialsToCache();
   renderFilters();
   renderTable();
   renderSummary();
@@ -1256,6 +1337,7 @@ async function refreshMaterialsLocal(materialIds) {
 function removeMaterialsLocal(materialIds) {
   const idSet = new Set(materialIds);
   materials = materials.filter(m => !idSet.has(m.id));
+  saveMaterialsToCache();
   renderFilters();
   renderTable();
   renderSummary();
@@ -1265,6 +1347,13 @@ function removeMaterialsLocal(materialIds) {
 async function reloadAllMaterialsLocal() {
   const snap = await getDocs(collection(db, 'materials'));
   materials = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  let maxSeen = 0;
+  snap.docs.forEach(d => {
+    const ts = d.data().updatedAt;
+    if (ts && ts.toMillis && ts.toMillis() > maxSeen) maxSeen = ts.toMillis();
+  });
+  localStorage.setItem(MATERIALS_SYNC_TIME_KEY, String(maxSeen || Date.now()));
+  saveMaterialsToCache();
   renderFilters();
   renderTable();
   renderSummary();
@@ -2901,6 +2990,7 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async () =
       await deleteDoc(doc(db, 'materials', m.id, 'history', d.id));
     }
     await deleteDoc(doc(db, 'materials', m.id));
+    await setDoc(doc(db, 'deletedMaterials', m.id), { deletedAt: serverTimestamp() });
     removeMaterialsLocal([m.id]);
     closeModal('deleteModal');
     closeModal('detailModal');
@@ -3917,6 +4007,14 @@ document.getElementById('confirmWipeBtn').addEventListener('click', async () => 
       await batch.commit();
       committed += chunk.length;
       progressEl.textContent = `清除中... 已處理 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作`;
+    }
+
+    // 記錄這些材料被刪除了,讓其他分頁/下次開頁的「本機快取只抓變動」機制知道要把這些從本機清單移除
+    for (let i = 0; i < targetMaterials.length; i += CHUNK_SIZE) {
+      const chunk = targetMaterials.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach(m => batch.set(doc(db, 'deletedMaterials', m.id), { deletedAt: serverTimestamp() }));
+      await batch.commit();
     }
 
     // 清除範圍對應的材料編號流水號一起歸零,避免下次編號從一個跟現況對不上的號碼繼續跳
