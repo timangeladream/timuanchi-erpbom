@@ -289,6 +289,7 @@
         <th data-col="productCode">編號</th>
         <th data-col="category">分類</th>
         <th data-col="name">成品名稱</th>
+        <th class="ta-col-right" data-col="sellingPrice">售價</th>
         <th class="ta-col-center" data-col="status">狀態</th>
       </tr>
     </thead>
@@ -548,9 +549,9 @@ import {
   getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  getFirestore,
   collection, collectionGroup, doc, getDoc, getDocs, addDoc, updateDoc, setDoc, deleteDoc,
-  query, where, orderBy, serverTimestamp, onSnapshot, Timestamp, writeBatch, runTransaction, deleteField,
+  query, where, orderBy, serverTimestamp, Timestamp, writeBatch, runTransaction, deleteField,
   getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -565,12 +566,10 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-// 開啟本機離線快取:重新整理頁面時先讀瀏覽器本機的舊資料,伺服器只需要傳這期間的變動,
-// 不用每次都整批重讀全部材料,大幅降低 Firestore 讀取次數。用「多分頁」模式,
-// 這樣材料系統/BOM系統(或同一個系統開兩個分頁)同時開著也不會互相搶快取。
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-});
+// 不使用離線持久化快取:多分頁協調機制(persistentMultipleTabManager)會在分頁
+// 切換焦點、或分頁閒置時的「主分頁」租約續約失敗時,整批取消並重新註冊所有監聽,
+// 造成不易預期的讀取量。改用預設的記憶體快取,兩個分頁各自獨立連線,不互相協調。
+const db = getFirestore(app);
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -642,38 +641,172 @@ function showConfirmModal({ title = '請確認', text = '' } = {}) {
   });
 }
 
+// ---------- 材料清單本機快取(跟材料清單系統 index.html 共用同一份 localStorage,同一個瀏覽器來源) ----------
+// BOM 系統從不寫入材料,只有讀取,所以沿用材料清單系統存的快取當起點,自己再視情況補問變動,
+// 兩邊互相受惠:不管哪一邊比較晚同步過,另一邊開頁時都能拿到比較新的起點。
+const MATERIALS_CACHE_KEY = 'ta_materials_cache_v1';
+const MATERIALS_SYNC_TIME_KEY = 'ta_materials_sync_time_v1';
+
+function materialsJsonReviver(key, value) {
+  if (value && typeof value === 'object' && typeof value.seconds === 'number' && typeof value.nanoseconds === 'number') {
+    return new Timestamp(value.seconds, value.nanoseconds);
+  }
+  return value;
+}
+
+function loadMaterialsFromCache() {
+  try {
+    const cached = localStorage.getItem(MATERIALS_CACHE_KEY);
+    if (!cached) return false;
+    materials = JSON.parse(cached, materialsJsonReviver);
+    return true;
+  } catch (e) {
+    materials = [];
+    return false;
+  }
+}
+
+function saveMaterialsToCache() {
+  try {
+    localStorage.setItem(MATERIALS_CACHE_KEY, JSON.stringify(materials));
+  } catch (e) {
+    // 存不進去(例如容量爆了)不影響功能,只是下次會退回整包重讀
+  }
+}
+
+// 開頁時只用:有快取就直接沿用(不主動問伺服器有沒有變動),沒有快取才整包讀一次。
+// 成品列表本身不需要材料資料,只有點開成品詳情時才需要,所以開頁時不必急著同步,
+// 交給 syncMaterialsDeltaThrottled() 在真正需要的時候處理。
+let lastMaterialsSyncCheckAt = 0;
+async function initMaterialsForBom() {
+  const hasCache = loadMaterialsFromCache();
+  if (!hasCache) {
+    const snap = await getDocs(collection(db, 'materials'));
+    materials = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    let maxSeen = 0;
+    snap.docs.forEach(d => {
+      const ts = d.data().updatedAt;
+      if (ts && ts.toMillis && ts.toMillis() > maxSeen) maxSeen = ts.toMillis();
+    });
+    localStorage.setItem(MATERIALS_SYNC_TIME_KEY, String(maxSeen || Date.now()));
+    saveMaterialsToCache();
+    lastMaterialsSyncCheckAt = Date.now(); // 剛整包讀完,資料一定是最新的,避免馬上又觸發一次多餘的 delta 查詢
+  }
+}
+
+// 點開成品詳情時呼叫:節流過的 delta 同步——距離上次「真的問過」不到 1 分鐘就跳過,
+// 避免連續點開好幾個成品時重複查詢。跟材料清單系統一樣,只抓「上次同步之後」變動或被刪除的材料。
+const MATERIALS_SYNC_THROTTLE_MS = 60 * 1000;
+// 回傳 true 代表真的抓到材料變動/刪除,呼叫端可以據此決定要不要重新畫面
+async function syncMaterialsDeltaThrottled() {
+  const now = Date.now();
+  if (now - lastMaterialsSyncCheckAt < MATERIALS_SYNC_THROTTLE_MS) return false;
+  lastMaterialsSyncCheckAt = now;
+
+  const lastSyncMillis = Number(localStorage.getItem(MATERIALS_SYNC_TIME_KEY) || 0);
+  if (!lastSyncMillis) return false;
+
+  const lastSync = Timestamp.fromMillis(lastSyncMillis);
+  const changedSnap = await getDocs(query(collection(db, 'materials'), where('updatedAt', '>', lastSync)));
+  let maxSeen = lastSyncMillis;
+  let hasChanges = changedSnap.size > 0;
+  changedSnap.docs.forEach(d => {
+    const updated = { id: d.id, ...d.data() };
+    const idx = materials.findIndex(m => m.id === d.id);
+    if (idx >= 0) materials[idx] = updated; else materials.push(updated);
+    const ts = updated.updatedAt;
+    if (ts && ts.toMillis && ts.toMillis() > maxSeen) maxSeen = ts.toMillis();
+  });
+
+  const deletedSnap = await getDocs(query(collection(db, 'deletedMaterials'), where('deletedAt', '>', lastSync)));
+  if (deletedSnap.size) {
+    hasChanges = true;
+    const deletedIds = new Set(deletedSnap.docs.map(d => d.id));
+    materials = materials.filter(m => !deletedIds.has(m.id));
+    deletedSnap.docs.forEach(d => {
+      const ts = d.data().deletedAt;
+      if (ts && ts.toMillis && ts.toMillis() > maxSeen) maxSeen = ts.toMillis();
+    });
+  }
+
+  if (maxSeen !== lastSyncMillis) localStorage.setItem(MATERIALS_SYNC_TIME_KEY, String(maxSeen));
+  saveMaterialsToCache();
+  return hasChanges;
+}
+
+// ---------- 成品/成品分類設定本機同步 ----------
+// products、settings/productOptions 都是 BOM 自己寫入的資料,不會有其他系統同時修改,
+// 所以不需要 onSnapshot 一直監聽——開頁讀一次,之後每次自己寫入成功後,用底下這些工具函式
+// 重新讀「剛剛那一筆」回來更新畫面,不用整個集合持續監聽。
+
+async function refreshProductLocal(productId) {
+  const snap = await getDoc(doc(db, 'products', productId));
+  const idx = products.findIndex(p => p.id === productId);
+  if (snap.exists()) {
+    const updated = { id: snap.id, ...snap.data() };
+    if (idx >= 0) products[idx] = updated;
+    else products.push(updated);
+  } else if (idx >= 0) {
+    products.splice(idx, 1);
+  }
+  renderProductCategoryManageList();
+  renderProductTable();
+}
+
+async function refreshProductsLocal(productIds) {
+  const uniqueIds = [...new Set(productIds)];
+  await Promise.all(uniqueIds.map(async id => {
+    const snap = await getDoc(doc(db, 'products', id));
+    const idx = products.findIndex(p => p.id === id);
+    if (snap.exists()) {
+      const updated = { id: snap.id, ...snap.data() };
+      if (idx >= 0) products[idx] = updated;
+      else products.push(updated);
+    } else if (idx >= 0) {
+      products.splice(idx, 1);
+    }
+  }));
+  renderProductCategoryManageList();
+  renderProductTable();
+}
+
+function removeProductLocal(productId) {
+  products = products.filter(p => p.id !== productId);
+  renderProductCategoryManageList();
+  renderProductTable();
+}
+
+async function refreshProductOptionsLocal() {
+  const productOptRef = doc(db, 'settings', 'productOptions');
+  const snap = await getDoc(productOptRef);
+  const base = { categories: [], categoryCodes: {}, disabledCategories: [], requiredMaterials: {} };
+  if (snap.exists()) {
+    productOptions = { ...base, ...snap.data() };
+  } else {
+    productOptions = base;
+    await setDoc(productOptRef, base);
+  }
+  renderProductCategoryManageList();
+  renderProductCategoryTabs();
+  renderProductTable();
+  const enabledCategories = (productOptions.categories || []).filter(c => !(productOptions.disabledCategories || []).includes(c));
+  fillProductCategorySelect('pfCategory', enabledCategories);
+}
+
 // ---------- 初始化資料 ----------
 let materials = []; // 材料清單(之後配方材料選擇器會用到)
 let products = [];  // 成品清單(第3步才會真正建立寫入邏輯,這裡先宣告好讓分類管理可以查詢引用數量)
 let productOptions = { categories: [], categoryCodes: {}, disabledCategories: [], requiredMaterials: {} };
 
-function initData() {
-  onSnapshot(collection(db, 'materials'), snap => {
-    materials = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  });
+async function initData() {
+  await initMaterialsForBom();
 
-  onSnapshot(collection(db, 'products'), snap => {
-    products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderProductCategoryManageList();
-    renderProductTable();
-  });
+  const prodSnap = await getDocs(collection(db, 'products'));
+  products = prodSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderProductCategoryManageList();
+  renderProductTable();
 
-  const productOptRef = doc(db, 'settings', 'productOptions');
-  onSnapshot(productOptRef, snap => {
-    const base = { categories: [], categoryCodes: {}, disabledCategories: [], requiredMaterials: {} };
-    if (snap.exists()) {
-      productOptions = { ...base, ...snap.data() };
-    } else {
-      productOptions = base;
-      setDoc(productOptRef, base);
-    }
-    renderProductCategoryManageList();
-    renderProductCategoryTabs();
-    renderProductTable();
-    const enabledCategories = (productOptions.categories || []).filter(c => !(productOptions.disabledCategories || []).includes(c));
-    fillProductCategorySelect('pfCategory', enabledCategories);
-  });
-
+  await refreshProductOptionsLocal();
 }
 
 function fillProductCategorySelect(selectId, list) {
@@ -754,6 +887,7 @@ async function moveProductCategoryOption(idx, delta) {
   [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
   productOptions.categories = list;
   await setDoc(doc(db, 'settings', 'productOptions'), { categories: list }, { merge: true });
+  await refreshProductOptionsLocal();
   renderProductCategoryManageList();
 }
 
@@ -763,6 +897,7 @@ async function toggleProductCategoryDisabled(name) {
   const list = [...disabledSet];
   productOptions.disabledCategories = list;
   await setDoc(doc(db, 'settings', 'productOptions'), { disabledCategories: list }, { merge: true });
+  await refreshProductOptionsLocal();
   renderProductCategoryManageList();
 }
 
@@ -834,8 +969,10 @@ document.getElementById('productCategoryFormSaveBtn').addEventListener('click', 
         for (const p of affected) {
           await updateDoc(doc(db, 'products', p.id), { category: name, updatedAt: serverTimestamp() });
         }
+        if (affected.length) await refreshProductsLocal(affected.map(p => p.id));
       }
     }
+    await refreshProductOptionsLocal();
     closeModal('productCategoryFormModal');
     renderProductCategoryManageList();
   } catch (e) {
@@ -919,6 +1056,7 @@ function renderProductTable() {
       <td>${escapeHtml(p.productCode)}</td>
       <td>${escapeHtml(p.category)}</td>
       <td>${escapeHtml(p.name)}</td>
+      <td class="ta-col-right">${p.sellingPrice != null ? 'NT$ ' + Number(p.sellingPrice).toFixed(0) : ''}</td>
       <td class="ta-col-center">${p.archived ? '<span class="ta-tag">已下架</span>' : ''}</td>
     `;
     tr.addEventListener('click', () => openProductDetail(p.id));
@@ -968,16 +1106,18 @@ document.getElementById('productFormSaveBtn').addEventListener('click', async ()
       await updateDoc(doc(db, 'products', productFormEditId), {
         category, name, note, updatedAt: serverTimestamp(),
       });
+      await refreshProductLocal(productFormEditId);
       closeModal('productFormModal');
       if (document.getElementById('productDetailModal').classList.contains('ta-is-open')) {
         openProductDetail(productFormEditId); // 存檔後立刻刷新底下的成品詳情頁
       }
     } else {
       const productCode = await getNextProductCode(category);
-      await addDoc(collection(db, 'products'), {
+      const newRef = await addDoc(collection(db, 'products'), {
         category, name, note, productCode, archived: false, recipe: [],
         createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       });
+      await refreshProductLocal(newRef.id);
       closeModal('productFormModal');
     }
   } catch (e) {
@@ -1001,9 +1141,12 @@ function calcRecipeCost(recipe) {
   }, 0);
 }
 
+let currentDetailProductId = null;
+
 function openProductDetail(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
+  currentDetailProductId = id;
 
   const materialCost = calcRecipeCost(p.recipe);
   const lastSeen = p.lastSeenMaterialCost;
@@ -1047,8 +1190,17 @@ function openProductDetail(id) {
 
   // 更新「上次看到的成本」快照,純粹拿來下次比對用,不影響上面顯示的即時成本
   if (lastSeen == null || Math.abs(materialCost - lastSeen) >= 0.01) {
+    p.lastSeenMaterialCost = materialCost;
     updateDoc(doc(db, 'products', p.id), { lastSeenMaterialCost: materialCost }).catch(() => {});
   }
+
+  // 背景做一次節流過的材料同步(距離上次真的問過不到 1 分鐘就跳過);如果真的抓到材料變動,
+  // 而使用者還停留在同一筆成品詳情,才重新畫面,讓材料成本/毛利數字更新成最新的
+  syncMaterialsDeltaThrottled().then(hasChanges => {
+    if (hasChanges && currentDetailProductId === id && document.getElementById('productDetailModal').classList.contains('ta-is-open')) {
+      openProductDetail(id);
+    }
+  });
 }
 
 async function toggleProductArchive(p) {
@@ -1059,6 +1211,7 @@ async function toggleProductArchive(p) {
   });
   if (!ok) return;
   await updateDoc(doc(db, 'products', p.id), { archived: newState, updatedAt: serverTimestamp() });
+  await refreshProductLocal(p.id);
   closeModal('productDetailModal');
 }
 
@@ -1075,6 +1228,7 @@ document.getElementById('confirmDeleteProductBtn').addEventListener('click', asy
   btn.disabled = true;
   try {
     await deleteDoc(doc(db, 'products', deleteProductTarget.id));
+    removeProductLocal(deleteProductTarget.id);
     closeModal('deleteProductModal');
     closeModal('productDetailModal');
   } catch (e) {
@@ -1183,6 +1337,7 @@ async function deleteRequiredCombo(category, comboId) {
   const newRequired = { ...(productOptions.requiredMaterials || {}), [category]: newCombos };
   productOptions.requiredMaterials = newRequired;
   await setDoc(doc(db, 'settings', 'productOptions'), { requiredMaterials: newRequired }, { merge: true });
+  await refreshProductOptionsLocal();
   renderRequiredMaterialsManageList();
 }
 
@@ -1373,6 +1528,7 @@ document.getElementById('recipeSaveBtn').addEventListener('click', async () => {
   try {
     if (context.mode === 'product') {
       await updateDoc(doc(db, 'products', context.productId), { recipe: currentRecipe, updatedAt: serverTimestamp() });
+      await refreshProductLocal(context.productId);
       closeModal('productRecipeModal');
       openProductDetail(context.productId); // 存檔後立刻刷新底下的成品詳情頁,不用手動關掉重開才看得到最新配方/成本
     } else {
@@ -1388,6 +1544,7 @@ document.getElementById('recipeSaveBtn').addEventListener('click', async () => {
       const newRequired = { ...(productOptions.requiredMaterials || {}), [context.category]: newCombos };
       productOptions.requiredMaterials = newRequired;
       await setDoc(doc(db, 'settings', 'productOptions'), { requiredMaterials: newRequired }, { merge: true });
+      await refreshProductOptionsLocal();
       closeModal('productRecipeModal');
       if (document.getElementById('requiredMaterialsManageModal').classList.contains('ta-is-open')) {
         renderRequiredMaterialsManageList();
@@ -1739,6 +1896,7 @@ document.getElementById('pcSaveBtn').addEventListener('click', async () => {
   btn.disabled = true;
   try {
     await updateDoc(doc(db, 'products', savedProductId), { sellingPrice: priceVal, updatedAt: serverTimestamp() });
+    await refreshProductLocal(savedProductId);
     closeModal('pricingModal');
     if (document.getElementById('productDetailModal').classList.contains('ta-is-open')) {
       openProductDetail(savedProductId); // 存檔後立刻刷新底下的成品詳情頁,才看得到最新售價/毛利
