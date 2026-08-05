@@ -99,6 +99,9 @@
   .ta-form-row input, .ta-form-row select, .ta-form-row textarea {
     width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
   }
+  .ta-radio-row { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+  .ta-radio-row input[type="radio"] { width: auto; flex: none; }
+  .ta-radio-row label { display: inline; margin: 0; font-size: 14px; color: var(--text); }
   .ta-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
   .ta-input-uppercase { text-transform: uppercase; }
 
@@ -368,15 +371,22 @@
   <div class="ta-modal">
     <span class="ta-modal-close" data-close="exportRecipeModal">✕</span>
     <h2>匯出配方</h2>
-    <div class="ta-form-row">
-      <label><input type="radio" name="exportRecipeScope" value="all" checked> 全部成品</label>
+    <div class="ta-radio-row">
+      <input type="radio" name="exportRecipeScope" id="exportScopeAll" value="all" checked>
+      <label for="exportScopeAll">全部成品</label>
+    </div>
+    <div class="ta-radio-row">
+      <input type="radio" name="exportRecipeScope" id="exportScopeCategory" value="category">
+      <label for="exportScopeCategory">指定分類</label>
     </div>
     <div class="ta-form-row">
-      <label><input type="radio" name="exportRecipeScope" value="category"> 指定分類</label>
       <select id="exportRecipeCategorySelect"></select>
     </div>
+    <div class="ta-radio-row">
+      <input type="radio" name="exportRecipeScope" id="exportScopeSingle" value="single">
+      <label for="exportScopeSingle">單一成品</label>
+    </div>
     <div class="ta-form-row">
-      <label><input type="radio" name="exportRecipeScope" value="single"> 單一成品</label>
       <select id="exportRecipeProductSelect"></select>
     </div>
     <div class="ta-modal-actions">
