@@ -312,6 +312,7 @@
   </nav>
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item" id="openProductCategoryManageBtn">分類管理</button>
+  <button class="ta-drawer-item" id="openExportRecipeBtn">匯出配方</button>
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item ta-drawer-item--danger" id="logoutBtn">登出</button>
 </aside>
@@ -358,6 +359,29 @@
     <div class="ta-modal-actions">
       <button class="ta-btn" data-close="productCategoryFormModal">取消</button>
       <button class="ta-btn ta-btn-primary" id="productCategoryFormSaveBtn">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 匯出配方 Modal -->
+<div class="ta-modal-overlay" id="exportRecipeModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="exportRecipeModal">✕</span>
+    <h2>匯出配方</h2>
+    <div class="ta-form-row">
+      <label><input type="radio" name="exportRecipeScope" value="all" checked> 全部成品</label>
+    </div>
+    <div class="ta-form-row">
+      <label><input type="radio" name="exportRecipeScope" value="category"> 指定分類</label>
+      <select id="exportRecipeCategorySelect"></select>
+    </div>
+    <div class="ta-form-row">
+      <label><input type="radio" name="exportRecipeScope" value="single"> 單一成品</label>
+      <select id="exportRecipeProductSelect"></select>
+    </div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="exportRecipeModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="confirmExportRecipeBtn">匯出</button>
     </div>
   </div>
 </div>
@@ -543,6 +567,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
@@ -1903,6 +1928,102 @@ document.getElementById('pcSaveBtn').addEventListener('click', async () => {
     }
   } catch (e) {
     alert('儲存失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- 匯出配方 ----------
+document.getElementById('openExportRecipeBtn').addEventListener('click', () => {
+  closeDrawer();
+  const enabledCategories = (productOptions.categories || []).filter(c => !(productOptions.disabledCategories || []).includes(c));
+  fillProductCategorySelect('exportRecipeCategorySelect', enabledCategories);
+  const productSelect = document.getElementById('exportRecipeProductSelect');
+  productSelect.innerHTML = products
+    .map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.productCode)} - ${escapeHtml(p.name)}</option>`)
+    .join('');
+  document.querySelector('input[name="exportRecipeScope"][value="all"]').checked = true;
+  openModal('exportRecipeModal');
+});
+
+document.getElementById('exportRecipeCategorySelect').addEventListener('change', () => {
+  document.querySelector('input[name="exportRecipeScope"][value="category"]').checked = true;
+});
+document.getElementById('exportRecipeProductSelect').addEventListener('change', () => {
+  document.querySelector('input[name="exportRecipeScope"][value="single"]').checked = true;
+});
+
+document.getElementById('confirmExportRecipeBtn').addEventListener('click', async () => {
+  const scope = document.querySelector('input[name="exportRecipeScope"]:checked').value;
+  let targetProducts;
+  if (scope === 'category') {
+    const cat = document.getElementById('exportRecipeCategorySelect').value;
+    if (!cat) { alert('請選擇分類'); return; }
+    targetProducts = products.filter(p => p.category === cat);
+  } else if (scope === 'single') {
+    const id = document.getElementById('exportRecipeProductSelect').value;
+    if (!id) { alert('請選擇成品'); return; }
+    targetProducts = products.filter(p => p.id === id);
+  } else {
+    targetProducts = products;
+  }
+
+  if (!targetProducts.length) { alert('這個範圍內沒有成品資料可以匯出'); return; }
+
+  const btn = document.getElementById('confirmExportRecipeBtn');
+  btn.disabled = true;
+  try {
+    // 匯出前先強制確認一次材料資料夠新(不受節流限制),避免匯出的成本數字是舊的
+    lastMaterialsSyncCheckAt = 0;
+    await syncMaterialsDeltaThrottled();
+
+    const rows = [];
+    for (const p of targetProducts) {
+      const materialCost = calcRecipeCost(p.recipe);
+      const sellingPrice = p.sellingPrice != null ? Number(p.sellingPrice) : null;
+      const profit = sellingPrice != null ? sellingPrice - materialCost : null;
+      const recipe = p.recipe || [];
+      const statusLabel = p.archived ? '已下架' : '上架中';
+
+      if (!recipe.length) {
+        rows.push([
+          p.productCode || '', p.category || '', p.name || '', statusLabel,
+          '', '', '', '', '', '',
+          0, Number(materialCost.toFixed(2)),
+          sellingPrice ?? '', profit != null ? Number(profit.toFixed(2)) : '',
+        ]);
+        continue;
+      }
+
+      recipe.forEach(r => {
+        const m = materials.find(x => x.id === r.materialId);
+        const unitCost = m ? (m.currentUnitCostWeightedAvg || 0) : 0;
+        const qty = r.quantity || 0;
+        rows.push([
+          p.productCode || '', p.category || '', p.name || '', statusLabel,
+          m ? (m.materialCode || '') : '(材料已刪除)',
+          m ? materialDisplayName(m) : '',
+          m ? (m.category || '') : '',
+          qty,
+          m ? (m.unit || '') : '',
+          Number(unitCost.toFixed(4)),
+          Number((unitCost * qty).toFixed(2)),
+          Number(materialCost.toFixed(2)),
+          sellingPrice ?? '',
+          profit != null ? Number(profit.toFixed(2)) : '',
+        ]);
+      });
+    }
+
+    const headers = ['成品編號', '成品分類', '成品名稱', '成品狀態', '材料編號', '材料名稱', '材料分類', '用量', '單位', '材料單價', '小計', '成品材料總成本', '售價', '毛利'];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), '配方明細');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `成品配方匯出_${dateStr}.xlsx`);
+
+    closeModal('exportRecipeModal');
+  } catch (e) {
+    alert('匯出失敗:' + e.message);
   } finally {
     btn.disabled = false;
   }
