@@ -1332,9 +1332,10 @@ function renderVariantSection(p) {
       const key = variantComboKey(combo.values);
       const label = combo.labels.join(' + ');
       const priceVal = (p.variantSellingPrices || {})[key];
+      const costVal = calcRecipeCost((p.variantRecipes || {})[key]);
       return `
         <div class="ta-variant-combo-row" data-combo-key="${escapeHtml(key)}" data-combo-label="${escapeHtml(label)}">
-          <div class="ta-variant-combo-label">${escapeHtml(label)}${priceVal != null ? ` <span class="ta-tag">售價 NT$${Number(priceVal).toFixed(0)}</span>` : ''}</div>
+          <div class="ta-variant-combo-label">${escapeHtml(label)} <span class="ta-tag">成本 NT$${costVal.toFixed(2)}</span>${priceVal != null ? ` <span class="ta-tag">售價 NT$${Number(priceVal).toFixed(0)}</span>` : ''}</div>
           <input type="text" class="ta-variant-combo-sku" placeholder="規格貨號" value="${escapeHtml((p.variantSkus || {})[key] || '')}">
           <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-recipe>編輯規格配方</button>
           <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-pricing>定價試算</button>
