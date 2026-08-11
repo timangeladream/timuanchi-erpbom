@@ -153,6 +153,24 @@
     border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 12.5px;
   }
 
+  .ta-variant-section { margin-top: 16px; }
+  .ta-variant-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .ta-variant-section-header h3 { font-size: 14px; margin: 0; color: var(--primary-dark); }
+  .ta-variant-group {
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 10px; background: var(--bg);
+  }
+  .ta-variant-group-header { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .ta-variant-group-name { flex: 1; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .ta-variant-options { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .ta-variant-option { display: flex; align-items: center; gap: 4px; }
+  .ta-variant-option input { width: 100px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .ta-variant-combo-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border);
+  }
+  .ta-variant-combo-label { flex: 1; font-size: 13px; }
+  .ta-variant-combo-sku { width: 160px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .ta-variant-link { font-size: 12.5px; color: var(--primary); cursor: pointer; text-decoration: underline; }
+
   .ta-recipe-search-wrap { position: relative; }
   .ta-recipe-search-results {
     position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px; z-index: 10;
@@ -293,6 +311,7 @@
         <th data-col="category">分類</th>
         <th data-col="name">成品名稱</th>
         <th class="ta-col-right" data-col="sellingPrice">售價</th>
+        <th class="ta-col-center" data-col="variantCount">多規格</th>
         <th class="ta-col-center" data-col="status">狀態</th>
       </tr>
     </thead>
@@ -1087,11 +1106,13 @@ function renderProductTable() {
   for (const p of list) {
     const tr = document.createElement('tr');
     if (p.archived) tr.classList.add('ta-row--archived');
+    const variantCount = Object.keys(p.variantSkus || {}).length;
     tr.innerHTML = `
       <td>${escapeHtml(p.productCode)}</td>
       <td>${escapeHtml(p.category)}</td>
       <td>${escapeHtml(p.name)}</td>
       <td class="ta-col-right">${p.sellingPrice != null ? 'NT$ ' + Number(p.sellingPrice).toFixed(0) : ''}</td>
+      <td class="ta-col-center">${variantCount ? `${variantCount} 個規格` : ''}</td>
       <td class="ta-col-center">${p.archived ? '<span class="ta-tag">已下架</span>' : ''}</td>
     `;
     tr.addEventListener('click', () => openProductDetail(p.id));
@@ -1176,6 +1197,261 @@ function calcRecipeCost(recipe) {
   }, 0);
 }
 
+// ---------- 成品規格(多維度組合) ----------
+// 規格資料結構:variants={維度名稱: [選項,...]}、variantKeyOrder=[維度名稱,...](保留順序,
+// 因為 Firestore 不保證物件 key 順序)、variantRecipes={組合鍵: 配方}、variantSkus={組合鍵: 貨號}、
+// variantSellingPrices={組合鍵: 售價}。組合鍵是各維度選項值用逗號串接,例如「金色,黑色」。
+let variantGroupCounter = 0;
+
+function variantComboKey(values) {
+  return values.join(',');
+}
+
+// 遞迴算出所有維度交叉組合
+function generateVariantCombinations(dims) {
+  if (!dims.length) return [];
+  function recurse(idx, current) {
+    if (idx === dims.length) {
+      return [{ values: current.map(c => c.value), labels: current.map(c => `${c.name}: ${c.value}`) }];
+    }
+    const dim = dims[idx];
+    const results = [];
+    dim.options.forEach(opt => {
+      results.push(...recurse(idx + 1, [...current, { name: dim.name, value: opt }]));
+    });
+    return results;
+  }
+  return recurse(0, []);
+}
+
+function addVariantOptionRow(groupId, value = '') {
+  const wrap = document.getElementById(`variantOptions${groupId}`);
+  if (!wrap) return;
+  const row = document.createElement('div');
+  row.className = 'ta-variant-option';
+  row.innerHTML = `<input type="text" placeholder="選項" value="${escapeHtml(value)}"><button type="button" class="ta-btn ta-btn-sm" data-remove-option>×</button>`;
+  wrap.appendChild(row);
+  row.querySelector('[data-remove-option]').addEventListener('click', () => row.remove());
+}
+
+function addVariantGroupRow(name = '', options = ['']) {
+  const wrap = document.getElementById('variantGroupsContainer');
+  if (!wrap) return;
+  document.getElementById('variantEmptyHint')?.remove();
+  const groupId = variantGroupCounter++;
+  const row = document.createElement('div');
+  row.className = 'ta-variant-group';
+  row.id = `variantGroup${groupId}`;
+  row.innerHTML = `
+    <div class="ta-variant-group-header">
+      <input type="text" class="ta-variant-group-name" placeholder="規格名稱(例如:配件顏色)" value="${escapeHtml(name)}">
+      <button type="button" class="ta-btn ta-btn-sm ta-btn-danger" data-remove-group>刪除</button>
+    </div>
+    <div class="ta-variant-options" id="variantOptions${groupId}"></div>
+    <button type="button" class="ta-btn ta-btn-sm" data-add-option>＋ 新增選項</button>
+  `;
+  wrap.appendChild(row);
+  row.querySelector('[data-remove-group]').addEventListener('click', () => {
+    row.remove();
+    if (!wrap.children.length) wrap.innerHTML = '<div class="ta-empty-hint" id="variantEmptyHint">尚未設定規格,點上方「新增規格」開始</div>';
+  });
+  row.querySelector('[data-add-option]').addEventListener('click', () => addVariantOptionRow(groupId));
+  (options.length ? options : ['']).forEach(v => addVariantOptionRow(groupId, v));
+  return groupId;
+}
+
+// 從畫面上目前的維度建構區塊讀出目前設定的維度/選項(還沒存檔的草稿狀態)
+function readVariantGroupsFromDom() {
+  const groups = [];
+  document.querySelectorAll('#variantGroupsContainer .ta-variant-group').forEach(g => {
+    const name = g.querySelector('.ta-variant-group-name').value.trim();
+    if (!name) return;
+    const options = Array.from(g.querySelectorAll('.ta-variant-options input')).map(i => i.value.trim()).filter(Boolean);
+    if (options.length) groups.push({ name, options });
+  });
+  return groups;
+}
+
+// 依目前維度建構區塊,重新產生規格組合列表(只是畫面上的預覽,還沒存檔);
+// 已經在畫面上填過的貨號會被保留,不會因為重新產生就被清空
+function refreshVariantCombosPreview() {
+  const dims = readVariantGroupsFromDom();
+  const section = document.getElementById('variantCombosSection');
+  const wrap = document.getElementById('variantCombosList');
+  if (!dims.length) { section.classList.add('ta-is-hidden'); wrap.innerHTML = ''; return; }
+
+  const existingSkuInputs = {};
+  wrap.querySelectorAll('.ta-variant-combo-sku').forEach(input => {
+    existingSkuInputs[input.closest('.ta-variant-combo-row').dataset.comboKey] = input.value;
+  });
+
+  const combos = generateVariantCombinations(dims);
+  wrap.innerHTML = combos.map(combo => {
+    const key = variantComboKey(combo.values);
+    const label = combo.labels.join(' + ');
+    const skuVal = existingSkuInputs[key] != null ? existingSkuInputs[key] : '';
+    return `
+      <div class="ta-variant-combo-row" data-combo-key="${escapeHtml(key)}" data-combo-label="${escapeHtml(label)}">
+        <div class="ta-variant-combo-label">${escapeHtml(label)}</div>
+        <input type="text" class="ta-variant-combo-sku" placeholder="規格貨號">
+        <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-recipe>編輯規格配方</button>
+        <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-pricing>定價試算</button>
+      </div>
+    `;
+  }).join('');
+  // innerHTML 賦值後,input 的 value 屬性設定要另外補(避免內容裡的特殊字元跟屬性字串衝突)
+  wrap.querySelectorAll('.ta-variant-combo-row').forEach(row => {
+    row.querySelector('.ta-variant-combo-sku').value = existingSkuInputs[row.dataset.comboKey] || '';
+  });
+  section.classList.remove('ta-is-hidden');
+}
+
+// 依成品目前已存檔的 variants/variantKeyOrder,把維度建構區塊、規格組合列表初始化出來
+function renderVariantSection(p) {
+  const groupsWrap = document.getElementById('variantGroupsContainer');
+  if (!groupsWrap) return;
+  groupsWrap.innerHTML = '';
+  variantGroupCounter = 0;
+  const dimNames = p.variantKeyOrder || Object.keys(p.variants || {});
+  if (!dimNames.length) {
+    groupsWrap.innerHTML = '<div class="ta-empty-hint" id="variantEmptyHint">尚未設定規格,點上方「新增規格」開始</div>';
+  } else {
+    dimNames.forEach(name => addVariantGroupRow(name, (p.variants || {})[name] || ['']));
+  }
+
+  const combosWrap = document.getElementById('variantCombosList');
+  const combosSection = document.getElementById('variantCombosSection');
+  const savedKeys = Object.keys(p.variantSkus || {});
+  if (!savedKeys.length) {
+    combosSection.classList.add('ta-is-hidden');
+    combosWrap.innerHTML = '';
+  } else {
+    const dims = dimNames.map(name => ({ name, options: (p.variants || {})[name] || [] }));
+    const combos = generateVariantCombinations(dims);
+    combosWrap.innerHTML = combos.map(combo => {
+      const key = variantComboKey(combo.values);
+      const label = combo.labels.join(' + ');
+      const priceVal = (p.variantSellingPrices || {})[key];
+      return `
+        <div class="ta-variant-combo-row" data-combo-key="${escapeHtml(key)}" data-combo-label="${escapeHtml(label)}">
+          <div class="ta-variant-combo-label">${escapeHtml(label)}${priceVal != null ? ` <span class="ta-tag">售價 NT$${Number(priceVal).toFixed(0)}</span>` : ''}</div>
+          <input type="text" class="ta-variant-combo-sku" placeholder="規格貨號" value="${escapeHtml((p.variantSkus || {})[key] || '')}">
+          <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-recipe>編輯規格配方</button>
+          <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-pricing>定價試算</button>
+        </div>
+      `;
+    }).join('');
+    combosSection.classList.remove('ta-is-hidden');
+  }
+
+  document.getElementById('addVariantGroupBtn').onclick = () => addVariantGroupRow();
+  document.getElementById('generateVariantCombosBtn').onclick = refreshVariantCombosPreview;
+  document.getElementById('saveVariantSettingsBtn').onclick = () => saveVariantSettings(p.id);
+  wireVariantComboEditButtons(p.id);
+}
+
+function wireVariantComboEditButtons(productId) {
+  document.querySelectorAll('#variantCombosList [data-edit-variant-recipe]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('.ta-variant-combo-row');
+      btn.disabled = true;
+      try {
+        // 先把目前畫面上的規格設定(維度/選項/貨號)存檔,確保這個組合真的存在於資料裡,
+        // 再進去編輯配方,避免規格資料還沒存、配方卻先存了的不一致情況
+        const saved = await saveVariantSettings(productId);
+        if (!saved) return;
+        const p = products.find(x => x.id === productId);
+        openVariantRecipeModal(p, row.dataset.comboKey, row.dataset.comboLabel);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+  document.querySelectorAll('#variantCombosList [data-edit-variant-pricing]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('.ta-variant-combo-row');
+      btn.disabled = true;
+      try {
+        const saved = await saveVariantSettings(productId);
+        if (!saved) return;
+        const p = products.find(x => x.id === productId);
+        openPricingModal(p, row.dataset.comboKey);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+// 檢查規格貨號有沒有跟其他成品貨號或其他規格貨號重複
+function findDuplicateProductCode(code, { excludeProductId, excludeComboKey } = {}) {
+  if (!code) return null;
+  for (const p of products) {
+    if (p.productCode && p.productCode === code && p.id !== excludeProductId) return `成品「${p.name}」的貨號`;
+    for (const [key, sku] of Object.entries(p.variantSkus || {})) {
+      if (sku === code && !(p.id === excludeProductId && key === excludeComboKey)) {
+        return `成品「${p.name}」的規格貨號`;
+      }
+    }
+  }
+  return null;
+}
+
+// 存下目前規格設定的草稿(維度/選項/貨號),新出現的組合會複製目前的基礎配方當起點,
+// 已經存在的組合配方/貨號不會被覆蓋掉。回傳 true 代表存檔成功。
+async function saveVariantSettings(productId) {
+  const p = products.find(x => x.id === productId);
+  if (!p) return false;
+  const dims = readVariantGroupsFromDom();
+  const variants = {};
+  const variantKeyOrder = [];
+  dims.forEach(d => { variants[d.name] = d.options; variantKeyOrder.push(d.name); });
+
+  const skuRows = Array.from(document.querySelectorAll('#variantCombosList .ta-variant-combo-row'));
+  const variantSkus = { ...(p.variantSkus || {}) };
+  const variantRecipes = { ...(p.variantRecipes || {}) };
+  const variantSellingPrices = { ...(p.variantSellingPrices || {}) };
+  const validKeys = new Set(skuRows.map(row => row.dataset.comboKey));
+
+  // 貨號重複檢查(包含這次畫面上彼此之間有沒有撞號)
+  const skuValuesThisSave = new Map();
+  for (const row of skuRows) {
+    const key = row.dataset.comboKey;
+    const sku = row.querySelector('.ta-variant-combo-sku').value.trim();
+    if (!sku) continue;
+    if (skuValuesThisSave.has(sku)) {
+      alert(`規格貨號「${sku}」重複出現在多個規格組合裡,請修正後再儲存`);
+      return false;
+    }
+    skuValuesThisSave.set(sku, key);
+    const dup = findDuplicateProductCode(sku, { excludeProductId: productId, excludeComboKey: key });
+    if (dup) {
+      alert(`規格貨號「${sku}」已經被${dup}使用了,請換一個`);
+      return false;
+    }
+  }
+
+  for (const row of skuRows) {
+    const key = row.dataset.comboKey;
+    const sku = row.querySelector('.ta-variant-combo-sku').value.trim();
+    variantSkus[key] = sku;
+    if (!variantRecipes[key]) {
+      // 新出現的組合,複製目前的基礎配方當起點,你再各自去改差異的材料
+      variantRecipes[key] = (p.recipe || []).map(r => ({ ...r }));
+    }
+  }
+  // 拿掉已經不在目前組合裡的舊資料(例如刪掉了某個維度選項)
+  Object.keys(variantSkus).forEach(key => { if (!validKeys.has(key)) delete variantSkus[key]; });
+  Object.keys(variantRecipes).forEach(key => { if (!validKeys.has(key)) delete variantRecipes[key]; });
+  Object.keys(variantSellingPrices).forEach(key => { if (!validKeys.has(key)) delete variantSellingPrices[key]; });
+
+  await updateDoc(doc(db, 'products', productId), {
+    variants, variantKeyOrder, variantSkus, variantRecipes, variantSellingPrices, updatedAt: serverTimestamp(),
+  });
+  await refreshProductLocal(productId);
+  return true;
+}
+
 let currentDetailProductId = null;
 
 function openProductDetail(id) {
@@ -1190,12 +1466,14 @@ function openProductDetail(id) {
     ? `<div class="ta-cost-change-notice">⚠️ 材料成本已異動：NT$${lastSeen.toFixed(2)} → NT$${materialCost.toFixed(2)}</div>`
     : '';
 
+  const hasVariants = Object.keys(p.variantSkus || {}).length > 0;
+
   const body = document.getElementById('productDetailBody');
   body.innerHTML = `
     <div class="ta-detail-header">
       <div class="ta-detail-title">${escapeHtml(p.name)}</div>
       <div>
-        <button class="ta-btn ta-btn-sm" id="editRecipeBtn">編輯配方</button>
+        ${hasVariants ? '' : '<button class="ta-btn ta-btn-sm" id="editRecipeBtn">編輯配方</button>'}
         <button class="ta-btn ta-btn-sm" id="openPricingBtn">定價試算</button>
         <button class="ta-btn ta-btn-sm" id="editProductBtn">編輯屬性</button>
         <button class="ta-btn ta-btn-sm ${p.archived ? '' : 'ta-btn-danger'}" id="archiveProductBtn">${p.archived ? '上架' : '下架'}</button>
@@ -1206,20 +1484,38 @@ function openProductDetail(id) {
     ${p.note ? `<div class="ta-modal-text">備註:${escapeHtml(p.note)}</div>` : ''}
     ${costNotice}
     <div class="ta-detail-stats">
-      <div><div class="ta-stat-label">材料成本(即時計算)</div><div class="ta-stat-value">NT$ ${materialCost.toFixed(2)}</div></div>
-      <div><div class="ta-stat-label">配方項目數</div><div class="ta-stat-value">${(p.recipe || []).length} 項</div></div>
-      ${p.sellingPrice != null ? `
-        <div><div class="ta-stat-label">售價</div><div class="ta-stat-value">NT$ ${Number(p.sellingPrice).toFixed(0)}</div></div>
-        <div><div class="ta-stat-label">毛利</div><div class="ta-stat-value">NT$ ${(Number(p.sellingPrice) - materialCost).toFixed(2)}</div></div>
-      ` : ''}
+      ${hasVariants ? `
+        <div><div class="ta-stat-label">規格組合數</div><div class="ta-stat-value">${Object.keys(p.variantSkus || {}).length} 個</div></div>
+      ` : `
+        <div><div class="ta-stat-label">材料成本(即時計算)</div><div class="ta-stat-value">NT$ ${materialCost.toFixed(2)}</div></div>
+        <div><div class="ta-stat-label">配方項目數</div><div class="ta-stat-value">${(p.recipe || []).length} 項</div></div>
+        ${p.sellingPrice != null ? `
+          <div><div class="ta-stat-label">售價</div><div class="ta-stat-value">NT$ ${Number(p.sellingPrice).toFixed(0)}</div></div>
+          <div><div class="ta-stat-label">毛利</div><div class="ta-stat-value">NT$ ${(Number(p.sellingPrice) - materialCost).toFixed(2)}</div></div>
+        ` : ''}
+      `}
+    </div>
+    <hr class="ta-section-divider">
+    <div class="ta-variant-section">
+      <div class="ta-variant-section-header">
+        <h3>商品規格</h3>
+        <button type="button" class="ta-btn ta-btn-sm" id="addVariantGroupBtn">＋ 新增規格</button>
+      </div>
+      <div id="variantGroupsContainer"></div>
+      <button type="button" class="ta-btn ta-btn-sm" id="generateVariantCombosBtn" style="margin-bottom:10px;">產生規格組合</button>
+      <div id="variantCombosSection" class="ta-is-hidden">
+        <div id="variantCombosList"></div>
+        <button type="button" class="ta-btn ta-btn-primary ta-btn-sm" id="saveVariantSettingsBtn" style="margin-top:10px;">儲存規格設定</button>
+      </div>
     </div>
   `;
 
-  document.getElementById('editRecipeBtn').addEventListener('click', () => openRecipeModal(p));
+  if (!hasVariants) document.getElementById('editRecipeBtn').addEventListener('click', () => openRecipeModal(p));
   document.getElementById('openPricingBtn').addEventListener('click', () => openPricingModal(p));
   document.getElementById('editProductBtn').addEventListener('click', () => openProductEditForm(p));
   document.getElementById('archiveProductBtn').addEventListener('click', () => toggleProductArchive(p));
   document.getElementById('deleteProductBtn').addEventListener('click', () => openDeleteProductModal(p));
+  renderVariantSection(p);
 
   openModal('productDetailModal');
 
@@ -1310,8 +1606,41 @@ function openRecipeModal(p) {
   openModal('productRecipeModal');
 }
 
+// 編輯單一規格組合自己的配方(跟編輯成品共用的配方,是分開獨立的兩份資料)
+function openVariantRecipeModal(p, variantKey, variantLabel) {
+  recipeEditContext = { mode: 'variant', productId: p.id, variantKey };
+  currentRecipe = ((p.variantRecipes || {})[variantKey] || []).map(r => ({ ...r }));
+  document.getElementById('recipeModalTitle').textContent = `編輯規格配方:${variantLabel}`;
+  document.getElementById('recipeSaveBtn').textContent = '儲存規格配方';
+  document.getElementById('recipeComboNameRow').classList.add('ta-is-hidden');
+
+  const combos = (productOptions.requiredMaterials || {})[p.category] || [];
+  const applySection = document.getElementById('requiredCombosApplySection');
+  if (combos.length) {
+    document.getElementById('requiredCombosApplyList').innerHTML = combos.map(combo => `
+      <div class="ta-category-row">
+        <div class="ta-category-row-info"><span class="ta-category-row-name">${escapeHtml(combo.name)}(${combo.items.length}項)</span></div>
+        <button type="button" class="ta-btn ta-btn-sm" data-apply-combo="${escapeHtml(combo.id)}">加入</button>
+      </div>
+    `).join('');
+    applySection.classList.remove('ta-is-hidden');
+    applySection.querySelectorAll('[data-apply-combo]').forEach(btn => {
+      btn.addEventListener('click', () => applyRequiredCombo(btn.dataset.applyCombo));
+    });
+  } else {
+    applySection.classList.add('ta-is-hidden');
+  }
+
+  document.getElementById('recipeSearchInput').value = '';
+  document.getElementById('recipeSearchResults').classList.add('ta-is-hidden');
+  fillRecipeCategoryFilter();
+  document.getElementById('recipeCategoryFilter').value = '';
+  renderRecipeList();
+  openModal('productRecipeModal');
+}
+
 function applyRequiredCombo(comboId) {
-  if (!recipeEditContext || recipeEditContext.mode !== 'product') return;
+  if (!recipeEditContext || (recipeEditContext.mode !== 'product' && recipeEditContext.mode !== 'variant')) return;
   const p = products.find(x => x.id === recipeEditContext.productId);
   if (!p) return;
   const combos = (productOptions.requiredMaterials || {})[p.category] || [];
@@ -1566,6 +1895,13 @@ document.getElementById('recipeSaveBtn').addEventListener('click', async () => {
       await refreshProductLocal(context.productId);
       closeModal('productRecipeModal');
       openProductDetail(context.productId); // 存檔後立刻刷新底下的成品詳情頁,不用手動關掉重開才看得到最新配方/成本
+    } else if (context.mode === 'variant') {
+      const p = products.find(x => x.id === context.productId);
+      const variantRecipes = { ...(p.variantRecipes || {}), [context.variantKey]: currentRecipe };
+      await updateDoc(doc(db, 'products', context.productId), { variantRecipes, updatedAt: serverTimestamp() });
+      await refreshProductLocal(context.productId);
+      closeModal('productRecipeModal');
+      openProductDetail(context.productId); // 存檔後立刻刷新底下的成品詳情頁,規格列表才會反映最新配方
     } else {
       const comboName = document.getElementById('recipeComboName').value.trim();
       const combos = (productOptions.requiredMaterials || {})[context.category] || [];
@@ -1597,6 +1933,7 @@ document.getElementById('recipeSaveBtn').addEventListener('click', async () => {
 let pcCurrentInputs = null; // 目前彈窗編輯中的完整設定(本地暫存,尚未存檔)
 let pcNextCostId = 1, pcNextFeeId = 1;
 let pricingEditProductId = null;
+let pricingEditVariantKey = null; // 有值代表目前在編輯某個規格組合自己的售價
 
 function pcBlankInputs() {
   return { rate: 0, marginMode: false, q: 0, u: 0, r: 0, aa1: 0, aa2: 0, aa3: 0, costItems: [], feeItems: [] };
@@ -1818,8 +2155,11 @@ document.getElementById('pcMarginModeToggle').addEventListener('change', () => {
   document.getElementById(id).addEventListener('input', renderPcCards);
 });
 
-function openPricingModal(p) {
+// variantKey 有給的話,代表是在編輯「某一個規格組合」自己的售價,不是成品共用的售價;
+// 定價試算的計算方式(成本項目/手續費項目/倍數公式)維持成品共用同一套,只有最後儲存的售價分開存
+function openPricingModal(p, variantKey = null) {
   pricingEditProductId = p.id;
+  pricingEditVariantKey = variantKey;
   const pi = p.pricingInputs;
   pcCurrentInputs = pi
     ? { ...pcBlankInputs(), ...pi, costItems: (pi.costItems || []).map(it => ({ ...it })), feeItems: (pi.feeItems || []).map(it => ({ ...it })) }
@@ -1827,11 +2167,14 @@ function openPricingModal(p) {
   pcNextCostId = Math.max(0, ...pcCurrentInputs.costItems.map(c => c.id)) + 1;
   pcNextFeeId = Math.max(0, ...pcCurrentInputs.feeItems.map(f => f.id)) + 1;
 
-  // 成本欄位一律自動帶入這個成品「目前」的材料成本(台幣),不套用之前儲存的舊值,
+  const recipeForCost = variantKey ? (p.variantRecipes || {})[variantKey] : p.recipe;
+  const existingSellingPrice = variantKey ? (p.variantSellingPrices || {})[variantKey] : p.sellingPrice;
+
+  // 成本欄位一律自動帶入這個成品(或規格)「目前」的材料成本(台幣),不套用之前儲存的舊值,
   // 這樣配方材料漲價時才能馬上反映最新真實成本;連帶幣別模式也固定用台幣輸入,
   // 避免跟自動帶入的成本互相覆蓋(見人民幣模式下 renderPcCards 會用人民幣欄位反推台幣)
   document.getElementById('pcCurrencyModeToggle').checked = true;
-  document.getElementById('pcTwd').value = calcRecipeCost(p.recipe).toFixed(2);
+  document.getElementById('pcTwd').value = calcRecipeCost(recipeForCost).toFixed(2);
   document.getElementById('pcRate').value = pcCurrentInputs.rate;
   document.getElementById('pcQ').value = pcCurrentInputs.q;
   document.getElementById('pcU').value = pcCurrentInputs.u;
@@ -1840,7 +2183,7 @@ function openPricingModal(p) {
   document.getElementById('pcAa1').value = pcCurrentInputs.aa1;
   document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
   document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
-  document.getElementById('pcSellingPrice').value = p.sellingPrice != null ? p.sellingPrice : '';
+  document.getElementById('pcSellingPrice').value = existingSellingPrice != null ? existingSellingPrice : '';
 
   pcApplyCurrencyMode();
   pcApplyMarginMode();
@@ -1925,12 +2268,19 @@ document.getElementById('pcApplyGlobalBtn').addEventListener('click', async () =
 document.getElementById('pcSaveBtn').addEventListener('click', async () => {
   if (!pricingEditProductId) return;
   const savedProductId = pricingEditProductId;
+  const savedVariantKey = pricingEditVariantKey;
   const priceVal = parseFloat(document.getElementById('pcSellingPrice').value);
   if (isNaN(priceVal) || priceVal < 0) { alert('請輸入正確的售價'); return; }
   const btn = document.getElementById('pcSaveBtn');
   btn.disabled = true;
   try {
-    await updateDoc(doc(db, 'products', savedProductId), { sellingPrice: priceVal, updatedAt: serverTimestamp() });
+    if (savedVariantKey) {
+      const p = products.find(x => x.id === savedProductId);
+      const variantSellingPrices = { ...(p.variantSellingPrices || {}), [savedVariantKey]: priceVal };
+      await updateDoc(doc(db, 'products', savedProductId), { variantSellingPrices, updatedAt: serverTimestamp() });
+    } else {
+      await updateDoc(doc(db, 'products', savedProductId), { sellingPrice: priceVal, updatedAt: serverTimestamp() });
+    }
     await refreshProductLocal(savedProductId);
     closeModal('pricingModal');
     if (document.getElementById('productDetailModal').classList.contains('ta-is-open')) {
@@ -1944,6 +2294,68 @@ document.getElementById('pcSaveBtn').addEventListener('click', async () => {
 });
 
 // ---------- 匯出配方 ----------
+// 組出單一成品要匯出的所有列。沒有規格的成品:一列一種材料(比照原本的做法)。
+// 有規格的成品:每個規格組合各自的材料各一列,並且多帶出規格1~3名稱/值+規格貨號這幾欄(最多3個維度,
+// 比照 POS 系統匯入格式的欄位設計),售價/材料總成本/毛利都改用該規格自己的值。
+function buildExportRowsForProduct(p) {
+  const statusLabel = p.archived ? '已下架' : '上架中';
+  const variantKeys = Object.keys(p.variantSkus || {});
+
+  function materialRows(recipe, materialCost, sellingPrice, variantCols) {
+    const profit = sellingPrice != null ? sellingPrice - materialCost : null;
+    if (!recipe.length) {
+      return [[
+        p.productCode || '', p.category || '', p.name || '', statusLabel,
+        ...variantCols,
+        '', '', '', '', '', '',
+        0, Number(materialCost.toFixed(2)),
+        sellingPrice ?? '', profit != null ? Number(profit.toFixed(2)) : '',
+      ]];
+    }
+    return recipe.map(r => {
+      const m = materials.find(x => x.id === r.materialId);
+      const unitCost = m ? (m.currentUnitCostWeightedAvg || 0) : 0;
+      const qty = r.quantity || 0;
+      return [
+        p.productCode || '', p.category || '', p.name || '', statusLabel,
+        ...variantCols,
+        m ? (m.materialCode || '') : '(材料已刪除)',
+        m ? materialDisplayName(m) : '',
+        m ? (m.category || '') : '',
+        qty,
+        m ? (m.unit || '') : '',
+        Number(unitCost.toFixed(4)),
+        Number((unitCost * qty).toFixed(2)),
+        Number(materialCost.toFixed(2)),
+        sellingPrice ?? '',
+        profit != null ? Number(profit.toFixed(2)) : '',
+      ];
+    });
+  }
+
+  if (!variantKeys.length) {
+    const materialCost = calcRecipeCost(p.recipe);
+    const sellingPrice = p.sellingPrice != null ? Number(p.sellingPrice) : null;
+    return materialRows(p.recipe || [], materialCost, sellingPrice, ['', '', '', '', '', '', '']);
+  }
+
+  const dimNames = p.variantKeyOrder || Object.keys(p.variants || {});
+  const rows = [];
+  variantKeys.forEach(key => {
+    const values = key.split(',');
+    const variantCols = [];
+    for (let i = 0; i < 3; i++) {
+      variantCols.push(dimNames[i] || '', values[i] || '');
+    }
+    variantCols.push(p.variantSkus[key] || '');
+    const recipe = (p.variantRecipes || {})[key] || [];
+    const materialCost = calcRecipeCost(recipe);
+    const sellingPrice = (p.variantSellingPrices || {})[key] != null ? Number(p.variantSellingPrices[key]) : null;
+    rows.push(...materialRows(recipe, materialCost, sellingPrice, variantCols));
+  });
+  return rows;
+}
+
 document.getElementById('openExportRecipeBtn').addEventListener('click', () => {
   closeDrawer();
   const enabledCategories = (productOptions.categories || []).filter(c => !(productOptions.disabledCategories || []).includes(c));
@@ -1989,43 +2401,14 @@ document.getElementById('confirmExportRecipeBtn').addEventListener('click', asyn
 
     const rows = [];
     for (const p of targetProducts) {
-      const materialCost = calcRecipeCost(p.recipe);
-      const sellingPrice = p.sellingPrice != null ? Number(p.sellingPrice) : null;
-      const profit = sellingPrice != null ? sellingPrice - materialCost : null;
-      const recipe = p.recipe || [];
-      const statusLabel = p.archived ? '已下架' : '上架中';
-
-      if (!recipe.length) {
-        rows.push([
-          p.productCode || '', p.category || '', p.name || '', statusLabel,
-          '', '', '', '', '', '',
-          0, Number(materialCost.toFixed(2)),
-          sellingPrice ?? '', profit != null ? Number(profit.toFixed(2)) : '',
-        ]);
-        continue;
-      }
-
-      recipe.forEach(r => {
-        const m = materials.find(x => x.id === r.materialId);
-        const unitCost = m ? (m.currentUnitCostWeightedAvg || 0) : 0;
-        const qty = r.quantity || 0;
-        rows.push([
-          p.productCode || '', p.category || '', p.name || '', statusLabel,
-          m ? (m.materialCode || '') : '(材料已刪除)',
-          m ? materialDisplayName(m) : '',
-          m ? (m.category || '') : '',
-          qty,
-          m ? (m.unit || '') : '',
-          Number(unitCost.toFixed(4)),
-          Number((unitCost * qty).toFixed(2)),
-          Number(materialCost.toFixed(2)),
-          sellingPrice ?? '',
-          profit != null ? Number(profit.toFixed(2)) : '',
-        ]);
-      });
+      rows.push(...buildExportRowsForProduct(p));
     }
 
-    const headers = ['成品編號', '成品分類', '成品名稱', '成品狀態', '材料編號', '材料名稱', '材料分類', '用量', '單位', '材料單價', '小計', '成品材料總成本', '售價', '毛利'];
+    const headers = [
+      '成品編號', '成品分類', '成品名稱', '成品狀態',
+      '規格1名稱', '規格1', '規格2名稱', '規格2', '規格3名稱', '規格3', '規格貨號',
+      '材料編號', '材料名稱', '材料分類', '用量', '單位', '材料單價', '小計', '材料總成本', '售價', '毛利',
+    ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), '配方明細');
     const dateStr = new Date().toISOString().slice(0, 10);
