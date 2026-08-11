@@ -1274,7 +1274,7 @@ function readVariantGroupsFromDom() {
 
 // 依目前維度建構區塊,重新產生規格組合列表(只是畫面上的預覽,還沒存檔);
 // 已經在畫面上填過的貨號會被保留,不會因為重新產生就被清空
-function refreshVariantCombosPreview() {
+function refreshVariantCombosPreview(productId) {
   const dims = readVariantGroupsFromDom();
   const section = document.getElementById('variantCombosSection');
   const wrap = document.getElementById('variantCombosList');
@@ -1304,6 +1304,7 @@ function refreshVariantCombosPreview() {
     row.querySelector('.ta-variant-combo-sku').value = existingSkuInputs[row.dataset.comboKey] || '';
   });
   section.classList.remove('ta-is-hidden');
+  wireVariantComboEditButtons(productId); // innerHTML 重新產生後,按鈕是全新的 DOM 節點,要重新綁定點擊事件
 }
 
 // 依成品目前已存檔的 variants/variantKeyOrder,把維度建構區塊、規格組合列表初始化出來
@@ -1346,8 +1347,22 @@ function renderVariantSection(p) {
   }
 
   document.getElementById('addVariantGroupBtn').onclick = () => addVariantGroupRow();
-  document.getElementById('generateVariantCombosBtn').onclick = refreshVariantCombosPreview;
-  document.getElementById('saveVariantSettingsBtn').onclick = () => saveVariantSettings(p.id);
+  document.getElementById('generateVariantCombosBtn').onclick = () => refreshVariantCombosPreview(p.id);
+  document.getElementById('saveVariantSettingsBtn').onclick = async () => {
+    const btn = document.getElementById('saveVariantSettingsBtn');
+    btn.disabled = true;
+    try {
+      const saved = await saveVariantSettings(p.id);
+      if (!saved) return;
+      const updated = products.find(x => x.id === p.id);
+      renderVariantSection(updated); // 重新畫規格組合列表,按鈕才會是綁定好事件的新節點
+      const originalLabel = btn.textContent;
+      btn.textContent = '已儲存!';
+      setTimeout(() => { btn.textContent = originalLabel; }, 1200);
+    } finally {
+      btn.disabled = false;
+    }
+  };
   wireVariantComboEditButtons(p.id);
 }
 
