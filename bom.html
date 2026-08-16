@@ -854,9 +854,9 @@ let productOptions = { categories: [], categoryCodes: {}, disabledCategories: []
 
 async function initData() {
   await initMaterialsForBom();
-  // 成品列表現在會顯示「⚠️有異動」(依賴材料目前的成本),所以開頁時要先確認一次材料資料夠新。
-  // 如果 initMaterialsForBom() 剛整包讀完,lastMaterialsSyncCheckAt 已經是最新,這裡會自動跳過,
-  // 不會產生多餘的查詢;只有沿用舊快取時,才會真的觸發這次的 delta 同步。
+  // 成品列表現在會顯示「⚠️有異動」(檢查配方裡有沒有材料已經被刪除),需要材料資料夠新,
+  // 所以開頁時要先確認一次。如果 initMaterialsForBom() 剛整包讀完,lastMaterialsSyncCheckAt
+  // 已經是最新,這裡會自動跳過,不會產生多餘的查詢;只有沿用舊快取時,才會真的觸發這次的 delta 同步。
   await syncMaterialsDeltaThrottled();
 
   const prodSnap = await getDocs(collection(db, 'products'));
@@ -1117,7 +1117,7 @@ function renderProductTable() {
       <td>${escapeHtml(p.name)}</td>
       <td class="ta-col-right">${p.sellingPrice != null ? 'NT$ ' + Number(p.sellingPrice).toFixed(0) : ''}</td>
       <td class="ta-col-center">${variantCount ? `${variantCount} 個規格` : ''}</td>
-      <td class="ta-col-center">${p.archived ? '<span class="ta-tag">已下架</span>' : ''}${productHasChangedCost(p) ? ' <span class="ta-tag" style="color:var(--danger);">⚠️有異動</span>' : ''}</td>
+      <td class="ta-col-center">${p.archived ? '<span class="ta-tag">已下架</span>' : ''}${productHasMissingMaterial(p) ? ' <span class="ta-tag" style="color:var(--danger);">⚠️有異動</span>' : ''}</td>
     `;
     tr.addEventListener('click', () => openProductDetail(p.id));
     tbody.appendChild(tr);
@@ -1206,20 +1206,13 @@ function recipeHasMissingMaterial(recipe) {
   return (recipe || []).some(r => !materials.find(m => m.id === r.materialId));
 }
 
-// 這個成品(或它任一個規格組合)現在的材料成本,是不是跟「上次存檔配方時」看到的不一樣了。
-// 只比對「有存過檔」的情況(lastSeen 不是 null),全新、從沒存過配方的成品/規格不算異動。
-function productHasChangedCost(p) {
+// 這個成品的配方(有規格的話,任一個規格組合的配方)裡,有沒有引用到已經被材料清單系統刪除的材料。
+// 直接沿用 recipeHasMissingMaterial 的即時判斷,不需要另外記錄任何快照——材料換掉之後,
+// 下次重新整理列表,這裡就會自動不再顯示,不用手動存檔「確認」。
+function productHasMissingMaterial(p) {
   const hasVariants = Object.keys(p.variantSkus || {}).length > 0;
-  if (!hasVariants) {
-    const lastSeen = p.lastSeenMaterialCost;
-    if (lastSeen == null) return false;
-    return Math.abs(calcRecipeCost(p.recipe) - lastSeen) >= 0.01;
-  }
-  return Object.keys(p.variantSkus || {}).some(key => {
-    const lastSeen = (p.variantLastSeenCosts || {})[key];
-    if (lastSeen == null) return false;
-    return Math.abs(calcRecipeCost((p.variantRecipes || {})[key]) - lastSeen) >= 0.01;
-  });
+  if (!hasVariants) return recipeHasMissingMaterial(p.recipe);
+  return Object.values(p.variantRecipes || {}).some(recipe => recipeHasMissingMaterial(recipe));
 }
 
 // ---------- 成品規格(多維度組合) ----------
@@ -1564,6 +1557,12 @@ function openProductDetail(id) {
   renderVariantSection(p);
 
   openModal('productDetailModal');
+
+  // 更新「上次看到的成本」快照,純粹拿來下次比對用,不影響上面顯示的即時成本
+  if (lastSeen == null || Math.abs(materialCost - lastSeen) >= 0.01) {
+    p.lastSeenMaterialCost = materialCost;
+    updateDoc(doc(db, 'products', p.id), { lastSeenMaterialCost: materialCost }).catch(() => {});
+  }
 
   // 背景做一次節流過的材料同步(距離上次真的問過不到 1 分鐘就跳過);如果真的抓到材料變動,
   // 而使用者還停留在同一筆成品詳情,才重新畫面,讓材料成本/毛利數字更新成最新的
@@ -1931,18 +1930,14 @@ document.getElementById('recipeSaveBtn').addEventListener('click', async () => {
   btn.disabled = true;
   try {
     if (context.mode === 'product') {
-      // 「上次看到的成本」快照,只有在真的存檔配方時才更新(不是單純點開詳情頁就算),
-      // 這樣「⚠️有異動」提示才會一直留著,直到你真的進來處理過配方為止
-      const lastSeenMaterialCost = calcRecipeCost(currentRecipe);
-      await updateDoc(doc(db, 'products', context.productId), { recipe: currentRecipe, lastSeenMaterialCost, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, 'products', context.productId), { recipe: currentRecipe, updatedAt: serverTimestamp() });
       await refreshProductLocal(context.productId);
       closeModal('productRecipeModal');
       openProductDetail(context.productId); // 存檔後立刻刷新底下的成品詳情頁,不用手動關掉重開才看得到最新配方/成本
     } else if (context.mode === 'variant') {
       const p = products.find(x => x.id === context.productId);
       const variantRecipes = { ...(p.variantRecipes || {}), [context.variantKey]: currentRecipe };
-      const variantLastSeenCosts = { ...(p.variantLastSeenCosts || {}), [context.variantKey]: calcRecipeCost(currentRecipe) };
-      await updateDoc(doc(db, 'products', context.productId), { variantRecipes, variantLastSeenCosts, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, 'products', context.productId), { variantRecipes, updatedAt: serverTimestamp() });
       await refreshProductLocal(context.productId);
       closeModal('productRecipeModal');
       openProductDetail(context.productId); // 存檔後立刻刷新底下的成品詳情頁,規格列表才會反映最新配方
