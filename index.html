@@ -1014,6 +1014,10 @@
       <label>目前庫存</label>
       <input type="text" id="adjustCurrent" disabled>
     </div>
+    <div class="ta-form-row ta-is-hidden" id="adjustScrapTotalRow">
+      <label>目前累計報廢數量</label>
+      <input type="text" id="adjustScrapTotal" disabled>
+    </div>
     <div class="ta-form-row">
       <label id="adjustQtyLabel">調整後數量</label>
       <input type="number" id="adjustNewQty">
@@ -1152,6 +1156,7 @@ let materials = [];       // 目前所有材料(含下架)
 let options = { brands: [], materials: [], beadTypes: [], categories: [], packageUnits: [], stockUnits: [], categoryCodes: {}, disabledCategories: [] };
 let exchangeRates = { CNY: 5, JPY: 3 };
 let currentDetailId = null;
+let currentDetailScrapQtyTotal = 0; // 材料詳情頁算出的累計報廢數量,順手帶給人工盤點調整彈窗用,不用另外再讀一次歷史
 let dupMatchedMaterial = null; // 新增進貨時比對到的既有材料
 let categoryFilter = ''; // 目前選中的分類頁籤,空字串代表全部
 let currentPage = 1;
@@ -2831,6 +2836,7 @@ function findColorAlternatives(m) {
 
 async function openDetail(id) {
   currentDetailId = id;
+  currentDetailScrapQtyTotal = 0; // 重置,避免切換材料時,調整彈窗短暫顯示上一款材料的舊數字
   const m = materials.find(x => x.id === id);
   if (!m) return;
 
@@ -2919,6 +2925,7 @@ async function openDetail(id) {
   const scrapLossTotal = logs.reduce((sum, log) => sum + (log.scrapQuantity || 0) * (log.unitCost || 0), 0);
   document.getElementById('scrapQtyStat').textContent = `${scrapQtyTotal.toLocaleString()} ${unit}`;
   document.getElementById('scrapLossStat').textContent = `NT$ ${scrapLossTotal.toFixed(2)}`;
+  if (currentDetailId === id) currentDetailScrapQtyTotal = scrapQtyTotal;
 
   const shortageQtyTotal = logs.reduce((sum, log) => sum + (log.shortageQuantity || 0), 0);
   const shortageLossTotal = logs.reduce((sum, log) => sum + (log.shortageQuantity || 0) * (log.unitCost || 0), 0);
@@ -3169,9 +3176,11 @@ function updateAdjustCurrentDisplay() {
   const current = isSecondary ? (m.currentStockSecondary || 0) : (m.currentStock || 0);
   const label = isSecondary ? '次品庫存' : '正品庫存';
   document.getElementById('adjustCurrent').value = `${current} ${unit}(${label})`;
+  document.getElementById('adjustScrapTotalRow').classList.toggle('ta-is-hidden', !isScrap);
   if (isScrap) {
     document.getElementById('adjustQtyLabel').textContent = `報廢數量(${unit},本次從正品庫存報廢幾個)`;
     document.getElementById('adjustNewQty').value = '';
+    document.getElementById('adjustScrapTotal').value = `${currentDetailScrapQtyTotal.toLocaleString()} ${unit}`;
   } else {
     document.getElementById('adjustQtyLabel').textContent = `調整後數量(${unit},${label})`;
     document.getElementById('adjustNewQty').value = current;
