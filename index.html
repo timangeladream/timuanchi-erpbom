@@ -3321,14 +3321,6 @@ function resetImportModal() {
   importParsedGroups = null;
 }
 
-// 把整份檔案的內容算成一個指紋值(SHA-256),用來偵測「這份檔案是不是已經匯入過」
-async function computeFileHash(buf) {
-  const digest = await crypto.subtle.digest('SHA-256', buf);
-  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-let pendingImportFileHash = null;
-
 document.getElementById('importFileInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -3336,27 +3328,9 @@ document.getElementById('importFileInput').addEventListener('change', async (e) 
   document.getElementById('importErrorList').innerHTML = '';
   document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
   importParsedGroups = null;
-  pendingImportFileHash = null;
 
   try {
     const buf = await file.arrayBuffer();
-    const hash = await computeFileHash(buf);
-
-    const hashDocSnap = await getDoc(doc(db, 'settings', 'importedFileHashes'));
-    const knownHashes = hashDocSnap.exists() ? (hashDocSnap.data().hashes || []) : [];
-    if (knownHashes.includes(hash)) {
-      const proceed = await showConfirmModal({
-        title: '這份檔案好像匯入過了',
-        text: '這份檔案的內容跟您之前成功匯入過的某一份檔案完全相同,再匯入一次很可能會造成進貨紀錄重複、庫存被灌水。確定要繼續匯入嗎?',
-      });
-      if (!proceed) {
-        document.getElementById('importSummary').innerHTML = '';
-        e.target.value = '';
-        return;
-      }
-    }
-    pendingImportFileHash = hash;
-
     const wb = XLSX.read(buf, { type: 'array', cellDates: true });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', blankrows: true });
@@ -3752,16 +3726,6 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
       await batch.commit();
       committed += chunk.length;
       progressEl.textContent = `匯入中... 已寫入 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作`;
-    }
-
-    // 記錄這份檔案的指紋,下次選到內容一樣的檔案時可以提醒
-    if (pendingImportFileHash) {
-      const hashDocSnap = await getDoc(doc(db, 'settings', 'importedFileHashes'));
-      const knownHashes = hashDocSnap.exists() ? (hashDocSnap.data().hashes || []) : [];
-      if (!knownHashes.includes(pendingImportFileHash)) {
-        await setDoc(doc(db, 'settings', 'importedFileHashes'), { hashes: [...knownHashes, pendingImportFileHash] }, { merge: true });
-      }
-      pendingImportFileHash = null;
     }
 
     await reloadAllMaterialsLocal();
