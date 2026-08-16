@@ -114,6 +114,8 @@
   }
   .ta-category-row-name { flex: 1; }
   .ta-tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #e8edf3; color: var(--text-muted); }
+  .ta-status-tag { display: inline-block; font-size: 12px; background: none; color: var(--text-muted); }
+  .ta-status-tag--danger { color: var(--danger); }
   .ta-empty-hint { text-align: center; color: var(--text-muted); padding: 40px 0; font-size: 13px; }
 
   .ta-category-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
@@ -1117,7 +1119,7 @@ function renderProductTable() {
       <td>${escapeHtml(p.name)}</td>
       <td class="ta-col-right">${p.sellingPrice != null ? 'NT$ ' + Number(p.sellingPrice).toFixed(0) : ''}</td>
       <td class="ta-col-center">${variantCount ? `${variantCount} 個規格` : ''}</td>
-      <td class="ta-col-center">${p.archived ? '<span class="ta-tag">已下架</span>' : ''}${productHasMissingMaterial(p) ? ' <span class="ta-tag" style="color:var(--danger);">⚠️有異動</span>' : ''}</td>
+      <td class="ta-col-center">${p.archived ? '<span class="ta-status-tag">已下架</span>' : ''}${productHasMissingMaterial(p) ? ' <span class="ta-status-tag ta-status-tag--danger">⚠️有異動</span>' : ''}</td>
     `;
     tr.addEventListener('click', () => openProductDetail(p.id));
     tbody.appendChild(tr);
