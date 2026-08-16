@@ -2944,13 +2944,19 @@ async function deleteMaterial(m) {
   deleteTargetMaterial = m;
   deleteTargetHistCount = histSnap.size;
 
-  // 順便檢查有沒有被 BOM 成品的配方引用中(成品組合系統存在另一個 products 集合裡)
+  // 順便檢查有沒有被 BOM 成品的配方引用中(成品組合系統存在另一個 products 集合裡);
+  // 除了成品共用的那份配方(recipe),也要檢查每個規格組合各自的配方(variantRecipes),
+  // 不然材料只被用在某個規格的配方裡時,刪除材料不會跳出警告
   let referencingProducts = [];
   try {
     const productsSnap = await getDocs(collection(db, 'products'));
     referencingProducts = productsSnap.docs
       .map(d => d.data())
-      .filter(p => (p.recipe || []).some(r => r.materialId === m.id));
+      .filter(p => {
+        const inBaseRecipe = (p.recipe || []).some(r => r.materialId === m.id);
+        const inVariantRecipes = Object.values(p.variantRecipes || {}).some(recipe => (recipe || []).some(r => r.materialId === m.id));
+        return inBaseRecipe || inVariantRecipes;
+      });
   } catch (e) {
     // 讀取失敗不擋刪除流程,只是少了這項提醒
   }

@@ -1197,6 +1197,11 @@ function calcRecipeCost(recipe) {
   }, 0);
 }
 
+// 配方裡有沒有引用到已經被材料清單系統刪除的材料(找不到對應的材料資料)
+function recipeHasMissingMaterial(recipe) {
+  return (recipe || []).some(r => !materials.find(m => m.id === r.materialId));
+}
+
 // ---------- 成品規格(多維度組合) ----------
 // 規格資料結構:variants={維度名稱: [選項,...]}、variantKeyOrder=[維度名稱,...](保留順序,
 // 因為 Firestore 不保證物件 key 順序)、variantRecipes={組合鍵: 配方}、variantSkus={組合鍵: 貨號}、
@@ -1334,9 +1339,10 @@ function renderVariantSection(p) {
       const label = combo.labels.join(' + ');
       const priceVal = (p.variantSellingPrices || {})[key];
       const costVal = calcRecipeCost((p.variantRecipes || {})[key]);
+      const missingMaterial = recipeHasMissingMaterial((p.variantRecipes || {})[key]);
       return `
         <div class="ta-variant-combo-row" data-combo-key="${escapeHtml(key)}" data-combo-label="${escapeHtml(label)}">
-          <div class="ta-variant-combo-label">${escapeHtml(label)} <span class="ta-tag">成本 NT$${costVal.toFixed(2)}</span>${priceVal != null ? ` <span class="ta-tag">售價 NT$${Number(priceVal).toFixed(0)}</span>` : ''}</div>
+          <div class="ta-variant-combo-label">${escapeHtml(label)} <span class="ta-tag">成本 NT$${costVal.toFixed(2)}</span>${priceVal != null ? ` <span class="ta-tag">售價 NT$${Number(priceVal).toFixed(0)}</span>` : ''}${missingMaterial ? ' <span class="ta-tag" style="color:var(--danger);">⚠️ 含已刪除材料</span>' : ''}</div>
           <input type="text" class="ta-variant-combo-sku" placeholder="規格貨號" value="${escapeHtml((p.variantSkus || {})[key] || '')}">
           <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-recipe>編輯規格配方</button>
           <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-pricing>定價試算</button>
@@ -1483,6 +1489,9 @@ function openProductDetail(id) {
     : '';
 
   const hasVariants = Object.keys(p.variantSkus || {}).length > 0;
+  const missingMaterialNotice = (!hasVariants && recipeHasMissingMaterial(p.recipe))
+    ? `<div class="ta-cost-change-notice">⚠️ 配方裡有材料已經被刪除,上面的材料成本沒有算進那些材料,實際成本會比顯示的更高,建議進「編輯配方」確認</div>`
+    : '';
 
   const body = document.getElementById('productDetailBody');
   body.innerHTML = `
@@ -1499,6 +1508,7 @@ function openProductDetail(id) {
     <div class="ta-detail-category"><span class="ta-tag">${escapeHtml(p.category || '未分類')}</span> <span class="ta-tag">${escapeHtml(p.productCode)}</span></div>
     ${p.note ? `<div class="ta-modal-text">備註:${escapeHtml(p.note)}</div>` : ''}
     ${costNotice}
+    ${missingMaterialNotice}
     <div class="ta-detail-stats">
       ${hasVariants ? `
         <div><div class="ta-stat-label">規格組合數</div><div class="ta-stat-value">${Object.keys(p.variantSkus || {}).length} 個</div></div>
