@@ -728,9 +728,9 @@ function saveMaterialsToCache() {
   }
 }
 
-// 開頁時只用:有快取就直接沿用(不主動問伺服器有沒有變動),沒有快取才整包讀一次。
-// 成品列表本身不需要材料資料,只有點開成品詳情時才需要,所以開頁時不必急著同步,
-// 交給 syncMaterialsDeltaThrottled() 在真正需要的時候處理。
+// 開頁時只用:有快取就直接沿用,沒有快取才整包讀一次;是否需要再另外問一次「有沒有變動」,
+// 交給呼叫端(initData)決定——現在成品列表會顯示「⚠️有異動」,需要材料資料夠新,所以開頁時
+// 還是會做一次 delta 同步,只是這裡本身不主動做,避免這個函式的職責跟節流邏輯耦合在一起。
 let lastMaterialsSyncCheckAt = 0;
 async function initMaterialsForBom() {
   const hasCache = loadMaterialsFromCache();
@@ -854,6 +854,10 @@ let productOptions = { categories: [], categoryCodes: {}, disabledCategories: []
 
 async function initData() {
   await initMaterialsForBom();
+  // 成品列表現在會顯示「⚠️有異動」(依賴材料目前的成本),所以開頁時要先確認一次材料資料夠新。
+  // 如果 initMaterialsForBom() 剛整包讀完,lastMaterialsSyncCheckAt 已經是最新,這裡會自動跳過,
+  // 不會產生多餘的查詢;只有沿用舊快取時,才會真的觸發這次的 delta 同步。
+  await syncMaterialsDeltaThrottled();
 
   const prodSnap = await getDocs(collection(db, 'products'));
   products = prodSnap.docs.map(d => ({ id: d.id, ...d.data() }));
