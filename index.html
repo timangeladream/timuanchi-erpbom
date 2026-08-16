@@ -1348,22 +1348,6 @@ function removeMaterialsLocal(materialIds) {
   renderSummary();
 }
 
-// 全部材料整批重讀(找不到明確受影響的材料 id 清單時使用,例如大量匯入)
-async function reloadAllMaterialsLocal() {
-  const snap = await getDocs(collection(db, 'materials'));
-  materials = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  let maxSeen = 0;
-  snap.docs.forEach(d => {
-    const ts = d.data().updatedAt;
-    if (ts && ts.toMillis && ts.toMillis() > maxSeen) maxSeen = ts.toMillis();
-  });
-  localStorage.setItem(MATERIALS_SYNC_TIME_KEY, String(maxSeen || Date.now()));
-  saveMaterialsToCache();
-  renderFilters();
-  renderTable();
-  renderSummary();
-}
-
 // 寫入 settings/options 成功後呼叫:重新讀那份設定,更新畫面
 async function refreshOptionsLocal() {
   const optRef = doc(db, 'settings', 'options');
@@ -3636,6 +3620,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
     const ops = []; // { ref, data, opType }
     let totalRows = 0;
     importParsedGroups.forEach(g => totalRows += g.rows.length);
+    const touchedMaterialIds = []; // 這次匯入實際新增/累加到的材料 id,匯入完後只重讀這些,不用整包重讀
 
     for (const [groupIdx, g] of importParsedGroups.entries()) {
       let materialId = g.existingId;
@@ -3711,6 +3696,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
         currentUnitCost: runningCost, currentUnitCostWeightedAvg: runningWeightedAvg,
         lastPurchaseDate, updatedAt: serverTimestamp(),
       }});
+      touchedMaterialIds.push(materialId);
     }
 
     // 分批寫入(Firestore 單一批次上限 500 個操作)
@@ -3728,7 +3714,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
       progressEl.textContent = `匯入中... 已寫入 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作`;
     }
 
-    await reloadAllMaterialsLocal();
+    await refreshMaterialsLocal(touchedMaterialIds);
 
     progressEl.textContent = `匯入完成!共處理 ${totalRows} 筆進貨紀錄。`;
     document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
