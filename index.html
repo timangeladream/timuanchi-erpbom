@@ -3151,6 +3151,11 @@ function renderTimeline(logs, unit, materialId) {
       detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
         原因：${escapeHtml(log.reason || '')}<br>
         消耗調整：${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${escapeHtml(unit)}`;
+    } else if (log.type === 'posSaleConfirm') {
+      typeLabel = 'POS銷售確認'; cls = 'production';
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
+        訂單：${escapeHtml(log.orderId || '')}<br>
+        消耗：${log.consumedQuantity} ${escapeHtml(unit)}(已預留 → 真正扣除,累計銷售數量 +${log.salesConfirmedQuantity || 0})`;
     } else if (log.type === 'historyMigration') {
       typeLabel = '歷史資料搬遷'; cls = 'migration';
       detail = `庫存：${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff >= 0 ? '+' : ''}${log.diff})<br>

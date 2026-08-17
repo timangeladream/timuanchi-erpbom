@@ -276,6 +276,17 @@
   }
   .ta-drawer-item:hover { background: var(--bg); }
   .ta-drawer-item--danger { color: var(--danger); }
+  .ta-drawer-pos-status { padding: 4px 12px; font-size: 12px; color: var(--text-muted); }
+
+  .ta-pos-map-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .ta-pos-map-name { flex: 1; font-size: 13px; }
+  .ta-pos-map-summary { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .ta-pos-target-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+  .ta-pos-target-row select { flex: 1; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .ta-pos-target-row input { width: 70px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .ta-pos-preview-row { padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .ta-pos-preview-item { padding: 2px 0 2px 16px; font-size: 12px; color: var(--text-muted); }
+  .ta-pos-preview-item--warn { color: var(--warn); }
 
   .ta-placeholder {
     background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
@@ -348,6 +359,12 @@
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item" id="openProductCategoryManageBtn">分類管理</button>
   <button class="ta-drawer-item" id="openExportRecipeBtn">匯出配方</button>
+  <div class="ta-drawer-divider"></div>
+  <div class="ta-drawer-pos-status" id="posLoginStatus">POS：尚未登入</div>
+  <button class="ta-drawer-item" id="openPosLoginBtn">登入 POS</button>
+  <button class="ta-drawer-item" id="openPosMappingBtn">POS 商品對應設定</button>
+  <button class="ta-drawer-item" id="openPosSyncBtn">同步 POS 銷售</button>
+  <button class="ta-drawer-item" id="openPosSyncLogsBtn">POS 同步紀錄</button>
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item ta-drawer-item--danger" id="logoutBtn">登出</button>
 </aside>
@@ -547,6 +564,88 @@
   </div>
 </div>
 
+<!-- POS 登入 Modal -->
+<div class="ta-modal-overlay" id="posLoginModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="posLoginModal">✕</span>
+    <h2>登入 POS</h2>
+    <div class="ta-modal-text">這是另一個獨立的 Firebase 專案,需要用你的 POS 管理員帳號另外登入一次,才能讀取銷售紀錄。</div>
+    <div class="ta-form-row">
+      <label>POS 帳號</label>
+      <input type="email" id="posLoginEmail" autocomplete="username">
+    </div>
+    <div class="ta-form-row">
+      <label>POS 密碼</label>
+      <input type="password" id="posLoginPassword" autocomplete="current-password">
+    </div>
+    <div class="ta-modal-text" id="posLoginError" style="color:var(--danger);"></div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="posLoginModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="posLoginBtn">登入</button>
+    </div>
+  </div>
+</div>
+
+<!-- POS 商品對應設定 Modal -->
+<div class="ta-modal-overlay" id="posMappingModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="posMappingModal">✕</span>
+    <h2>POS 商品對應設定</h2>
+    <div class="ta-modal-text">設定每個 POS 商品(規格)賣出時,要對應扣哪個 BOM 成品(規格)的材料。大部分是一對一、數量填1;如果一個 POS 商品其實是好幾個 BOM 成品的組合包,可以新增多筆對應。</div>
+    <div class="ta-form-row">
+      <input type="text" id="posMappingSearchInput" placeholder="搜尋 POS 商品名稱...">
+    </div>
+    <div id="posMappingList"></div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn ta-btn-primary" data-close="posMappingModal">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- POS 商品對應編輯 Modal -->
+<div class="ta-modal-overlay" id="posMappingEditModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="posMappingEditModal">✕</span>
+    <h2 id="posMappingEditTitle">設定對應</h2>
+    <div id="posMappingEditTargets"></div>
+    <button type="button" class="ta-btn ta-btn-sm" id="posMappingAddTargetBtn">＋ 新增對應項目</button>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="posMappingEditModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="posMappingSaveBtn">儲存對應</button>
+    </div>
+  </div>
+</div>
+
+<!-- POS 銷售同步 Modal -->
+<div class="ta-modal-overlay" id="posSyncModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="posSyncModal">✕</span>
+    <h2>同步 POS 銷售</h2>
+    <div id="posSyncFirstTimeRow" class="ta-form-row ta-is-hidden">
+      <label>第一次同步,請選擇同步起始時間(只會處理這個時間之後的訂單)</label>
+      <input type="date" id="posSyncStartDate">
+    </div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="posSyncModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="posSyncPreviewBtn">抓取預覽</button>
+    </div>
+    <hr class="ta-section-divider">
+    <div id="posSyncPreviewResult"></div>
+    <div class="ta-modal-actions ta-is-hidden" id="posSyncConfirmRow">
+      <button class="ta-btn ta-btn-primary" id="posSyncConfirmBtn">確認執行同步</button>
+    </div>
+  </div>
+</div>
+
+<!-- POS 同步紀錄 Modal -->
+<div class="ta-modal-overlay" id="posSyncLogsModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="posSyncLogsModal">✕</span>
+    <h2>POS 同步紀錄</h2>
+    <div id="posSyncLogsList"></div>
+  </div>
+</div>
+
 <!-- 編輯配方 / 設定分類必備材料組合 Modal(共用同一套介面) -->
 <div class="ta-modal-overlay" id="productRecipeModal">
   <div class="ta-modal ta-modal--wide">
@@ -711,6 +810,28 @@ const auth = getAuth(app);
 // 切換焦點、或分頁閒置時的「主分頁」租約續約失敗時,整批取消並重新註冊所有監聽,
 // 造成不易預期的讀取量。改用預設的記憶體快取,兩個分頁各自獨立連線,不互相協調。
 const db = getFirestore(app);
+
+// ---------- POS 系統(另一個獨立的 Firebase 專案,POS 銷售同步用) ----------
+// 跟材料/BOM系統的登入完全分開,需要另外用 POS 的帳號登入這個第二個 app 實例
+const posFirebaseConfig = {
+  apiKey: "AIzaSyAdUjtB_b2ArOnFhDlZLG_EsIVeE-3NG1M",
+  authDomain: "timuanchi2026pos.firebaseapp.com",
+  projectId: "timuanchi2026pos",
+  storageBucket: "timuanchi2026pos.firebasestorage.app",
+  messagingSenderId: "816721531919",
+  appId: "1:816721531919:web:05c3fcd1a0f4c4a053bf7a"
+};
+const posApp = initializeApp(posFirebaseConfig, 'posApp');
+const posAuth = getAuth(posApp);
+const posDb = getFirestore(posApp);
+let posUser = null;
+let posProductsCache = []; // POS settings/system 讀回來的商品扁平陣列(含規格)
+let posMappingsCache = []; // 本地(ERP+BOM) posProductMappings 集合的快取
+
+onAuthStateChanged(posAuth, user => {
+  posUser = user;
+  document.getElementById('posLoginStatus').textContent = user ? `POS：已登入 ${user.email}` : 'POS：尚未登入';
+});
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2406,6 +2527,436 @@ function openShipmentCorrectionModal(log) {
   closeModal('shipmentLogsModal');
   openModal('shipmentFormModal');
 }
+
+// ---------- POS 銷售同步 ----------
+// 核心邏輯跟「登記出貨(非銷售)」是同一套引擎(釋放已預留、真扣庫存、扣減已製作未售出),
+// 差別只在觸發來源是 POS 訂單、累加的是「累計銷售數量」不是「累計非銷售數量」。
+
+document.getElementById('openPosLoginBtn').addEventListener('click', () => {
+  closeDrawer();
+  document.getElementById('posLoginError').textContent = '';
+  document.getElementById('posLoginEmail').value = '';
+  document.getElementById('posLoginPassword').value = '';
+  openModal('posLoginModal');
+});
+
+document.getElementById('posLoginBtn').addEventListener('click', async () => {
+  const email = document.getElementById('posLoginEmail').value.trim();
+  const password = document.getElementById('posLoginPassword').value;
+  const errEl = document.getElementById('posLoginError');
+  errEl.textContent = '';
+  try {
+    await signInWithEmailAndPassword(posAuth, email, password);
+    closeModal('posLoginModal');
+  } catch (e) {
+    errEl.textContent = '登入失敗:帳號或密碼錯誤';
+  }
+});
+
+async function loadPosProducts() {
+  const snap = await getDoc(doc(posDb, 'settings', 'system'));
+  posProductsCache = snap.exists() ? (snap.data().products || []) : [];
+}
+
+async function loadPosMappings() {
+  const snap = await getDocs(collection(db, 'posProductMappings'));
+  posMappingsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+function findMappingFor(posProductId, posVariantKey) {
+  return posMappingsCache.find(m => m.posProductId === posProductId && (m.posVariantKey || null) === (posVariantKey || null));
+}
+
+// 把一個 POS 商品攤平成「每個可購買單位各一筆」:沒有規格就自己一筆,有規格就每個 comboKey 各一筆
+function posProductVariantRows(p) {
+  if (!p.variantStock || !Object.keys(p.variantStock).length) {
+    return [{ posProductId: p.id, posVariantKey: null, label: p.name }];
+  }
+  const dimNames = p.variantKeyOrder || Object.keys(p.variants || {});
+  return Object.keys(p.variantStock).map(comboKey => {
+    const values = comboKey.split(',');
+    const labelParts = dimNames.map((d, i) => values[i]).filter(Boolean);
+    return { posProductId: p.id, posVariantKey: comboKey, label: `${p.name}(${labelParts.join(' / ')})` };
+  });
+}
+
+// ---------- POS 商品對應設定 ----------
+let posMappingRows = [];
+
+async function openPosMappingModal() {
+  closeDrawer();
+  if (!posUser) { alert('請先登入 POS'); return; }
+  await Promise.all([loadPosProducts(), loadPosMappings()]);
+  posMappingRows = [];
+  posProductsCache.forEach(p => posProductVariantRows(p).forEach(row => posMappingRows.push(row)));
+  document.getElementById('posMappingSearchInput').value = '';
+  renderPosMappingList();
+  openModal('posMappingModal');
+}
+document.getElementById('openPosMappingBtn').addEventListener('click', openPosMappingModal);
+
+function renderPosMappingList() {
+  const keyword = document.getElementById('posMappingSearchInput').value.trim().toLowerCase();
+  const listEl = document.getElementById('posMappingList');
+  const filtered = keyword ? posMappingRows.filter(r => r.label.toLowerCase().includes(keyword)) : posMappingRows;
+  if (!filtered.length) { listEl.innerHTML = '<div class="ta-empty-hint">沒有符合的 POS 商品</div>'; return; }
+  listEl.innerHTML = filtered.map(r => {
+    const mapping = findMappingFor(r.posProductId, r.posVariantKey);
+    const summary = mapping && (mapping.bomTargets || []).length
+      ? mapping.bomTargets.map(t => {
+          const p = products.find(x => x.id === t.bomProductId);
+          const name = p ? (t.bomVariantKey ? `${p.name}(${(p.variantSkus || {})[t.bomVariantKey] || t.bomVariantKey})` : p.name) : '(成品已刪除)';
+          return `${name} ×${t.quantityPerUnit}`;
+        }).join('、')
+      : '尚未設定對應';
+    return `
+      <div class="ta-pos-map-row" data-pos-product-id="${escapeHtml(r.posProductId)}" data-pos-variant-key="${escapeHtml(r.posVariantKey || '')}">
+        <div style="flex:1;">
+          <div class="ta-pos-map-name">${escapeHtml(r.label)}</div>
+          <div class="ta-pos-map-summary">${escapeHtml(summary)}</div>
+        </div>
+        <button type="button" class="ta-btn ta-btn-sm" data-edit-pos-mapping>設定</button>
+      </div>
+    `;
+  }).join('');
+  listEl.querySelectorAll('[data-edit-pos-mapping]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('.ta-pos-map-row');
+      openPosMappingEditModal(row.dataset.posProductId, row.dataset.posVariantKey || null);
+    });
+  });
+}
+document.getElementById('posMappingSearchInput').addEventListener('input', renderPosMappingList);
+
+let posMappingEditContext = null; // { posProductId, posVariantKey, targets: [{bomProductId, bomVariantKey, quantityPerUnit}] }
+
+function bomTargetOptionsHtml(selectedProductId, selectedVariantKey) {
+  let options = '<option value="">請選擇成品</option>';
+  products.forEach(p => {
+    const hasVariants = Object.keys(p.variantSkus || {}).length > 0;
+    if (!hasVariants) {
+      const sel = (p.id === selectedProductId && !selectedVariantKey) ? 'selected' : '';
+      options += `<option value="${escapeHtml(p.id)}|" ${sel}>${escapeHtml(p.name)}</option>`;
+    } else {
+      Object.keys(p.variantSkus).forEach(key => {
+        const sel = (p.id === selectedProductId && key === selectedVariantKey) ? 'selected' : '';
+        options += `<option value="${escapeHtml(p.id)}|${escapeHtml(key)}" ${sel}>${escapeHtml(p.name)}(${escapeHtml(p.variantSkus[key] || key)})</option>`;
+      });
+    }
+  });
+  return options;
+}
+
+function openPosMappingEditModal(posProductId, posVariantKey) {
+  const existing = findMappingFor(posProductId, posVariantKey);
+  posMappingEditContext = {
+    posProductId, posVariantKey,
+    targets: existing ? (existing.bomTargets || []).map(t => ({ ...t })) : [],
+  };
+  const row = posMappingRows.find(r => r.posProductId === posProductId && (r.posVariantKey || null) === (posVariantKey || null));
+  document.getElementById('posMappingEditTitle').textContent = `設定對應：${row ? row.label : ''}`;
+  renderPosMappingEditTargets();
+  openModal('posMappingEditModal');
+}
+
+function renderPosMappingEditTargets() {
+  const ctx = posMappingEditContext;
+  if (!ctx.targets.length) ctx.targets.push({ bomProductId: '', bomVariantKey: null, quantityPerUnit: 1 });
+  const wrap = document.getElementById('posMappingEditTargets');
+  wrap.innerHTML = ctx.targets.map((t, idx) => `
+    <div class="ta-pos-target-row" data-idx="${idx}">
+      <select data-target-select>${bomTargetOptionsHtml(t.bomProductId, t.bomVariantKey)}</select>
+      <input type="number" min="0" step="any" value="${t.quantityPerUnit}" data-target-qty placeholder="數量">
+      <span class="ta-recipe-row-del" data-target-del>移除</span>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('[data-target-select]').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const idx = Number(sel.closest('.ta-pos-target-row').dataset.idx);
+      const [bomProductId, bomVariantKey] = sel.value.split('|');
+      ctx.targets[idx].bomProductId = bomProductId || '';
+      ctx.targets[idx].bomVariantKey = bomVariantKey || null;
+    });
+  });
+  wrap.querySelectorAll('[data-target-qty]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const idx = Number(inp.closest('.ta-pos-target-row').dataset.idx);
+      ctx.targets[idx].quantityPerUnit = Number(inp.value) || 0;
+    });
+  });
+  wrap.querySelectorAll('[data-target-del]').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = Number(el.closest('.ta-pos-target-row').dataset.idx);
+      ctx.targets.splice(idx, 1);
+      renderPosMappingEditTargets();
+    });
+  });
+}
+
+document.getElementById('posMappingAddTargetBtn').addEventListener('click', () => {
+  posMappingEditContext.targets.push({ bomProductId: '', bomVariantKey: null, quantityPerUnit: 1 });
+  renderPosMappingEditTargets();
+});
+
+document.getElementById('posMappingSaveBtn').addEventListener('click', async () => {
+  const ctx = posMappingEditContext;
+  const validTargets = ctx.targets.filter(t => t.bomProductId && t.quantityPerUnit > 0);
+  const btn = document.getElementById('posMappingSaveBtn');
+  btn.disabled = true;
+  try {
+    const existing = findMappingFor(ctx.posProductId, ctx.posVariantKey);
+    const row = posMappingRows.find(r => r.posProductId === ctx.posProductId && (r.posVariantKey || null) === (ctx.posVariantKey || null));
+    const payload = {
+      posProductId: ctx.posProductId,
+      posVariantKey: ctx.posVariantKey || null,
+      posProductName: row ? row.label : '',
+      bomTargets: validTargets,
+      updatedAt: serverTimestamp(),
+    };
+    if (existing) await updateDoc(doc(db, 'posProductMappings', existing.id), payload);
+    else await addDoc(collection(db, 'posProductMappings'), payload);
+    await loadPosMappings();
+    renderPosMappingList();
+    closeModal('posMappingEditModal');
+  } catch (e) {
+    alert('儲存失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- 同步 POS 銷售 ----------
+let posSyncPreviewData = null; // { orders: [{order, itemResults, unmapped}], watermarkMillis }
+
+document.getElementById('openPosSyncBtn').addEventListener('click', async () => {
+  closeDrawer();
+  if (!posUser) { alert('請先登入 POS'); return; }
+  const syncSettingsSnap = await getDoc(doc(db, 'settings', 'posSync'));
+  const hasWatermark = syncSettingsSnap.exists() && syncSettingsSnap.data().lastSyncTime;
+  document.getElementById('posSyncFirstTimeRow').classList.toggle('ta-is-hidden', !!hasWatermark);
+  if (!hasWatermark) document.getElementById('posSyncStartDate').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('posSyncPreviewResult').innerHTML = '';
+  document.getElementById('posSyncConfirmRow').classList.add('ta-is-hidden');
+  posSyncPreviewData = null;
+  openModal('posSyncModal');
+});
+
+document.getElementById('posSyncPreviewBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('posSyncPreviewBtn');
+  btn.disabled = true;
+  try {
+    const syncSettingsSnap = await getDoc(doc(db, 'settings', 'posSync'));
+    let watermarkMillis;
+    if (syncSettingsSnap.exists() && syncSettingsSnap.data().lastSyncTime) {
+      watermarkMillis = syncSettingsSnap.data().lastSyncTime.toMillis();
+    } else {
+      const dateStr = document.getElementById('posSyncStartDate').value;
+      if (!dateStr) { alert('請選擇同步起始時間'); return; }
+      watermarkMillis = new Date(dateStr).getTime();
+    }
+    const watermark = Timestamp.fromMillis(watermarkMillis);
+
+    const salesSnap = await getDocs(query(collection(posDb, 'sales'), where('timestamp', '>', watermark)));
+    const allOrders = salesSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.timestamp?.toMillis?.() || 0) - (b.timestamp?.toMillis?.() || 0));
+
+    // 排除已經處理過的訂單(用 posSyncedOrders 這份清單當真正的依據,不是只靠時間戳記)
+    const syncedFlags = await Promise.all(allOrders.map(o => getDoc(doc(db, 'posSyncedOrders', o.id))));
+    const newOrders = allOrders.filter((o, idx) => !syncedFlags[idx].exists());
+
+    await loadPosMappings();
+    const analyzed = newOrders.map(order => {
+      const items = (order.items || []).filter(item => !item.isDiscount);
+      const itemResults = items.map(item => {
+        const comboKey = item.selectedVariants && Object.keys(item.selectedVariants).length
+          ? Object.values(item.selectedVariants).join(',') : null;
+        const mapping = findMappingFor(item.id, comboKey);
+        return { item, comboKey, mapping };
+      });
+      const unmapped = itemResults.filter(r => !r.mapping || !(r.mapping.bomTargets || []).length);
+      return { order, itemResults, unmapped };
+    });
+
+    posSyncPreviewData = { orders: analyzed, watermarkMillis };
+    renderPosSyncPreview();
+    document.getElementById('posSyncConfirmRow').classList.toggle('ta-is-hidden', analyzed.length === 0);
+  } catch (e) {
+    alert('抓取失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function renderPosSyncPreview() {
+  const data = posSyncPreviewData;
+  const resultEl = document.getElementById('posSyncPreviewResult');
+  if (!data.orders.length) { resultEl.innerHTML = '<div class="ta-empty-hint">沒有新的訂單需要同步</div>'; return; }
+  const unmappedCount = data.orders.filter(o => o.unmapped.length > 0).length;
+  resultEl.innerHTML = `<div class="ta-modal-text">共 ${data.orders.length} 筆新訂單${unmappedCount ? `,其中 ${unmappedCount} 筆有商品沒對應成功` : ''}</div>`
+    + data.orders.map(o => {
+      const time = o.order.timestamp?.toDate ? o.order.timestamp.toDate().toLocaleString('zh-TW') : '';
+      const items = o.itemResults.map(r => {
+        const mapped = r.mapping && (r.mapping.bomTargets || []).length;
+        return `<div class="ta-pos-preview-item${mapped ? '' : ' ta-pos-preview-item--warn'}">${escapeHtml(r.item.name || '')} × ${r.item.quantity}${mapped ? '' : '(⚠️ 未對應)'}</div>`;
+      }).join('');
+      return `<div class="ta-pos-preview-row">${time}(訂單 ${escapeHtml(o.order.id)})${items}</div>`;
+    }).join('');
+}
+
+// 處理單一訂單:攤平出這張訂單牽涉到的所有 BOM 目標(成品+規格)各要扣幾件,
+// 用一個 transaction 把材料的已預留釋放+真扣庫存、成品已製作未售出扣減、
+// 標記這張訂單已處理完成,三件事綁在一起,避免中途失敗留下不上不下的狀態。
+async function processPosOrder(orderAnalysis) {
+  const order = orderAnalysis.order;
+  const orderRef = doc(db, 'posSyncedOrders', order.id);
+
+  const bomConsumption = new Map(); // key: productId|variantKey
+  for (const r of orderAnalysis.itemResults) {
+    if (!r.mapping) continue;
+    for (const target of (r.mapping.bomTargets || [])) {
+      const p = products.find(x => x.id === target.bomProductId);
+      if (!p) continue;
+      const key = `${target.bomProductId}|${target.bomVariantKey || ''}`;
+      const qty = (r.item.quantity || 1) * (target.quantityPerUnit || 0);
+      if (!bomConsumption.has(key)) {
+        const recipe = (target.bomVariantKey ? (p.variantRecipes || {})[target.bomVariantKey] : p.recipe) || [];
+        bomConsumption.set(key, { productId: target.bomProductId, variantKey: target.bomVariantKey || null, quantity: 0, recipe, productName: p.name });
+      }
+      bomConsumption.get(key).quantity += qty;
+    }
+  }
+
+  if (!bomConsumption.size) {
+    await setDoc(orderRef, { orderId: order.id, noMappedItems: true, timestamp: serverTimestamp() });
+    return { touchedMaterialIds: [], touchedProductIds: [] };
+  }
+
+  const materialIds = new Set();
+  bomConsumption.forEach(c => c.recipe.forEach(r => materialIds.add(r.materialId)));
+
+  await runTransaction(db, async (transaction) => {
+    const materialRefs = {};
+    const materialSnaps = {};
+    for (const id of materialIds) {
+      materialRefs[id] = doc(db, 'materials', id);
+      materialSnaps[id] = await transaction.get(materialRefs[id]);
+    }
+    const productRefs = {};
+    const productSnaps = {};
+    for (const c of bomConsumption.values()) {
+      if (!productRefs[c.productId]) {
+        productRefs[c.productId] = doc(db, 'products', c.productId);
+        productSnaps[c.productId] = await transaction.get(productRefs[c.productId]);
+      }
+    }
+
+    for (const c of bomConsumption.values()) {
+      for (const r of c.recipe) {
+        const snap = materialSnaps[r.materialId];
+        if (!snap.exists()) continue; // 材料已刪除,這部分消耗無法追蹤,略過不擋整筆同步
+        const data = snap.data();
+        const consumed = (r.quantity || 0) * c.quantity;
+        transaction.update(materialRefs[r.materialId], {
+          reservedStock: (data.reservedStock || 0) - consumed,
+          currentStock: (data.currentStock || 0) - consumed,
+          updatedAt: serverTimestamp(),
+        });
+        const histRef = doc(collection(db, 'materials', r.materialId, 'history'));
+        transaction.set(histRef, {
+          type: 'posSaleConfirm',
+          productId: c.productId, productName: c.productName, variantKey: c.variantKey, variantLabel: null,
+          orderId: order.id,
+          consumedQuantity: consumed,
+          salesConfirmedQuantity: consumed,
+          unitCost: data.currentUnitCostWeightedAvg || 0,
+          timestamp: serverTimestamp(),
+        });
+      }
+      const productSnap = productSnaps[c.productId];
+      if (productSnap && productSnap.exists()) {
+        const productData = productSnap.data();
+        if (c.variantKey) {
+          const variantPreMadeStock = { ...(productData.variantPreMadeStock || {}) };
+          variantPreMadeStock[c.variantKey] = (variantPreMadeStock[c.variantKey] || 0) - c.quantity;
+          transaction.update(productRefs[c.productId], { variantPreMadeStock, updatedAt: serverTimestamp() });
+        } else {
+          transaction.update(productRefs[c.productId], { preMadeStock: (productData.preMadeStock || 0) - c.quantity, updatedAt: serverTimestamp() });
+        }
+      }
+    }
+
+    transaction.set(orderRef, { orderId: order.id, timestamp: serverTimestamp() });
+  });
+
+  return { touchedMaterialIds: [...materialIds], touchedProductIds: [...bomConsumption.values()].map(c => c.productId) };
+}
+
+document.getElementById('posSyncConfirmBtn').addEventListener('click', async () => {
+  const data = posSyncPreviewData;
+  if (!data) return;
+  const btn = document.getElementById('posSyncConfirmBtn');
+  btn.disabled = true;
+  const touchedMaterialIds = new Set();
+  const touchedProductIds = new Set();
+  let processedCount = 0, unmappedOrderCount = 0;
+  const unmappedDetail = [];
+  try {
+    for (const o of data.orders) {
+      const result = await processPosOrder(o);
+      result.touchedMaterialIds.forEach(id => touchedMaterialIds.add(id));
+      result.touchedProductIds.forEach(id => touchedProductIds.add(id));
+      processedCount++;
+      if (o.unmapped.length) {
+        unmappedOrderCount++;
+        unmappedDetail.push({ orderId: o.order.id, items: o.unmapped.map(r => r.item.name || '') });
+      }
+    }
+
+    const maxMillis = Math.max(data.watermarkMillis, ...data.orders.map(o => o.order.timestamp?.toMillis?.() || 0));
+    await setDoc(doc(db, 'settings', 'posSync'), { lastSyncTime: Timestamp.fromMillis(maxMillis) }, { merge: true });
+
+    await addDoc(collection(db, 'posSyncLogs'), {
+      processedCount, unmappedOrderCount, unmappedDetail, timestamp: serverTimestamp(),
+    });
+
+    await refreshMaterialsLocal([...touchedMaterialIds]);
+    await Promise.all([...touchedProductIds].map(id => refreshProductLocal(id)));
+
+    alert(`同步完成:處理了 ${processedCount} 筆訂單${unmappedOrderCount ? `,其中 ${unmappedOrderCount} 筆有商品未對應成功` : ''}`);
+    closeModal('posSyncModal');
+  } catch (e) {
+    alert('同步失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('openPosSyncLogsBtn').addEventListener('click', async () => {
+  closeDrawer();
+  const snap = await getDocs(collection(db, 'posSyncLogs'));
+  const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+  const listEl = document.getElementById('posSyncLogsList');
+  if (!logs.length) {
+    listEl.innerHTML = '<div class="ta-empty-hint">尚無同步紀錄</div>';
+  } else {
+    listEl.innerHTML = logs.map(log => {
+      const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('zh-TW') : '(時間處理中)';
+      const unmappedText = log.unmappedOrderCount
+        ? `<div class="ta-production-logs-info" style="color:var(--warn);">⚠️ ${log.unmappedOrderCount} 筆訂單有商品未對應成功</div>` : '';
+      return `
+        <div class="ta-production-logs-row">
+          <div>
+            <div class="ta-production-logs-info">處理了 ${log.processedCount} 筆訂單</div>
+            ${unmappedText}
+            <div class="ta-production-logs-time">${time}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+  openModal('posSyncLogsModal');
+});
 
 // ---------- 編輯配方 / 設定分類必備材料(共用同一套彈窗+搜尋邏輯) ----------
 let currentRecipe = []; // 目前編輯中的配方(尚未儲存): [{materialId, quantity}]
