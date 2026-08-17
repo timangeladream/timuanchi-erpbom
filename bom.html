@@ -648,7 +648,7 @@ import {
 import {
   getFirestore,
   collection, collectionGroup, doc, getDoc, getDocs, addDoc, updateDoc, setDoc, deleteDoc,
-  query, where, orderBy, serverTimestamp, Timestamp, writeBatch, runTransaction, deleteField,
+  query, where, serverTimestamp, Timestamp, writeBatch, runTransaction, deleteField,
   getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -1981,8 +1981,10 @@ document.getElementById('productionFormSaveBtn').addEventListener('click', async
 });
 
 async function openProductionLogsModal(p) {
-  const logsSnap = await getDocs(query(collection(db, 'productionLogs'), where('productId', '==', p.id), orderBy('timestamp', 'desc')));
-  const logs = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // 只用 where 不加 orderBy,避免需要另外去 Firebase 主控台建立複合索引;筆數不多,直接在前端排序就好
+  const logsSnap = await getDocs(query(collection(db, 'productionLogs'), where('productId', '==', p.id)));
+  const logs = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
   const listEl = document.getElementById('productionLogsList');
   if (!logs.length) {
     listEl.innerHTML = '<div class="ta-empty-hint">尚無生產登記紀錄</div>';
