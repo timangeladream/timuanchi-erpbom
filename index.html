@@ -267,6 +267,7 @@
   .ta-timeline-type--edit { color: var(--text-muted); }
   .ta-timeline-type--production { color: var(--primary); }
   .ta-timeline-type--shipment { color: var(--accent); }
+  .ta-timeline-type--migration { color: var(--text-muted); }
   .ta-timeline-detail { font-size: 12px; color: var(--text); line-height: 1.6; }
   .ta-timeline-item--clickable { cursor: pointer; border-radius: 6px; padding: 4px 6px; margin-left: -6px; }
   .ta-timeline-item--clickable:hover { background: #eff3f7; }
@@ -1036,26 +1037,26 @@
   </div>
 </div>
 
-<!-- 歷史資料搬遷 Modal -->
+<!-- 歷史資料搬遷 Modal(新增一筆疊加調整 / 修正既有的某一筆調整,共用同一套介面) -->
 <div class="ta-modal-overlay" id="historyMigrationModal">
   <div class="ta-modal">
     <span class="ta-modal-close" data-close="historyMigrationModal">✕</span>
-    <h2>歷史資料搬遷</h2>
-    <div class="ta-modal-text">用來一次補登系統上線前的歷史消耗量:填入實際盤點到的庫存,以及過去已經消耗掉的材料裡,有多少是賣出、多少是非銷售(贈送/自用/損壞等)。</div>
+    <h2 id="hmTitle">歷史資料搬遷</h2>
+    <div class="ta-modal-text" id="hmDesc">用來補登系統上線前的歷史消耗量:填入調整後的實際庫存,以及這次要新增多少歷史銷售/非銷售數量(會疊加在原本已經記錄的數字上,不是取代)。之後要再調整,重新開一次這個功能疊加即可;如果是某一筆填錯了,可以直接點異動歷史裡那一筆進來修正。</div>
     <div class="ta-form-row">
-      <label>目前系統庫存(進貨累計)</label>
+      <label id="hmSystemStockLabel">調整前庫存</label>
       <input type="text" id="hmSystemStock" disabled>
     </div>
     <div class="ta-form-row">
-      <label>實際盤點庫存</label>
+      <label>調整後庫存(實際盤點到的數字)</label>
       <input type="number" id="hmActualStock">
     </div>
     <div class="ta-form-row">
-      <label>歷史銷售數量</label>
+      <label>這次新增的歷史銷售數量</label>
       <input type="number" id="hmSalesQty">
     </div>
     <div class="ta-form-row">
-      <label>歷史非銷售數量</label>
+      <label>這次新增的歷史非銷售數量</label>
       <input type="number" id="hmNonSalesQty">
     </div>
     <div class="ta-modal-text" id="hmCheckResult"></div>
@@ -3136,8 +3137,14 @@ function renderTimeline(logs, unit, materialId) {
       detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
         原因：${escapeHtml(log.reason || '')}<br>
         消耗調整：${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${escapeHtml(unit)}`;
+    } else if (log.type === 'historyMigration') {
+      typeLabel = '歷史資料搬遷'; cls = 'migration';
+      detail = `庫存：${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff >= 0 ? '+' : ''}${log.diff})<br>
+        這次新增歷史銷售：${log.salesQuantityAdded || 0} ${escapeHtml(unit)}<br>
+        這次新增歷史非銷售：${log.nonSalesQuantityAdded || 0} ${escapeHtml(unit)}<br>
+        <span style="color:var(--text-muted);font-size:12px;">(點這筆可以修正)</span>`;
     }
-    const clickable = log.type === 'purchase';
+    const clickable = log.type === 'purchase' || log.type === 'historyMigration';
     return `<div class="ta-timeline-item${clickable ? ' ta-timeline-item--clickable' : ''}"${clickable ? ` data-log-id="${escapeHtml(log.id)}"` : ''}>
       <div class="ta-timeline-time">${time}</div>
       <div class="ta-timeline-type ta-timeline-type--${cls}">${typeLabel}</div>
@@ -3148,7 +3155,9 @@ function renderTimeline(logs, unit, materialId) {
   el.querySelectorAll('.ta-timeline-item--clickable').forEach(itemEl => {
     itemEl.addEventListener('click', () => {
       const log = logs.find(l => l.id === itemEl.dataset.logId);
-      if (log) openEditPurchaseModal(materialId, log.id, log, unit);
+      if (!log) return;
+      if (log.type === 'historyMigration') openHistoryMigrationEditModal(materialId, log.id, log);
+      else openEditPurchaseModal(materialId, log.id, log, unit);
     });
   });
 }
@@ -3303,38 +3312,60 @@ document.getElementById('submitAdjustBtn').addEventListener('click', async () =>
 });
 
 // ---------- 歷史資料搬遷:系統上線前的舊資料一次性補登 ----------
-// 一次做兩件事:(1)沿用人工盤點調整的機制把庫存改成實際盤點到的數字
-// (2)把材料的 historicalSalesQuantity/historicalNonSalesQuantity 設定成填入的歷史拆分數字,
-// 這兩個欄位是「累計銷售數量」「累計非銷售數量」統計的起始值,之後系統裡真實發生的
-// 銷售確認/登記出貨,會疊加在這個起始值之上,不是取代它。
-let historyMigrationTargetMaterial = null;
+// 「新增」模式(點成品詳情最上面的按鈕):每次都是一筆新的、獨立的疊加調整,
+// 把這次填的數字疊加到材料的 historicalSalesQuantity/historicalNonSalesQuantity 上面(不是覆蓋),
+// 跟「進貨」「人工盤點調整」一樣,每次都是各自獨立的異動歷史紀錄。
+// 「編輯」模式(點異動歷史裡某一筆「歷史資料搬遷」紀錄進去修正):比照「編輯進貨紀錄」的做法,
+// 用這筆紀錄自己當初記錄的「調整前庫存」當基準(不是抓即時的目前庫存,才不會因為後來又有其他
+// 異動而讓基準跑掉),算出新舊數字的差額,把差額安全地套用到材料目前的即時狀態上,
+// 並且把這筆紀錄本身也更新成最新的數字。
+// historyMigrationContext: { mode:'new', material } 或 { mode:'edit', material, historyId, original }
+let historyMigrationContext = null;
 
 function openHistoryMigrationModal(m) {
-  historyMigrationTargetMaterial = m;
+  historyMigrationContext = { mode: 'new', material: m };
   const unit = m.unit || '';
+  document.getElementById('hmTitle').textContent = '歷史資料搬遷';
+  document.getElementById('hmSystemStockLabel').textContent = '調整前庫存(目前即時庫存)';
   document.getElementById('hmSystemStock').value = `${(m.currentStock || 0).toLocaleString()} ${unit}`;
   document.getElementById('hmActualStock').value = m.currentStock || 0;
-  document.getElementById('hmSalesQty').value = m.historicalSalesQuantity || 0;
-  document.getElementById('hmNonSalesQty').value = m.historicalNonSalesQuantity || 0;
+  document.getElementById('hmSalesQty').value = 0;
+  document.getElementById('hmNonSalesQty').value = 0;
+  updateHistoryMigrationCheck();
+  openModal('historyMigrationModal');
+}
+
+// 點異動歷史裡的「歷史資料搬遷」紀錄進來修正
+function openHistoryMigrationEditModal(materialId, historyId, log) {
+  const m = materials.find(x => x.id === materialId);
+  if (!m) return;
+  historyMigrationContext = { mode: 'edit', material: m, historyId, original: log };
+  const unit = m.unit || '';
+  document.getElementById('hmTitle').textContent = '修正歷史資料搬遷';
+  document.getElementById('hmSystemStockLabel').textContent = '調整前庫存(這筆紀錄當初的基準,不會變動)';
+  document.getElementById('hmSystemStock').value = `${(log.beforeQty || 0).toLocaleString()} ${unit}`;
+  document.getElementById('hmActualStock').value = log.afterQty || 0;
+  document.getElementById('hmSalesQty').value = log.salesQuantityAdded || 0;
+  document.getElementById('hmNonSalesQty').value = log.nonSalesQuantityAdded || 0;
   updateHistoryMigrationCheck();
   openModal('historyMigrationModal');
 }
 
 function updateHistoryMigrationCheck() {
-  const m = historyMigrationTargetMaterial;
-  if (!m) return;
-  const systemStock = m.currentStock || 0;
+  const ctx = historyMigrationContext;
+  if (!ctx) return;
+  const anchor = ctx.mode === 'edit' ? (ctx.original.beforeQty || 0) : (ctx.material.currentStock || 0);
   const actual = parseFloat(document.getElementById('hmActualStock').value) || 0;
   const sales = parseFloat(document.getElementById('hmSalesQty').value) || 0;
   const nonSales = parseFloat(document.getElementById('hmNonSalesQty').value) || 0;
   const sum = actual + sales + nonSales;
-  const diff = systemStock - sum;
+  const diff = anchor - sum;
   const resultEl = document.getElementById('hmCheckResult');
   if (Math.abs(diff) < 0.001) {
-    resultEl.innerHTML = `✓ 數字吻合(實際盤點庫存 + 歷史銷售 + 歷史非銷售 = 目前系統庫存)`;
+    resultEl.innerHTML = `✓ 數字吻合(調整後庫存 + 這次新增歷史銷售 + 這次新增歷史非銷售 = 調整前庫存)`;
     resultEl.style.color = 'var(--success)';
   } else {
-    resultEl.innerHTML = `⚠️ 三格加總是 ${sum.toLocaleString()}，跟目前系統庫存 ${systemStock.toLocaleString()} 差了 ${diff.toLocaleString()}(不會擋你送出，只是提醒)`;
+    resultEl.innerHTML = `⚠️ 三格加總是 ${sum.toLocaleString()}，跟調整前庫存 ${anchor.toLocaleString()} 差了 ${diff.toLocaleString()}(不會擋你送出，只是提醒)`;
     resultEl.style.color = 'var(--warn)';
   }
 }
@@ -3344,32 +3375,49 @@ function updateHistoryMigrationCheck() {
 });
 
 document.getElementById('submitHistoryMigrationBtn').addEventListener('click', async () => {
-  const m = historyMigrationTargetMaterial;
-  if (!m) return;
+  const ctx = historyMigrationContext;
+  if (!ctx) return;
   const actual = parseFloat(document.getElementById('hmActualStock').value);
   const sales = parseFloat(document.getElementById('hmSalesQty').value);
   const nonSales = parseFloat(document.getElementById('hmNonSalesQty').value);
-  if (isNaN(actual) || actual < 0) { alert('請輸入正確的實際盤點庫存'); return; }
-  if (isNaN(sales) || sales < 0) { alert('請輸入正確的歷史銷售數量'); return; }
-  if (isNaN(nonSales) || nonSales < 0) { alert('請輸入正確的歷史非銷售數量'); return; }
+  if (isNaN(actual) || actual < 0) { alert('請輸入正確的調整後庫存'); return; }
+  if (isNaN(sales)) { alert('請輸入正確的歷史銷售數量'); return; }
+  if (isNaN(nonSales)) { alert('請輸入正確的歷史非銷售數量'); return; }
 
   const btn = document.getElementById('submitHistoryMigrationBtn');
   btn.disabled = true;
   try {
-    const before = m.currentStock || 0;
-    if (actual !== before) {
+    const m = ctx.material;
+    if (ctx.mode === 'new') {
+      const before = m.currentStock || 0;
       await addDoc(collection(db, 'materials', m.id, 'history'), {
-        type: 'adjust', target: 'primary',
-        beforeQty: before, afterQty: actual, diff: actual - before, reason: '歷史資料搬遷',
+        type: 'historyMigration',
+        beforeQty: before, afterQty: actual, diff: actual - before,
+        salesQuantityAdded: sales, nonSalesQuantityAdded: nonSales,
         timestamp: serverTimestamp(),
       });
+      await updateDoc(doc(db, 'materials', m.id), {
+        currentStock: actual,
+        historicalSalesQuantity: (m.historicalSalesQuantity || 0) + sales,
+        historicalNonSalesQuantity: (m.historicalNonSalesQuantity || 0) + nonSales,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      const original = ctx.original;
+      const actualDiff = actual - (original.afterQty || 0);
+      const salesDiff = sales - (original.salesQuantityAdded || 0);
+      const nonSalesDiff = nonSales - (original.nonSalesQuantityAdded || 0);
+      await updateDoc(doc(db, 'materials', m.id, 'history', ctx.historyId), {
+        afterQty: actual, diff: actual - (original.beforeQty || 0),
+        salesQuantityAdded: sales, nonSalesQuantityAdded: nonSales,
+      });
+      await updateDoc(doc(db, 'materials', m.id), {
+        currentStock: (m.currentStock || 0) + actualDiff,
+        historicalSalesQuantity: (m.historicalSalesQuantity || 0) + salesDiff,
+        historicalNonSalesQuantity: (m.historicalNonSalesQuantity || 0) + nonSalesDiff,
+        updatedAt: serverTimestamp(),
+      });
     }
-    await updateDoc(doc(db, 'materials', m.id), {
-      currentStock: actual,
-      historicalSalesQuantity: sales,
-      historicalNonSalesQuantity: nonSales,
-      updatedAt: serverTimestamp(),
-    });
     await refreshMaterialLocal(m.id);
     closeModal('historyMigrationModal');
     openDetail(m.id);
