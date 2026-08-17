@@ -2012,7 +2012,8 @@ document.getElementById('productionFormSaveBtn').addEventListener('click', async
   const ctx = productionFormContext;
   if (!ctx) return;
   const qty = Math.max(0, Math.floor(Number(document.getElementById('pfQuantity').value) || 0));
-  if (qty <= 0) { alert('請輸入大於 0 的製作件數'); return; }
+  // 新增登記一定要大於0件(不然沒有意義);修正時允許改成0,等於直接把整筆登記作廢
+  if (ctx.mode === 'new' && qty <= 0) { alert('請輸入大於 0 的製作件數'); return; }
   const recipe = ctx.recipe || [];
   if (!recipe.length) { alert('這個成品(規格)還沒有設定配方,無法登記生產'); return; }
   if (recipe.some(r => !materials.find(m => m.id === r.materialId))) {
@@ -2319,7 +2320,8 @@ document.getElementById('shipmentFormSaveBtn').addEventListener('click', async (
   const ctx = shipmentFormContext;
   if (!ctx) return;
   const qty = Math.max(0, Math.floor(Number(document.getElementById('sfQuantity').value) || 0));
-  if (qty <= 0) { alert('請輸入大於 0 的件數'); return; }
+  // 新增登記一定要大於0件(不然沒有意義);修正時允許改成0,等於直接把整筆登記作廢
+  if (ctx.mode === 'new' && qty <= 0) { alert('請輸入大於 0 的件數'); return; }
   const recipe = ctx.recipe || [];
   if (!recipe.length) { alert('這個成品(規格)沒有配方,無法登記出貨'); return; }
   if (recipe.some(r => !materials.find(m => m.id === r.materialId))) {
