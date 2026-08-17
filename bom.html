@@ -570,14 +570,16 @@
     <span class="ta-modal-close" data-close="posLoginModal">✕</span>
     <h2>登入 POS</h2>
     <div class="ta-modal-text">這是另一個獨立的 Firebase 專案,需要用你的 POS 管理員帳號另外登入一次,才能讀取銷售紀錄。</div>
-    <div class="ta-form-row">
-      <label>POS 帳號</label>
-      <input type="email" id="posLoginEmail" autocomplete="username">
-    </div>
-    <div class="ta-form-row">
-      <label>POS 密碼</label>
-      <input type="password" id="posLoginPassword" autocomplete="current-password">
-    </div>
+    <form id="posLoginForm" onsubmit="return false;">
+      <div class="ta-form-row">
+        <label>POS 帳號</label>
+        <input type="email" id="posLoginEmail" autocomplete="username">
+      </div>
+      <div class="ta-form-row">
+        <label>POS 密碼</label>
+        <input type="password" id="posLoginPassword" autocomplete="current-password">
+      </div>
+    </form>
     <div class="ta-modal-text" id="posLoginError" style="color:var(--danger);"></div>
     <div class="ta-modal-actions">
       <button class="ta-btn" data-close="posLoginModal">取消</button>
@@ -2570,13 +2572,16 @@ function findMappingFor(posProductId, posVariantKey) {
 // 把一個 POS 商品攤平成「每個可購買單位各一筆」:沒有規格就自己一筆,有規格就每個 comboKey 各一筆
 function posProductVariantRows(p) {
   if (!p.variantStock || !Object.keys(p.variantStock).length) {
-    return [{ posProductId: p.id, posVariantKey: null, label: p.name }];
+    const label = p.sku ? `${p.name}(貨號:${p.sku})` : p.name;
+    return [{ posProductId: p.id, posVariantKey: null, label, sku: p.sku || '' }];
   }
   const dimNames = p.variantKeyOrder || Object.keys(p.variants || {});
   return Object.keys(p.variantStock).map(comboKey => {
     const values = comboKey.split(',');
     const labelParts = dimNames.map((d, i) => values[i]).filter(Boolean);
-    return { posProductId: p.id, posVariantKey: comboKey, label: `${p.name}(${labelParts.join(' / ')})` };
+    const sku = (p.variantSkus || {})[comboKey] || '';
+    const label = `${p.name}(${labelParts.join(' / ')}${sku ? '，規格貨號:' + sku : ''})`;
+    return { posProductId: p.id, posVariantKey: comboKey, label, sku };
   });
 }
 
