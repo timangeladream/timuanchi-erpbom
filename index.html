@@ -2955,7 +2955,12 @@ async function openDetail(id) {
   const adjustCount = logs.filter(log => log.type === 'adjust').length;
   document.getElementById('historyHeading').textContent = `完整異動歷史（進貨：${purchaseCount}次、人工盤點調整：${adjustCount}次）`;
 
-  const totalPurchasedQty = logs.reduce((sum, log) => sum + (log.type === 'purchase' ? (log.quantity || 0) : 0), 0);
+  // 總進貨數量 = 正品 + 短少 + 報廢 + 次品(這批貨物理上總共收到/處理過的量,不管後來分類到哪裡);
+  // 不含「損耗」,因為損耗是生產登記時做東西才會發生的事,跟進貨是不相干的兩個階段
+  const totalPurchasedQty = logs.reduce((sum, log) => {
+    if (log.type !== 'purchase') return sum;
+    return sum + (log.quantity || 0) + (log.shortageQuantity || 0) + (log.scrapQuantity || 0) + (log.secondaryQuantity || 0);
+  }, 0);
   const totalPurchasedValue = logs.reduce((sum, log) => sum + (log.type === 'purchase' ? (log.twdAmount || 0) : 0), 0);
   document.getElementById('totalPurchasedQtyStat').textContent = `${totalPurchasedQty.toLocaleString()} ${unit}`;
   document.getElementById('totalPurchasedValueStat').textContent = `NT$ ${totalPurchasedValue.toFixed(2)}`;
