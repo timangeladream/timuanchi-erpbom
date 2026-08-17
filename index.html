@@ -2905,9 +2905,13 @@ async function openDetail(id) {
     <div class="ta-detail-category"><span class="ta-tag">${escapeHtml(m.category || '未分類')}</span>${m.materialCode ? ` <span class="ta-tag">${escapeHtml(m.materialCode)}</span>` : ''}${m.colorSeries ? ` <span class="ta-tag">色系:${escapeHtml(m.colorSeries)}</span>` : ''}${m.colorTag ? ` <span class="ta-tag">同色標籤:${escapeHtml(m.colorTag)}</span>` : ''}</div>
     ${m.note ? `<div class="ta-modal-text">備註:${escapeHtml(m.note)}</div>` : ''}
     <div class="ta-detail-stats">
-      <div><div class="ta-stat-label">目前進價(歷史最高單價)</div><div class="ta-stat-value">NT$ ${cost.toFixed(2)} / ${escapeHtml(unit)}</div></div>
+      <div><div class="ta-stat-label">總進貨數量</div><div class="ta-stat-value" id="totalPurchasedQtyStat">-</div></div>
+      <div><div class="ta-stat-label">總進貨數量價值</div><div class="ta-stat-value" id="totalPurchasedValueStat">-</div></div>
+    </div>
+    <div class="ta-detail-stats">
+      <div><div class="ta-stat-label">進價(歷史最高單價)</div><div class="ta-stat-value">NT$ ${cost.toFixed(2)} / ${escapeHtml(unit)}</div></div>
       <div><div class="ta-stat-label">加權平均成本(BOM成本用這個)</div><div class="ta-stat-value">NT$ ${weightedAvgCost.toFixed(4)} / ${escapeHtml(unit)}</div></div>
-      <div><div class="ta-stat-label">庫存價值</div><div class="ta-stat-value">NT$ ${value.toFixed(2)}</div></div>
+      <div><div class="ta-stat-label">目前庫存價值</div><div class="ta-stat-value">NT$ ${value.toFixed(2)}</div></div>
     </div>
     <div class="ta-detail-stats">
       <div><div class="ta-stat-label">目前庫存</div><div class="ta-stat-value">${stock.toLocaleString()} ${escapeHtml(unit)}</div></div>
@@ -2950,6 +2954,11 @@ async function openDetail(id) {
   const purchaseCount = logs.filter(log => log.type === 'purchase').length;
   const adjustCount = logs.filter(log => log.type === 'adjust').length;
   document.getElementById('historyHeading').textContent = `完整異動歷史（進貨：${purchaseCount}次、人工盤點調整：${adjustCount}次）`;
+
+  const totalPurchasedQty = logs.reduce((sum, log) => sum + (log.type === 'purchase' ? (log.quantity || 0) : 0), 0);
+  const totalPurchasedValue = logs.reduce((sum, log) => sum + (log.type === 'purchase' ? (log.twdAmount || 0) : 0), 0);
+  document.getElementById('totalPurchasedQtyStat').textContent = `${totalPurchasedQty.toLocaleString()} ${unit}`;
+  document.getElementById('totalPurchasedValueStat').textContent = `NT$ ${totalPurchasedValue.toFixed(2)}`;
 
   const scrapQtyTotal = logs.reduce((sum, log) => sum + (log.scrapQuantity || 0), 0);
   const scrapLossTotal = logs.reduce((sum, log) => sum + (log.scrapQuantity || 0) * (log.unitCost || 0), 0);
