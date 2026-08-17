@@ -2641,11 +2641,16 @@ function bomTargetOptionsHtml(selectedProductId, selectedVariantKey) {
     const hasVariants = Object.keys(p.variantSkus || {}).length > 0;
     if (!hasVariants) {
       const sel = (p.id === selectedProductId && !selectedVariantKey) ? 'selected' : '';
-      options += `<option value="${escapeHtml(p.id)}|" ${sel}>${escapeHtml(p.name)}</option>`;
+      options += `<option value="${escapeHtml(p.id)}|" ${sel}>${escapeHtml(p.name)}${p.productCode ? '(' + escapeHtml(p.productCode) + ')' : ''}</option>`;
     } else {
+      const dimNames = p.variantKeyOrder || Object.keys(p.variants || {});
       Object.keys(p.variantSkus).forEach(key => {
         const sel = (p.id === selectedProductId && key === selectedVariantKey) ? 'selected' : '';
-        options += `<option value="${escapeHtml(p.id)}|${escapeHtml(key)}" ${sel}>${escapeHtml(p.name)}(${escapeHtml(p.variantSkus[key] || key)})</option>`;
+        const values = key.split(',');
+        const labelParts = dimNames.map((d, i) => values[i]).filter(Boolean);
+        const sku = p.variantSkus[key] || '';
+        const label = `${p.name}(${labelParts.join(' / ')}${sku ? '，' + sku : ''})`;
+        options += `<option value="${escapeHtml(p.id)}|${escapeHtml(key)}" ${sel}>${escapeHtml(label)}</option>`;
       });
     }
   });
