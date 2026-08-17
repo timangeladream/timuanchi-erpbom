@@ -24,6 +24,7 @@
     --danger: #c0524a;
     --success: #4a7c59;
     --warn: #b8894a;
+    --accent: #6b4a9c;
   }
   * { box-sizing: border-box; }
   body {
@@ -265,6 +266,7 @@
   .ta-timeline-type--adjust { color: var(--warn); }
   .ta-timeline-type--edit { color: var(--text-muted); }
   .ta-timeline-type--production { color: var(--primary); }
+  .ta-timeline-type--shipment { color: var(--accent); }
   .ta-timeline-detail { font-size: 12px; color: var(--text); line-height: 1.6; }
   .ta-timeline-item--clickable { cursor: pointer; border-radius: 6px; padding: 4px 6px; margin-left: -6px; }
   .ta-timeline-item--clickable:hover { background: #eff3f7; }
@@ -2880,7 +2882,8 @@ async function openDetail(id) {
       <div><div class="ta-stat-label">已預留數量</div><div class="ta-stat-value">${reservedStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
       <div><div class="ta-stat-label">真正可用庫存</div><div class="ta-stat-value">${availableStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
       <div><div class="ta-stat-label">次品庫存</div><div class="ta-stat-value">${secondaryStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
-      <div><div class="ta-stat-label">實際已使用數量</div><div class="ta-stat-value" id="confirmedUsedStat">-</div></div>
+      <div><div class="ta-stat-label">累計銷售數量</div><div class="ta-stat-value" id="salesConfirmedStat">-</div></div>
+      <div><div class="ta-stat-label">累計非銷售數量</div><div class="ta-stat-value" id="nonSalesStat">-</div></div>
     </div>
     <div class="ta-detail-stats">
       <div><div class="ta-stat-label">累計報廢數量</div><div class="ta-stat-value" id="scrapQtyStat">-</div></div>
@@ -2928,9 +2931,13 @@ async function openDetail(id) {
   document.getElementById('shortageLossStat').textContent = `NT$ ${shortageLossTotal.toFixed(2)}`;
   document.getElementById('extraQtyStat').textContent = `${extraQtyTotal.toLocaleString()} ${unit}`;
 
-  // 實際已使用數量:要等 POS 銷售同步(尚未實作)確認賣出時,才會真的累加,目前一律是 0,屬正常現象
-  const confirmedUsedTotal = logs.reduce((sum, log) => sum + (log.confirmedUsedQuantity || 0), 0);
-  document.getElementById('confirmedUsedStat').textContent = `${confirmedUsedTotal.toLocaleString()} ${unit}`;
+  // 累計銷售數量:要等 POS 銷售同步(尚未實作)確認賣出時,才會真的累加,目前一律是 0,屬正常現象
+  const salesConfirmedTotal = logs.reduce((sum, log) => sum + (log.salesConfirmedQuantity || 0), 0);
+  document.getElementById('salesConfirmedStat').textContent = `${salesConfirmedTotal.toLocaleString()} ${unit}`;
+
+  // 累計非銷售數量:來自「登記出貨(非銷售)」,贈送/自用/拍照樣品/損壞銷毀等原因
+  const nonSalesTotal = logs.reduce((sum, log) => sum + (log.nonSalesQuantity || 0), 0);
+  document.getElementById('nonSalesStat').textContent = `${nonSalesTotal.toLocaleString()} ${unit}`;
 
   const productionLossQtyTotal = logs.reduce((sum, log) => sum + (log.extraLossQuantity || 0), 0);
   const productionLossAmountTotal = logs.reduce((sum, log) => sum + (log.extraLossQuantity || 0) * (log.unitCost || 0), 0);
@@ -3087,6 +3094,16 @@ function renderTimeline(logs, unit, materialId) {
       detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
         配方消耗調整：${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${escapeHtml(unit)}(已預留量同步調整)
         ${log.extraLossDiff ? `<br>額外損耗調整：${log.extraLossDiff >= 0 ? '+' : ''}${log.extraLossDiff} ${escapeHtml(unit)}` : ''}`;
+    } else if (log.type === 'shipment') {
+      typeLabel = '非銷售出貨'; cls = 'shipment';
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''} × ${log.quantityShipped} 件<br>
+        原因：${escapeHtml(log.reason || '')}<br>
+        消耗：${log.consumedQuantity} ${escapeHtml(unit)}(已預留 → 真正扣除)`;
+    } else if (log.type === 'shipmentAdjust') {
+      typeLabel = '非銷售出貨修正'; cls = 'shipment';
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
+        原因：${escapeHtml(log.reason || '')}<br>
+        消耗調整：${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${escapeHtml(unit)}`;
     }
     const clickable = log.type === 'purchase';
     return `<div class="ta-timeline-item${clickable ? ' ta-timeline-item--clickable' : ''}"${clickable ? ` data-log-id="${escapeHtml(log.id)}"` : ''}>
