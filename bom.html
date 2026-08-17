@@ -194,6 +194,17 @@
   .ta-recipe-row-del { cursor: pointer; color: var(--danger); font-size: 12px; white-space: nowrap; }
   .ta-recipe-total { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 0 0; font-size: 15px; font-weight: 600; color: var(--primary-dark); }
 
+  .ta-production-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .ta-production-row-name { flex: 1; font-size: 13px; }
+  .ta-production-row-consumed { width: 150px; font-size: 13px; color: var(--text-muted); }
+  .ta-production-row-loss { width: 140px; display: flex; align-items: center; gap: 6px; }
+  .ta-production-row-loss input { width: 80px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .ta-production-row-loss span { font-size: 12px; color: var(--text-muted); }
+  .ta-production-insufficient { color: var(--danger); }
+  .ta-production-logs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .ta-production-logs-info { font-size: 13px; }
+  .ta-production-logs-time { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
   .ta-pc-grid { display: grid; gap: 12px 16px; margin-bottom: 1rem; }
   .ta-pc-grid-2 { grid-template-columns: repeat(2,1fr); }
   .ta-pc-grid-3 { grid-template-columns: repeat(3,1fr); }
@@ -459,6 +470,36 @@
       <button class="ta-btn" data-close="deleteProductModal">取消</button>
       <button class="ta-btn ta-btn-primary" style="background:var(--danger);border-color:var(--danger);" id="confirmDeleteProductBtn">確定刪除</button>
     </div>
+  </div>
+</div>
+
+<!-- 生產登記 / 修正生產登記 Modal(共用同一套介面) -->
+<div class="ta-modal-overlay" id="productionFormModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="productionFormModal">✕</span>
+    <h2 id="productionFormTitle">生產登記</h2>
+    <div class="ta-modal-text" id="productionFormProductLine"></div>
+    <div class="ta-form-row">
+      <label>實際製作件數</label>
+      <input type="number" id="pfQuantity" min="0" step="1" value="0">
+    </div>
+    <div class="ta-modal-text" id="productionFormMaxHint"></div>
+    <hr class="ta-section-divider">
+    <div class="ta-modal-text" style="font-weight:600;">材料消耗(配方消耗依件數自動計算,存入「已預留數量」;額外損耗選填,直接扣庫存)</div>
+    <div id="productionFormRecipeList"></div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="productionFormModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="productionFormSaveBtn">儲存生產登記</button>
+    </div>
+  </div>
+</div>
+
+<!-- 生產登記紀錄列表 Modal -->
+<div class="ta-modal-overlay" id="productionLogsModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="productionLogsModal">✕</span>
+    <h2>生產登記紀錄</h2>
+    <div id="productionLogsList"></div>
   </div>
 </div>
 
@@ -788,6 +829,23 @@ async function syncMaterialsDeltaThrottled() {
   if (maxSeen !== lastSyncMillis) localStorage.setItem(MATERIALS_SYNC_TIME_KEY, String(maxSeen));
   saveMaterialsToCache();
   return hasChanges;
+}
+
+// 生產登記會寫入材料的 reservedStock/currentStock,寫完之後用這個工具函式,
+// 只重新讀「剛剛被動到的」材料回來更新本機快取,不用整包材料重讀一次(跟 index.html 的匯入優化同一個做法)
+async function refreshMaterialsLocal(materialIds) {
+  const uniqueIds = [...new Set(materialIds)];
+  await Promise.all(uniqueIds.map(async id => {
+    const snap = await getDoc(doc(db, 'materials', id));
+    const idx = materials.findIndex(m => m.id === id);
+    if (snap.exists()) {
+      const updated = { id: snap.id, ...snap.data() };
+      if (idx >= 0) materials[idx] = updated; else materials.push(updated);
+    } else if (idx >= 0) {
+      materials.splice(idx, 1);
+    }
+  }));
+  saveMaterialsToCache();
 }
 
 // ---------- 成品/成品分類設定本機同步 ----------
@@ -1355,12 +1413,14 @@ function renderVariantSection(p) {
       const priceVal = (p.variantSellingPrices || {})[key];
       const costVal = calcRecipeCost((p.variantRecipes || {})[key]);
       const missingMaterial = recipeHasMissingMaterial((p.variantRecipes || {})[key]);
+      const preMade = (p.variantPreMadeStock || {})[key] || 0;
       return `
         <div class="ta-variant-combo-row" data-combo-key="${escapeHtml(key)}" data-combo-label="${escapeHtml(label)}">
-          <div class="ta-variant-combo-label">${escapeHtml(label)} <span class="ta-tag">成本 NT$${costVal.toFixed(2)}</span>${priceVal != null ? ` <span class="ta-tag">售價 NT$${Number(priceVal).toFixed(0)}</span>` : ''}${missingMaterial ? ' <span class="ta-tag" style="color:var(--danger);">⚠️ 含已刪除材料</span>' : ''}</div>
+          <div class="ta-variant-combo-label">${escapeHtml(label)} <span class="ta-tag">成本 NT$${costVal.toFixed(2)}</span>${priceVal != null ? ` <span class="ta-tag">售價 NT$${Number(priceVal).toFixed(0)}</span>` : ''}${preMade ? ` <span class="ta-tag">已製作未售出 ${preMade}</span>` : ''}${missingMaterial ? ' <span class="ta-tag" style="color:var(--danger);">⚠️ 含已刪除材料</span>' : ''}</div>
           <input type="text" class="ta-variant-combo-sku" placeholder="規格貨號" value="${escapeHtml((p.variantSkus || {})[key] || '')}">
           <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-recipe>編輯規格配方</button>
           <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-pricing>定價試算</button>
+          <button type="button" class="ta-btn ta-btn-sm" data-register-production>生產登記</button>
         </div>
       `;
     }).join('');
@@ -1413,6 +1473,20 @@ function wireVariantComboEditButtons(productId) {
         if (!saved) return;
         const p = products.find(x => x.id === productId);
         openPricingModal(p, row.dataset.comboKey);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+  document.querySelectorAll('#variantCombosList [data-register-production]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('.ta-variant-combo-row');
+      btn.disabled = true;
+      try {
+        const saved = await saveVariantSettings(productId);
+        if (!saved) return;
+        const p = products.find(x => x.id === productId);
+        openProductionRegisterModal(p, row.dataset.comboKey, row.dataset.comboLabel);
       } finally {
         btn.disabled = false;
       }
@@ -1514,6 +1588,8 @@ function openProductDetail(id) {
       <div class="ta-detail-title">${escapeHtml(p.name)}</div>
       <div>
         ${hasVariants ? '' : '<button class="ta-btn ta-btn-sm" id="editRecipeBtn">編輯配方</button>'}
+        ${hasVariants ? '' : '<button class="ta-btn ta-btn-sm" id="productionRegisterBtn">生產登記</button>'}
+        <button class="ta-btn ta-btn-sm" id="productionLogsBtn">生產登記紀錄</button>
         <button class="ta-btn ta-btn-sm" id="openPricingBtn">定價試算</button>
         <button class="ta-btn ta-btn-sm" id="editProductBtn">編輯屬性</button>
         <button class="ta-btn ta-btn-sm ${p.archived ? '' : 'ta-btn-danger'}" id="archiveProductBtn">${p.archived ? '上架' : '下架'}</button>
@@ -1530,6 +1606,7 @@ function openProductDetail(id) {
       ` : `
         <div><div class="ta-stat-label">材料成本(即時計算)</div><div class="ta-stat-value">NT$ ${materialCost.toFixed(2)}</div></div>
         <div><div class="ta-stat-label">配方項目數</div><div class="ta-stat-value">${(p.recipe || []).length} 項</div></div>
+        <div><div class="ta-stat-label">已製作未售出</div><div class="ta-stat-value">${(p.preMadeStock || 0).toLocaleString()} 件</div></div>
         ${p.sellingPrice != null ? `
           <div><div class="ta-stat-label">售價</div><div class="ta-stat-value">NT$ ${Number(p.sellingPrice).toFixed(0)}</div></div>
           <div><div class="ta-stat-label">毛利</div><div class="ta-stat-value">NT$ ${(Number(p.sellingPrice) - materialCost).toFixed(2)}</div></div>
@@ -1552,6 +1629,8 @@ function openProductDetail(id) {
   `;
 
   if (!hasVariants) document.getElementById('editRecipeBtn').addEventListener('click', () => openRecipeModal(p));
+  if (!hasVariants) document.getElementById('productionRegisterBtn').addEventListener('click', () => openProductionRegisterModal(p));
+  document.getElementById('productionLogsBtn').addEventListener('click', () => openProductionLogsModal(p));
   document.getElementById('openPricingBtn').addEventListener('click', () => openPricingModal(p));
   document.getElementById('editProductBtn').addEventListener('click', () => openProductEditForm(p));
   document.getElementById('archiveProductBtn').addEventListener('click', () => toggleProductArchive(p));
@@ -1609,6 +1688,351 @@ document.getElementById('confirmDeleteProductBtn').addEventListener('click', asy
     btn.disabled = false;
   }
 });
+
+// ---------- 生產登記(配方消耗進 reservedStock,額外損耗直接扣 currentStock) ----------
+// productionFormContext:
+//   新增登記: { mode:'new', productId, variantKey, variantLabel, recipe, initialLosses:{} }
+//   修正登記: { mode:'correct', productId, variantKey, variantLabel, logId, recipe, initialLosses,
+//              originalQuantity, originalMaterials, confirmedQuantity }
+// recipe 統一是 [{materialId, quantity}] 的形式;修正模式下是從那筆登記主紀錄存的 materials 明細
+// 重建回來(登記當時實際用掉的配方用量),不是抓成品「現在」的配方,避免事後改配方導致修正對不起來。
+let productionFormContext = null;
+
+// 依「真正可用庫存(currentStock-reservedStock)」算這個配方最多還能做幾件；
+// creditByMaterialId 是修正模式專用,把「這筆登記原本已經佔用掉的量」先加回來一起算,
+// 這樣修正時的上限,才不會被自己這筆登記本身卡住。
+function computeMaxProducible(recipe, creditByMaterialId = {}) {
+  const items = (recipe || []).filter(r => r.quantity > 0);
+  if (!items.length) return Infinity;
+  let max = Infinity;
+  for (const r of items) {
+    const m = materials.find(x => x.id === r.materialId);
+    if (!m) return 0;
+    const available = (m.currentStock || 0) - (m.reservedStock || 0) + (creditByMaterialId[r.materialId] || 0);
+    const producible = Math.floor(available / r.quantity);
+    if (producible < max) max = producible;
+  }
+  return Math.max(0, max);
+}
+
+function openProductionRegisterModal(p, variantKey = null, variantLabel = null) {
+  const recipe = (variantKey ? (p.variantRecipes || {})[variantKey] : p.recipe) || [];
+  productionFormContext = { mode: 'new', productId: p.id, variantKey, variantLabel, recipe, initialLosses: {} };
+  document.getElementById('productionFormTitle').textContent = '生產登記';
+  document.getElementById('productionFormSaveBtn').textContent = '儲存生產登記';
+  document.getElementById('productionFormProductLine').textContent = `成品：${p.name}${variantLabel ? '(' + variantLabel + ')' : ''}`;
+  document.getElementById('pfQuantity').value = 0;
+  document.getElementById('pfQuantity').oninput = renderProductionForm;
+  renderProductionForm();
+  openModal('productionFormModal');
+}
+
+function renderProductionForm() {
+  const ctx = productionFormContext;
+  if (!ctx) return;
+  const recipe = ctx.recipe || [];
+  const qty = Math.max(0, Math.floor(Number(document.getElementById('pfQuantity').value) || 0));
+
+  // 重新畫面前,先記住目前畫面上已經輸入的額外損耗值,避免因為改了件數觸發重畫,把使用者剛打的損耗值蓋掉
+  const existingLossInputs = {};
+  document.querySelectorAll('#productionFormRecipeList .pf-loss-input').forEach(inp => {
+    existingLossInputs[inp.dataset.materialId] = inp.value;
+  });
+
+  const credit = ctx.mode === 'correct'
+    ? Object.fromEntries((ctx.originalMaterials || []).map(m => [m.materialId, m.consumedQuantity || 0]))
+    : {};
+  const maxProducible = computeMaxProducible(recipe, credit);
+
+  const hints = [];
+  if (recipe.length) {
+    hints.push(`依真正可用庫存,最多可以${ctx.mode === 'correct' ? '修正到' : '做'} <strong>${maxProducible}</strong> 件`);
+    if (maxProducible < Infinity && qty > maxProducible) {
+      hints.push('<span class="ta-production-insufficient">⚠️ 目前輸入的件數超過材料可用量</span>');
+    }
+  } else {
+    hints.push('這個成品(規格)還沒有設定配方,無法計算材料消耗上限');
+  }
+  if (ctx.mode === 'correct' && ctx.confirmedQuantity) {
+    hints.push(`⚠️ 這筆登記已有 ${ctx.confirmedQuantity} 件確認賣出,件數不能修正到低於這個數字`);
+  }
+  document.getElementById('productionFormMaxHint').innerHTML = hints.join('<br>');
+
+  const listEl = document.getElementById('productionFormRecipeList');
+  if (!recipe.length) {
+    listEl.innerHTML = '<div class="ta-empty-hint">尚未設定配方</div>';
+    return;
+  }
+  listEl.innerHTML = recipe.map(r => {
+    const m = materials.find(x => x.id === r.materialId);
+    if (!m) {
+      return `<div class="ta-production-row"><div class="ta-production-row-name" style="color:var(--danger);">材料已刪除(無法登記)</div></div>`;
+    }
+    const consumed = (r.quantity || 0) * qty;
+    const lossVal = existingLossInputs.hasOwnProperty(m.id) ? existingLossInputs[m.id] : ((ctx.initialLosses || {})[r.materialId] || 0);
+    return `
+      <div class="ta-production-row" data-material-id="${escapeHtml(m.id)}">
+        <div class="ta-production-row-name">${escapeHtml(materialDisplayName(m))}</div>
+        <div class="ta-production-row-consumed">配方消耗：${consumed} ${escapeHtml(m.unit || '')} → 已預留</div>
+        <div class="ta-production-row-loss">
+          <span>額外損耗</span>
+          <input type="number" min="0" step="any" value="${lossVal}" class="pf-loss-input" data-material-id="${escapeHtml(m.id)}">
+          <span>${escapeHtml(m.unit || '')}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function submitProductionRegistration(ctx, qty, recipe, losses) {
+  const p = products.find(x => x.id === ctx.productId);
+  if (!p) throw new Error('找不到成品');
+
+  const materialIds = [...new Set(recipe.map(r => r.materialId))];
+  const logRef = doc(collection(db, 'productionLogs'));
+  const productRef = doc(db, 'products', ctx.productId);
+
+  await runTransaction(db, async (transaction) => {
+    const materialRefs = {};
+    const materialSnaps = {};
+    for (const id of materialIds) {
+      materialRefs[id] = doc(db, 'materials', id);
+      materialSnaps[id] = await transaction.get(materialRefs[id]);
+    }
+    const productSnap = await transaction.get(productRef);
+    if (!productSnap.exists()) throw new Error('成品已被刪除');
+
+    // 用交易裡剛讀到的最新資料重新驗證一次,避免跟畫面上看到的快取資料有落差(例如剛好另一筆登記搶先寫入)
+    for (const r of recipe) {
+      const snap = materialSnaps[r.materialId];
+      if (!snap.exists()) throw new Error('配方裡有材料已經被刪除,無法登記生產');
+      const data = snap.data();
+      const available = (data.currentStock || 0) - (data.reservedStock || 0);
+      const consumed = (r.quantity || 0) * qty;
+      if (consumed > available) {
+        throw new Error(`材料「${materialDisplayName(data)}」真正可用庫存不足,最多可用 ${available}`);
+      }
+    }
+
+    const materialEntries = [];
+    for (const r of recipe) {
+      const data = materialSnaps[r.materialId].data();
+      const consumed = (r.quantity || 0) * qty;
+      const lossQty = losses[r.materialId] || 0;
+      transaction.update(materialRefs[r.materialId], {
+        reservedStock: (data.reservedStock || 0) + consumed,
+        currentStock: (data.currentStock || 0) - lossQty,
+        updatedAt: serverTimestamp(),
+      });
+      const histRef = doc(collection(db, 'materials', r.materialId, 'history'));
+      transaction.set(histRef, {
+        type: 'production',
+        productId: ctx.productId, productName: p.name,
+        variantKey: ctx.variantKey || null, variantLabel: ctx.variantLabel || null,
+        quantityProduced: qty,
+        consumedQuantity: consumed,
+        extraLossQuantity: lossQty,
+        unitCost: data.currentUnitCostWeightedAvg || 0,
+        productionLogId: logRef.id,
+        timestamp: serverTimestamp(),
+      });
+      materialEntries.push({ materialId: r.materialId, recipeQuantity: r.quantity || 0, consumedQuantity: consumed, extraLossQuantity: lossQty });
+    }
+
+    const productData = productSnap.data();
+    if (ctx.variantKey) {
+      const variantPreMadeStock = { ...(productData.variantPreMadeStock || {}) };
+      variantPreMadeStock[ctx.variantKey] = (variantPreMadeStock[ctx.variantKey] || 0) + qty;
+      transaction.update(productRef, { variantPreMadeStock, updatedAt: serverTimestamp() });
+    } else {
+      transaction.update(productRef, { preMadeStock: (productData.preMadeStock || 0) + qty, updatedAt: serverTimestamp() });
+    }
+
+    transaction.set(logRef, {
+      productId: ctx.productId, productName: p.name,
+      variantKey: ctx.variantKey || null, variantLabel: ctx.variantLabel || null,
+      quantityProduced: qty,
+      materials: materialEntries,
+      confirmedQuantity: 0, // 之後 POS 銷售同步確認賣出時才會累加,目前一律是 0
+      timestamp: serverTimestamp(),
+      createdAt: serverTimestamp(),
+    });
+  });
+
+  await refreshMaterialsLocal(materialIds);
+  await refreshProductLocal(ctx.productId);
+}
+
+async function submitProductionCorrection(ctx, qty, recipe, losses) {
+  if (qty < (ctx.confirmedQuantity || 0)) {
+    throw new Error(`這筆登記已經有 ${ctx.confirmedQuantity} 件確認賣出,修正後的件數不能低於這個數字`);
+  }
+  const p = products.find(x => x.id === ctx.productId);
+  if (!p) throw new Error('找不到成品');
+
+  const originalByMaterial = Object.fromEntries((ctx.originalMaterials || []).map(m => [m.materialId, m]));
+  const materialIds = [...new Set(recipe.map(r => r.materialId))];
+  const logRef = doc(db, 'productionLogs', ctx.logId);
+  const productRef = doc(db, 'products', ctx.productId);
+
+  await runTransaction(db, async (transaction) => {
+    const materialRefs = {};
+    const materialSnaps = {};
+    for (const id of materialIds) {
+      materialRefs[id] = doc(db, 'materials', id);
+      materialSnaps[id] = await transaction.get(materialRefs[id]);
+    }
+    const productSnap = await transaction.get(productRef);
+    if (!productSnap.exists()) throw new Error('成品已被刪除');
+
+    const materialEntries = [];
+    for (const r of recipe) {
+      const snap = materialSnaps[r.materialId];
+      if (!snap.exists()) throw new Error('配方裡有材料已經被刪除,無法修正');
+      const data = snap.data();
+      const original = originalByMaterial[r.materialId] || { consumedQuantity: 0, extraLossQuantity: 0 };
+      const newConsumed = (r.quantity || 0) * qty;
+      const newLoss = losses[r.materialId] || 0;
+      const consumedDiff = newConsumed - (original.consumedQuantity || 0);
+      const lossDiff = newLoss - (original.extraLossQuantity || 0);
+
+      const newAvailable = (data.currentStock || 0) - (data.reservedStock || 0) - consumedDiff;
+      if (consumedDiff > 0 && newAvailable < 0) {
+        throw new Error(`材料「${materialDisplayName(data)}」真正可用庫存不足,無法修正到這個件數`);
+      }
+
+      transaction.update(materialRefs[r.materialId], {
+        reservedStock: (data.reservedStock || 0) + consumedDiff,
+        currentStock: (data.currentStock || 0) - lossDiff,
+        updatedAt: serverTimestamp(),
+      });
+
+      if (consumedDiff !== 0 || lossDiff !== 0) {
+        const histRef = doc(collection(db, 'materials', r.materialId, 'history'));
+        transaction.set(histRef, {
+          type: 'productionAdjust',
+          productId: ctx.productId, productName: p.name,
+          variantKey: ctx.variantKey || null, variantLabel: ctx.variantLabel || null,
+          consumedDiff, extraLossDiff: lossDiff,
+          unitCost: data.currentUnitCostWeightedAvg || 0,
+          productionLogId: ctx.logId,
+          timestamp: serverTimestamp(),
+        });
+      }
+      materialEntries.push({ materialId: r.materialId, recipeQuantity: r.quantity || 0, consumedQuantity: newConsumed, extraLossQuantity: newLoss });
+    }
+
+    const qtyDiff = qty - ctx.originalQuantity;
+    if (qtyDiff !== 0) {
+      const productData = productSnap.data();
+      if (ctx.variantKey) {
+        const variantPreMadeStock = { ...(productData.variantPreMadeStock || {}) };
+        variantPreMadeStock[ctx.variantKey] = (variantPreMadeStock[ctx.variantKey] || 0) + qtyDiff;
+        transaction.update(productRef, { variantPreMadeStock, updatedAt: serverTimestamp() });
+      } else {
+        transaction.update(productRef, { preMadeStock: (productData.preMadeStock || 0) + qtyDiff, updatedAt: serverTimestamp() });
+      }
+    }
+
+    transaction.update(logRef, {
+      quantityProduced: qty,
+      materials: materialEntries,
+      correctedAt: serverTimestamp(),
+    });
+  });
+
+  await refreshMaterialsLocal(materialIds);
+  await refreshProductLocal(ctx.productId);
+}
+
+document.getElementById('productionFormSaveBtn').addEventListener('click', async () => {
+  const ctx = productionFormContext;
+  if (!ctx) return;
+  const qty = Math.max(0, Math.floor(Number(document.getElementById('pfQuantity').value) || 0));
+  if (qty <= 0) { alert('請輸入大於 0 的製作件數'); return; }
+  const recipe = ctx.recipe || [];
+  if (!recipe.length) { alert('這個成品(規格)還沒有設定配方,無法登記生產'); return; }
+  if (recipe.some(r => !materials.find(m => m.id === r.materialId))) {
+    alert('配方裡有材料已經被刪除,無法登記生產,請先確認配方');
+    return;
+  }
+
+  const losses = {};
+  document.querySelectorAll('#productionFormRecipeList .pf-loss-input').forEach(inp => {
+    const v = Number(inp.value) || 0;
+    if (v > 0) losses[inp.dataset.materialId] = v;
+  });
+
+  const btn = document.getElementById('productionFormSaveBtn');
+  btn.disabled = true;
+  try {
+    if (ctx.mode === 'new') {
+      await submitProductionRegistration(ctx, qty, recipe, losses);
+    } else {
+      await submitProductionCorrection(ctx, qty, recipe, losses);
+    }
+    closeModal('productionFormModal');
+    openProductDetail(ctx.productId);
+  } catch (e) {
+    alert('登記失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function openProductionLogsModal(p) {
+  const logsSnap = await getDocs(query(collection(db, 'productionLogs'), where('productId', '==', p.id), orderBy('timestamp', 'desc')));
+  const logs = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const listEl = document.getElementById('productionLogsList');
+  if (!logs.length) {
+    listEl.innerHTML = '<div class="ta-empty-hint">尚無生產登記紀錄</div>';
+  } else {
+    listEl.innerHTML = logs.map(log => {
+      const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('zh-TW') : '(時間處理中)';
+      return `
+        <div class="ta-production-logs-row" data-log-id="${escapeHtml(log.id)}">
+          <div>
+            <div class="ta-production-logs-info">${log.variantLabel ? escapeHtml(log.variantLabel) + ' - ' : ''}${log.quantityProduced} 件${log.confirmedQuantity ? `(已確認賣出 ${log.confirmedQuantity} 件)` : ''}</div>
+            <div class="ta-production-logs-time">${time}</div>
+          </div>
+          <button type="button" class="ta-btn ta-btn-sm" data-correct-log>修正</button>
+        </div>
+      `;
+    }).join('');
+    listEl.querySelectorAll('[data-correct-log]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('.ta-production-logs-row');
+        const log = logs.find(l => l.id === row.dataset.logId);
+        if (log) openProductionCorrectionModal(log);
+      });
+    });
+  }
+  openModal('productionLogsModal');
+}
+
+function openProductionCorrectionModal(log) {
+  productionFormContext = {
+    mode: 'correct',
+    productId: log.productId,
+    variantKey: log.variantKey || null,
+    variantLabel: log.variantLabel || null,
+    logId: log.id,
+    recipe: (log.materials || []).map(m => ({ materialId: m.materialId, quantity: m.recipeQuantity })),
+    initialLosses: Object.fromEntries((log.materials || []).filter(m => m.extraLossQuantity).map(m => [m.materialId, m.extraLossQuantity])),
+    originalQuantity: log.quantityProduced,
+    originalMaterials: log.materials || [],
+    confirmedQuantity: log.confirmedQuantity || 0,
+  };
+  document.getElementById('productionFormTitle').textContent = '修正生產登記';
+  document.getElementById('productionFormSaveBtn').textContent = '儲存修正';
+  const productName = products.find(x => x.id === log.productId)?.name || '';
+  document.getElementById('productionFormProductLine').textContent = `成品：${productName}${log.variantLabel ? '(' + log.variantLabel + ')' : ''}`;
+  document.getElementById('pfQuantity').value = log.quantityProduced;
+  document.getElementById('pfQuantity').oninput = renderProductionForm;
+  renderProductionForm();
+  closeModal('productionLogsModal');
+  openModal('productionFormModal');
+}
 
 // ---------- 編輯配方 / 設定分類必備材料(共用同一套彈窗+搜尋邏輯) ----------
 let currentRecipe = []; // 目前編輯中的配方(尚未儲存): [{materialId, quantity}]

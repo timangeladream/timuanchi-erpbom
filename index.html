@@ -264,6 +264,7 @@
   .ta-timeline-type--purchase { color: var(--success); }
   .ta-timeline-type--adjust { color: var(--warn); }
   .ta-timeline-type--edit { color: var(--text-muted); }
+  .ta-timeline-type--production { color: var(--primary); }
   .ta-timeline-detail { font-size: 12px; color: var(--text); line-height: 1.6; }
   .ta-timeline-item--clickable { cursor: pointer; border-radius: 6px; padding: 4px 6px; margin-left: -6px; }
   .ta-timeline-item--clickable:hover { background: #eff3f7; }
@@ -2830,6 +2831,8 @@ async function openDetail(id) {
   const weightedAvgCost = m.currentUnitCostWeightedAvg || 0;
   const unit = m.unit || '';
   const value = stock * cost;
+  const reservedStock = m.reservedStock || 0;
+  const availableStock = stock - reservedStock;
 
   const alternatives = findColorAlternatives(m);
   let alternativesSection = '';
@@ -2868,11 +2871,16 @@ async function openDetail(id) {
     <div class="ta-detail-category"><span class="ta-tag">${escapeHtml(m.category || '未分類')}</span>${m.materialCode ? ` <span class="ta-tag">${escapeHtml(m.materialCode)}</span>` : ''}${m.colorSeries ? ` <span class="ta-tag">色系:${escapeHtml(m.colorSeries)}</span>` : ''}${m.colorTag ? ` <span class="ta-tag">同色標籤:${escapeHtml(m.colorTag)}</span>` : ''}</div>
     ${m.note ? `<div class="ta-modal-text">備註:${escapeHtml(m.note)}</div>` : ''}
     <div class="ta-detail-stats">
-      <div><div class="ta-stat-label">目前庫存</div><div class="ta-stat-value">${stock.toLocaleString()} ${escapeHtml(unit)}</div></div>
-      <div><div class="ta-stat-label">次品庫存</div><div class="ta-stat-value">${secondaryStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
       <div><div class="ta-stat-label">目前進價(歷史最高單價)</div><div class="ta-stat-value">NT$ ${cost.toFixed(2)} / ${escapeHtml(unit)}</div></div>
       <div><div class="ta-stat-label">加權平均成本(BOM成本用這個)</div><div class="ta-stat-value">NT$ ${weightedAvgCost.toFixed(4)} / ${escapeHtml(unit)}</div></div>
       <div><div class="ta-stat-label">庫存價值</div><div class="ta-stat-value">NT$ ${value.toFixed(2)}</div></div>
+    </div>
+    <div class="ta-detail-stats">
+      <div><div class="ta-stat-label">目前庫存</div><div class="ta-stat-value">${stock.toLocaleString()} ${escapeHtml(unit)}</div></div>
+      <div><div class="ta-stat-label">已預留數量</div><div class="ta-stat-value">${reservedStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
+      <div><div class="ta-stat-label">真正可用庫存</div><div class="ta-stat-value">${availableStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
+      <div><div class="ta-stat-label">次品庫存</div><div class="ta-stat-value">${secondaryStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
+      <div><div class="ta-stat-label">實際已使用數量</div><div class="ta-stat-value" id="confirmedUsedStat">-</div></div>
     </div>
     <div class="ta-detail-stats">
       <div><div class="ta-stat-label">累計報廢數量</div><div class="ta-stat-value" id="scrapQtyStat">-</div></div>
@@ -2880,6 +2888,8 @@ async function openDetail(id) {
       <div><div class="ta-stat-label">累計短少數量</div><div class="ta-stat-value" id="shortageQtyStat">-</div></div>
       <div><div class="ta-stat-label">累計短少損失</div><div class="ta-stat-value" id="shortageLossStat">-</div></div>
       <div><div class="ta-stat-label">累計多給數量</div><div class="ta-stat-value" id="extraQtyStat">-</div></div>
+      <div><div class="ta-stat-label">累計製作損耗數量</div><div class="ta-stat-value" id="productionLossQtyStat">-</div></div>
+      <div><div class="ta-stat-label">累計製作損耗金額</div><div class="ta-stat-value" id="productionLossAmountStat">-</div></div>
     </div>
     <hr class="ta-section-divider">
     ${alternativesSection}
@@ -2917,6 +2927,15 @@ async function openDetail(id) {
   document.getElementById('shortageQtyStat').textContent = `${shortageQtyTotal.toLocaleString()} ${unit}`;
   document.getElementById('shortageLossStat').textContent = `NT$ ${shortageLossTotal.toFixed(2)}`;
   document.getElementById('extraQtyStat').textContent = `${extraQtyTotal.toLocaleString()} ${unit}`;
+
+  // 實際已使用數量:要等 POS 銷售同步(尚未實作)確認賣出時,才會真的累加,目前一律是 0,屬正常現象
+  const confirmedUsedTotal = logs.reduce((sum, log) => sum + (log.confirmedUsedQuantity || 0), 0);
+  document.getElementById('confirmedUsedStat').textContent = `${confirmedUsedTotal.toLocaleString()} ${unit}`;
+
+  const productionLossQtyTotal = logs.reduce((sum, log) => sum + (log.extraLossQuantity || 0), 0);
+  const productionLossAmountTotal = logs.reduce((sum, log) => sum + (log.extraLossQuantity || 0) * (log.unitCost || 0), 0);
+  document.getElementById('productionLossQtyStat').textContent = `${productionLossQtyTotal.toLocaleString()} ${unit}`;
+  document.getElementById('productionLossAmountStat').textContent = `NT$ ${productionLossAmountTotal.toFixed(2)}`;
 }
 
 let deleteTargetMaterial = null;
@@ -3058,6 +3077,16 @@ function renderTimeline(logs, unit, materialId) {
     } else if (log.type === 'archive') {
       typeLabel = log.archived ? '下架' : '上架'; cls = 'edit';
       detail = '';
+    } else if (log.type === 'production') {
+      typeLabel = '生產登記'; cls = 'production';
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''} × ${log.quantityProduced} 件<br>
+        配方消耗：${log.consumedQuantity} ${escapeHtml(unit)} → 已預留
+        ${log.extraLossQuantity ? `<br>額外損耗：${log.extraLossQuantity} ${escapeHtml(unit)}（損失約 NT$${(log.extraLossQuantity * (log.unitCost || 0)).toFixed(2)}）` : ''}`;
+    } else if (log.type === 'productionAdjust') {
+      typeLabel = '生產登記修正'; cls = 'production';
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
+        配方消耗調整：${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${escapeHtml(unit)}(已預留量同步調整)
+        ${log.extraLossDiff ? `<br>額外損耗調整：${log.extraLossDiff >= 0 ? '+' : ''}${log.extraLossDiff} ${escapeHtml(unit)}` : ''}`;
     }
     const clickable = log.type === 'purchase';
     return `<div class="ta-timeline-item${clickable ? ' ta-timeline-item--clickable' : ''}"${clickable ? ` data-log-id="${escapeHtml(log.id)}"` : ''}>
