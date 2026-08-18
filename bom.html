@@ -676,6 +676,7 @@
     <span class="ta-modal-close" data-close="importProductModal">✕</span>
     <h2>匯入成品</h2>
     <div class="ta-modal-text">Excel 欄位：成品分類 / 成品名稱 / 售價(選填) / 備註(選填) / 略過。成品編號由系統自動產生,不用填;配方跟規格請匯入後再手動設定。「略過」欄位填任何文字,該列就不會被匯入。</div>
+    <button class="ta-btn ta-btn-sm" id="downloadImportProductTemplateBtn">下載空白範例檔案</button>
     <input type="file" id="importProductFileInput" accept=".xlsx,.xls">
     <div id="importProductResult"></div>
     <div class="ta-modal-actions ta-is-hidden" id="importProductConfirmRow">
@@ -3086,6 +3087,15 @@ async function showPosRestockReminder(bomProductId, bomVariantKey) {
 
 // ---------- 匯入成品(只建立基本資料,不含配方/規格) ----------
 let importProductParsedRows = null;
+
+// 跟 processImportProductRows() 實際讀取的欄位名稱保持一致,兩邊有新增/異動欄位時務必同步修改
+const IMPORT_PRODUCT_TEMPLATE_HEADERS = ['成品分類', '成品名稱', '售價', '備註', '略過'];
+
+document.getElementById('downloadImportProductTemplateBtn').addEventListener('click', () => {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([IMPORT_PRODUCT_TEMPLATE_HEADERS]), '匯入範本');
+  XLSX.writeFile(wb, '成品匯入範本.xlsx');
+});
 
 document.getElementById('openImportProductBtn').addEventListener('click', () => {
   closeDrawer();
