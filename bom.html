@@ -75,7 +75,11 @@
   .ta-btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
   .ta-btn-primary:hover { background: #fff; }
   .ta-btn-danger { color: var(--danger); }
+  .ta-btn-danger-solid { background: var(--danger); color: #fff; border-color: var(--danger); }
+  .ta-btn-danger-solid:hover { opacity: 0.9; }
   .ta-btn-sm { padding: 6px 8px; font-size: 10px; }
+  .ta-modal-error { font-size: 12.5px; color: var(--danger); margin: -6px 0 14px; }
+  .ta-import-progress { font-size: 13px; color: var(--text-muted); margin: 14px 0; }
   .ta-hamburger-btn { font-size: 16px; padding: 8px 12px; line-height: 1; }
 
   .ta-is-hidden.ta-modal-overlay { display: none; }
@@ -373,6 +377,7 @@
   <button class="ta-drawer-item" id="openProductCategoryManageBtn">分類管理</button>
   <button class="ta-drawer-item" id="openExportRecipeBtn">匯出配方</button>
   <button class="ta-drawer-item" id="openImportProductBtn">匯入成品</button>
+  <button class="ta-drawer-item ta-drawer-item--danger" id="openWipeProductBtn">清除成品資料</button>
   <div class="ta-drawer-divider"></div>
   <div class="ta-drawer-pos-status" id="posLoginStatus">POS：尚未登入</div>
   <button class="ta-drawer-item" id="openPosLoginBtn">登入 POS</button>
@@ -699,6 +704,34 @@
   </div>
 </div>
 
+<!-- 清除成品資料 Modal -->
+<div class="ta-modal-overlay" id="wipeProductModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="wipeProductModal">✕</span>
+    <h2>清除成品資料</h2>
+    <div class="ta-modal-text">選擇要清除的範圍。</div>
+    <div class="ta-form-row">
+      <label>清除範圍</label>
+      <select id="wipeProductScopeSelect">
+        <option value="">請選擇...</option>
+        <option value="__ALL__">全部分類</option>
+      </select>
+    </div>
+    <div class="ta-modal-text ta-is-hidden" id="wipeProductScopePreview"></div>
+    <form class="ta-form-row ta-is-hidden" id="wipeProductPasswordRow" onsubmit="return false;">
+      <input type="email" autocomplete="username" style="display:none">
+      <label>密碼</label>
+      <input type="password" id="wipeProductPasswordInput" autocomplete="current-password">
+    </form>
+    <div class="ta-modal-error ta-is-hidden" id="wipeProductErrorText"></div>
+    <div class="ta-import-progress ta-is-hidden" id="wipeProductProgressText"></div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="wipeProductModal">取消</button>
+      <button class="ta-btn ta-btn-sm ta-btn-danger-solid ta-is-hidden" id="confirmWipeProductBtn">確認清除</button>
+    </div>
+  </div>
+</div>
+
 <!-- 匯入成品 Modal -->
 <div class="ta-modal-overlay" id="importProductModal">
   <div class="ta-modal ta-modal--wide">
@@ -854,7 +887,8 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+  getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
+  EmailAuthProvider, reauthenticateWithCredential
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore,
@@ -3290,6 +3324,154 @@ document.getElementById('confirmImportProductBtn').addEventListener('click', asy
     importProductParsedRows = null;
   } catch (e) {
     resultEl.innerHTML += `<div class="ta-import-errors">匯入中斷:${escapeHtml(e.message)}(已成功匯入 ${successCount} 筆)</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- 清除成品資料(批次刪除,比照材料系統「清除資料」的安全機制) ----------
+let wipeProductPlan = null;
+
+document.getElementById('openWipeProductBtn').addEventListener('click', () => {
+  closeDrawer();
+  const scopeSelect = document.getElementById('wipeProductScopeSelect');
+  scopeSelect.innerHTML = '<option value="">請選擇...</option><option value="__ALL__">全部分類</option>' +
+    (productOptions.categories || []).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  document.getElementById('wipeProductPasswordInput').value = '';
+  document.getElementById('wipeProductScopePreview').classList.add('ta-is-hidden');
+  document.getElementById('wipeProductPasswordRow').classList.add('ta-is-hidden');
+  const errEl = document.getElementById('wipeProductErrorText');
+  const progressEl = document.getElementById('wipeProductProgressText');
+  errEl.classList.add('ta-is-hidden'); errEl.textContent = '';
+  progressEl.classList.add('ta-is-hidden'); progressEl.textContent = '';
+  const confirmBtn = document.getElementById('confirmWipeProductBtn');
+  confirmBtn.disabled = false;
+  confirmBtn.classList.add('ta-is-hidden');
+  wipeProductPlan = null;
+  openModal('wipeProductModal');
+});
+
+document.getElementById('wipeProductScopeSelect').addEventListener('change', async () => {
+  const scope = document.getElementById('wipeProductScopeSelect').value;
+  const previewEl = document.getElementById('wipeProductScopePreview');
+  const passwordRow = document.getElementById('wipeProductPasswordRow');
+  const confirmBtn = document.getElementById('confirmWipeProductBtn');
+  wipeProductPlan = null;
+
+  if (!scope) {
+    previewEl.classList.add('ta-is-hidden');
+    passwordRow.classList.add('ta-is-hidden');
+    confirmBtn.classList.add('ta-is-hidden');
+    return;
+  }
+
+  const targetProducts = scope === '__ALL__' ? products : products.filter(p => p.category === scope);
+  previewEl.textContent = '計算中...';
+  previewEl.classList.remove('ta-is-hidden');
+  passwordRow.classList.add('ta-is-hidden');
+  confirmBtn.classList.add('ta-is-hidden');
+
+  // 範圍裡只要有一個成品「已製作未售出」大於0(不管是無規格成品自己的,還是任何一個規格的),
+  // 就整批擋下不給清除,因為刪除成品會讓材料的已預留數量永久對不上、沒辦法救回來
+  const blockedProducts = targetProducts.filter(p => {
+    const hasVariants = Object.keys(p.variantSkus || {}).length > 0;
+    if (hasVariants) return Object.values(p.variantPreMadeStock || {}).some(v => (v || 0) > 0);
+    return (p.preMadeStock || 0) > 0;
+  });
+  if (blockedProducts.length) {
+    const names = blockedProducts.map(p => p.name).join('、');
+    previewEl.textContent = `⚠️ 這個範圍裡有 ${blockedProducts.length} 個成品目前「已製作未售出」大於0(${names}),代表材料還有已預留數量卡在它們身上,無法清除。請先確認這些成品的生產登記/出貨狀況,把已製作未售出歸零後再重新清除。`;
+    return;
+  }
+
+  const targetIds = new Set(targetProducts.map(p => p.id));
+  const [productionLogsSnap, shipmentLogsSnap, mappingsSnap] = await Promise.all([
+    getDocs(collection(db, 'productionLogs')),
+    getDocs(collection(db, 'shipmentLogs')),
+    getDocs(collection(db, 'posProductMappings')),
+  ]);
+  const productionLogIds = productionLogsSnap.docs.filter(d => targetIds.has(d.data().productId)).map(d => d.id);
+  const shipmentLogIds = shipmentLogsSnap.docs.filter(d => targetIds.has(d.data().productId)).map(d => d.id);
+  const referencingMappingsCount = mappingsSnap.docs
+    .map(d => d.data())
+    .filter(m => (m.bomTargets || []).some(t => targetIds.has(t.bomProductId))).length;
+
+  const scopeLabel = scope === '__ALL__' ? '全部分類' : `「${scope}」`;
+  let text = `${scopeLabel}目前有 ${targetProducts.length} 筆成品、${productionLogIds.length} 筆生產登記紀錄、${shipmentLogIds.length} 筆出貨紀錄,清除後無法復原。`;
+  if (referencingMappingsCount) {
+    text += ` ⚠️ 另外有 ${referencingMappingsCount} 筆 POS 商品對應設定指向這個範圍裡的成品,清除後這些對應會失效,需要自己到「POS 商品對應設定」清理。`;
+  }
+  previewEl.textContent = text;
+  wipeProductPlan = { scope, targetProducts, productionLogIds, shipmentLogIds };
+  passwordRow.classList.remove('ta-is-hidden');
+  confirmBtn.classList.remove('ta-is-hidden');
+});
+
+document.getElementById('confirmWipeProductBtn').addEventListener('click', async () => {
+  const plan = wipeProductPlan;
+  if (!plan) return;
+  const password = document.getElementById('wipeProductPasswordInput').value;
+  const errEl = document.getElementById('wipeProductErrorText');
+  const progressEl = document.getElementById('wipeProductProgressText');
+  const btn = document.getElementById('confirmWipeProductBtn');
+
+  errEl.classList.add('ta-is-hidden'); errEl.textContent = '';
+  if (!password) { errEl.textContent = '請輸入密碼'; errEl.classList.remove('ta-is-hidden'); return; }
+
+  btn.disabled = true;
+  progressEl.classList.remove('ta-is-hidden');
+  progressEl.textContent = '驗證密碼中...';
+
+  try {
+    const credential = EmailAuthProvider.credential(auth.currentUser.email, password);
+    await reauthenticateWithCredential(auth.currentUser, credential);
+  } catch (err) {
+    progressEl.classList.add('ta-is-hidden'); progressEl.textContent = '';
+    errEl.textContent = '密碼錯誤,未執行清除';
+    errEl.classList.remove('ta-is-hidden');
+    btn.disabled = false;
+    return;
+  }
+
+  try {
+    progressEl.textContent = '清除中...';
+    const ops = [
+      ...plan.targetProducts.map(p => doc(db, 'products', p.id)),
+      ...plan.productionLogIds.map(id => doc(db, 'productionLogs', id)),
+      ...plan.shipmentLogIds.map(id => doc(db, 'shipmentLogs', id)),
+    ];
+    const CHUNK_SIZE = 400;
+    let committed = 0;
+    for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+      const chunk = ops.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach(ref => batch.delete(ref));
+      await batch.commit();
+      committed += chunk.length;
+      progressEl.textContent = `清除中... 已處理 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作`;
+    }
+
+    // 清除範圍對應的成品編號流水號一起歸零,避免下次編號從一個跟現況對不上的號碼繼續跳
+    if (plan.scope === '__ALL__') {
+      await deleteDoc(doc(db, 'settings', 'productCounters'));
+    } else {
+      const code = (productOptions.categoryCodes || {})[plan.scope];
+      if (code) await setDoc(doc(db, 'settings', 'productCounters'), { [code]: 0 }, { merge: true });
+    }
+
+    const deletedIds = new Set(plan.targetProducts.map(p => p.id));
+    products = products.filter(p => !deletedIds.has(p.id));
+    renderProductCategoryManageList();
+    renderProductTable();
+
+    const scopeLabel = plan.scope === '__ALL__' ? '全部分類' : `「${plan.scope}」`;
+    progressEl.textContent = `清除完成！已清除${scopeLabel}共 ${plan.targetProducts.length} 筆成品、${plan.productionLogIds.length} 筆生產登記紀錄、${plan.shipmentLogIds.length} 筆出貨紀錄。`;
+    btn.classList.add('ta-is-hidden');
+    wipeProductPlan = null;
+  } catch (err) {
+    progressEl.textContent = '';
+    errEl.textContent = '清除失敗:' + err.message;
+    errEl.classList.remove('ta-is-hidden');
   } finally {
     btn.disabled = false;
   }
