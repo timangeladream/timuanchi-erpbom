@@ -2997,6 +2997,14 @@ let deleteTargetHistCount = 0;
 let deleteTargetRequiresConfirmName = false;
 
 async function deleteMaterial(m) {
+  // 已預留數量代表現在就有已製作未售出的成品卡在這款材料身上;材料一旦刪除,這筆預留的
+  // 庫存記錄會永久消失、沒辦法補救(之後那些成品要出貨時,也會因為材料找不到而卡住),
+  // 所以直接硬性擋下,不像一般刪除只是跳警告讓你確認就能刪
+  if ((m.reservedStock || 0) > 0) {
+    alert(`「${displayName(m)}」目前已預留數量是 ${m.reservedStock},代表有已製作未售出的成品卡在這款材料身上,無法刪除。請先確認這些成品的生產登記/出貨狀況,把已預留數量歸零後再刪除。`);
+    return;
+  }
+
   const histSnap = await getDocs(collection(db, 'materials', m.id, 'history'));
   deleteTargetMaterial = m;
   deleteTargetHistCount = histSnap.size;
@@ -4112,6 +4120,15 @@ document.getElementById('wipeScopeSelect').addEventListener('change', async () =
   passwordRow.classList.add('ta-is-hidden');
   confirmBtn.classList.add('ta-is-hidden');
 
+  // 範圍裡只要有一款材料「已預留數量」大於0(代表有已製作未售出的成品卡在它身上),就整批擋下不給清除,
+  // 因為材料一旦被批次刪除,這筆預留庫存記錄會永久消失、沒辦法補救
+  const reservedMaterials = targetMaterials.filter(m => (m.reservedStock || 0) > 0);
+  if (reservedMaterials.length) {
+    const names = reservedMaterials.map(m => displayName(m)).join('、');
+    previewEl.textContent = `⚠️ 這個範圍裡有 ${reservedMaterials.length} 款材料目前「已預留數量」大於0(${names}),代表有已製作未售出的成品卡在它們身上,無法清除。請先確認這些成品的生產登記/出貨狀況,把已預留數量歸零後再重新清除。`;
+    return;
+  }
+
   let historyCount = 0;
   if (scope === '__ALL__') {
     // 全部分類本來就需要讀完所有材料的歷史紀錄,用集合群組查詢1次算完,不用逐款材料分開問
@@ -4124,8 +4141,28 @@ document.getElementById('wipeScopeSelect').addEventListener('change', async () =
     }
   }
 
+  // 順便檢查這些材料有沒有被 BOM 成品的配方引用中(基礎配方+每個規格組合各自的配方),
+  // 批次清除影響範圍比刪除單一材料大,更需要在按下清除前就看到這個警告
+  let referenceWarning = '';
+  try {
+    const targetIds = new Set(targetMaterials.map(m => m.id));
+    const productsSnap = await getDocs(collection(db, 'products'));
+    const referencingNames = [];
+    productsSnap.docs.forEach(d => {
+      const p = d.data();
+      const inBaseRecipe = (p.recipe || []).some(r => targetIds.has(r.materialId));
+      const inVariantRecipes = Object.values(p.variantRecipes || {}).some(recipe => (recipe || []).some(r => targetIds.has(r.materialId)));
+      if (inBaseRecipe || inVariantRecipes) referencingNames.push(p.name);
+    });
+    if (referencingNames.length) {
+      referenceWarning = ` ⚠️ 其中有材料被 ${referencingNames.length} 個成品的配方使用中(${referencingNames.join('、')}),清除後這些配方會找不到對應的材料。`;
+    }
+  } catch (e) {
+    // 讀取失敗不擋清除流程,只是少了這項提醒
+  }
+
   const scopeLabel = scope === '__ALL__' ? '全部分類' : `「${scope}」`;
-  previewEl.textContent = `${scopeLabel}目前有 ${targetMaterials.length} 筆材料、${historyCount} 筆進貨紀錄,清除後無法復原。`;
+  previewEl.textContent = `${scopeLabel}目前有 ${targetMaterials.length} 筆材料、${historyCount} 筆進貨紀錄,清除後無法復原。${referenceWarning}`;
   passwordRow.classList.remove('ta-is-hidden');
   confirmBtn.classList.remove('ta-is-hidden');
 });
