@@ -1061,8 +1061,9 @@ async function refreshProductLocal(productId) {
   const idx = products.findIndex(p => p.id === productId);
   if (snap.exists()) {
     const updated = { id: snap.id, ...snap.data() };
+    // 新成品放最前面(跟成品列表「最新建立排最上面」的排序方式一致),編輯既有成品維持原本位置不動
     if (idx >= 0) products[idx] = updated;
-    else products.push(updated);
+    else products.unshift(updated);
   } else if (idx >= 0) {
     products.splice(idx, 1);
   }
@@ -1124,6 +1125,9 @@ async function initData() {
 
   const prodSnap = await getDocs(collection(db, 'products'));
   products = prodSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // Firestore 沒有指定排序時不保證每次查詢的順序一致,固定依建立時間排序(最新的排最上面),
+  // 避免每次重新整理成品列表順序看起來隨機變動
+  products.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
   renderProductCategoryManageList();
   renderProductTable();
 
