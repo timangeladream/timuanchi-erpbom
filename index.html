@@ -1012,6 +1012,7 @@
         <label class="ta-radio-option"><input type="radio" name="adjustTarget" value="primary" id="adjustTargetPrimary" checked> 正品庫存</label>
         <label class="ta-radio-option"><input type="radio" name="adjustTarget" value="secondary" id="adjustTargetSecondary"> 次品庫存</label>
         <label class="ta-radio-option"><input type="radio" name="adjustTarget" value="scrap" id="adjustTargetScrap"> 報廢登記</label>
+        <label class="ta-radio-option"><input type="radio" name="adjustTarget" value="reserved" id="adjustTargetReserved"> 已預留數量</label>
       </div>
     </div>
     <div class="ta-form-row">
@@ -3119,7 +3120,7 @@ function renderTimeline(logs, unit, materialId) {
         單價：${unitCostTags}
         ${log.note ? '<br>備註：' + escapeHtml(log.note) : ''}`;
     } else if (log.type === 'adjust') {
-      const targetLabel = log.target === 'secondary' ? '次品庫存' : '正品庫存';
+      const targetLabel = log.target === 'secondary' ? '次品庫存' : log.target === 'reserved' ? '已預留數量' : '正品庫存';
       if (log.scrapQuantity) {
         typeLabel = '報廢登記'; cls = 'adjust';
         detail = `${targetLabel} 數量:${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff})<br>
@@ -3277,8 +3278,9 @@ function updateAdjustCurrentDisplay() {
   const unit = m.unit || '';
   const isSecondary = document.getElementById('adjustTargetSecondary').checked;
   const isScrap = document.getElementById('adjustTargetScrap').checked;
-  const current = isSecondary ? (m.currentStockSecondary || 0) : (m.currentStock || 0);
-  const label = isSecondary ? '次品庫存' : '正品庫存';
+  const isReserved = document.getElementById('adjustTargetReserved').checked;
+  const current = isReserved ? (m.reservedStock || 0) : isSecondary ? (m.currentStockSecondary || 0) : (m.currentStock || 0);
+  const label = isReserved ? '已預留數量' : isSecondary ? '次品庫存' : '正品庫存';
   document.getElementById('adjustCurrent').value = `${current} ${unit}(${label})`;
   document.getElementById('adjustScrapTotalRow').classList.toggle('ta-is-hidden', !isScrap);
   if (isScrap) {
@@ -3300,8 +3302,22 @@ document.getElementById('submitAdjustBtn').addEventListener('click', async () =>
   const reason = document.getElementById('adjustReason').value.trim();
   const isSecondary = document.getElementById('adjustTargetSecondary').checked;
   const isScrap = document.getElementById('adjustTargetScrap').checked;
+  const isReserved = document.getElementById('adjustTargetReserved').checked;
 
-  if (isScrap) {
+  if (isReserved) {
+    const newQty = parseFloat(document.getElementById('adjustNewQty').value);
+    if (isNaN(newQty) || newQty < 0) { alert('請輸入正確的數量'); return; }
+    const before = adjustTargetMaterial.reservedStock || 0;
+
+    await addDoc(collection(db, 'materials', adjustTargetMaterial.id, 'history'), {
+      type: 'adjust', target: 'reserved',
+      beforeQty: before, afterQty: newQty, diff: newQty - before, reason,
+      timestamp: serverTimestamp(),
+    });
+    await updateDoc(doc(db, 'materials', adjustTargetMaterial.id), {
+      reservedStock: newQty, updatedAt: serverTimestamp(),
+    });
+  } else if (isScrap) {
     const scrapQty = parseFloat(document.getElementById('adjustNewQty').value);
     const before = adjustTargetMaterial.currentStock || 0;
     if (isNaN(scrapQty) || scrapQty <= 0) { alert('請輸入正確的報廢數量'); return; }
