@@ -674,6 +674,23 @@
   </div>
 </div>
 
+<!-- 複製規格配方到其他規格 Modal -->
+<div class="ta-modal-overlay" id="copyVariantRecipeModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="copyVariantRecipeModal">✕</span>
+    <h2 id="copyVariantRecipeTitle">複製配方到其他規格</h2>
+    <div class="ta-modal-text">勾選要套用到哪些規格(會覆蓋掉目標規格目前的配方,包括已經客製化過的,此動作無法復原)</div>
+    <div class="ta-form-row">
+      <label><input type="checkbox" id="copyVariantRecipeSelectAll"> 全選</label>
+    </div>
+    <div id="copyVariantRecipeTargetList"></div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="copyVariantRecipeModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="copyVariantRecipeConfirmBtn">確認套用</button>
+    </div>
+  </div>
+</div>
+
 <!-- 匯入成品 Modal -->
 <div class="ta-modal-overlay" id="importProductModal">
   <div class="ta-modal ta-modal--wide">
@@ -1638,6 +1655,7 @@ function renderVariantSection(p) {
           <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-pricing>定價試算</button>
           <button type="button" class="ta-btn ta-btn-sm" data-register-production>生產登記</button>
           <button type="button" class="ta-btn ta-btn-sm" data-register-shipment>登記出貨</button>
+          <button type="button" class="ta-btn ta-btn-sm" data-copy-recipe>複製配方到其他規格</button>
         </div>
       `;
     }).join('');
@@ -1723,7 +1741,91 @@ function wireVariantComboEditButtons(productId) {
       }
     });
   });
+  document.querySelectorAll('#variantCombosList [data-copy-recipe]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('.ta-variant-combo-row');
+      btn.disabled = true;
+      try {
+        const saved = await saveVariantSettings(productId);
+        if (!saved) return;
+        openCopyVariantRecipeModal(productId, row.dataset.comboKey, row.dataset.comboLabel);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
 }
+
+// 把基礎配方覆蓋套用到這個成品底下的每一個規格(包括已經客製化過的),需要使用者先確認
+async function applyBaseRecipeToAllVariants(productId) {
+  const p = products.find(x => x.id === productId);
+  if (!p) return;
+  const keys = Object.keys(p.variantSkus || {});
+  if (!keys.length) return;
+  const ok = await showConfirmModal({
+    title: '套用基礎配方到全部規格',
+    text: '這會把基礎配方覆蓋套用到這個成品底下的每一個規格,包括已經客製化過的規格配方,此動作無法復原。確定要繼續嗎?',
+  });
+  if (!ok) return;
+  const baseRecipe = (p.recipe || []).map(r => ({ ...r }));
+  const variantRecipes = { ...(p.variantRecipes || {}) };
+  keys.forEach(key => { variantRecipes[key] = baseRecipe.map(r => ({ ...r })); });
+  await updateDoc(doc(db, 'products', productId), { variantRecipes, updatedAt: serverTimestamp() });
+  await refreshProductLocal(productId);
+  openProductDetail(productId);
+}
+
+// ---------- 複製某個規格的配方到其他規格(來源固定是那個規格自己的配方,目標可以自己勾選) ----------
+let copyVariantRecipeContext = null; // { productId, sourceKey }
+
+function openCopyVariantRecipeModal(productId, sourceKey, sourceLabel) {
+  const p = products.find(x => x.id === productId);
+  if (!p) return;
+  const otherKeys = Object.keys(p.variantSkus || {}).filter(k => k !== sourceKey);
+  if (!otherKeys.length) { alert('這個成品沒有其他規格可以套用'); return; }
+  copyVariantRecipeContext = { productId, sourceKey };
+  document.getElementById('copyVariantRecipeTitle').textContent = `複製配方到其他規格(來源：${sourceLabel})`;
+  document.getElementById('copyVariantRecipeSelectAll').checked = false;
+  const dimNames = p.variantKeyOrder || Object.keys(p.variants || {});
+  document.getElementById('copyVariantRecipeTargetList').innerHTML = otherKeys.map(key => {
+    const values = key.split(',');
+    const label = dimNames.map((d, i) => values[i]).filter(Boolean).join(' + ');
+    return `<div class="ta-form-row ta-form-row--full"><label><input type="checkbox" class="copy-variant-target-cb" value="${escapeHtml(key)}"> ${escapeHtml(label)}</label></div>`;
+  }).join('');
+  openModal('copyVariantRecipeModal');
+}
+
+document.getElementById('copyVariantRecipeSelectAll').addEventListener('change', (e) => {
+  document.querySelectorAll('.copy-variant-target-cb').forEach(cb => { cb.checked = e.target.checked; });
+});
+
+document.getElementById('copyVariantRecipeConfirmBtn').addEventListener('click', async () => {
+  const ctx = copyVariantRecipeContext;
+  if (!ctx) return;
+  const targetKeys = [...document.querySelectorAll('.copy-variant-target-cb:checked')].map(cb => cb.value);
+  if (!targetKeys.length) { alert('請至少勾選一個要套用的規格'); return; }
+  const ok = await showConfirmModal({
+    title: '確定要套用嗎?',
+    text: `這會把這個規格的配方,覆蓋套用到你勾選的 ${targetKeys.length} 個規格上,包括已經客製化過的配方,此動作無法復原。確定要繼續嗎?`,
+  });
+  if (!ok) return;
+  const btn = document.getElementById('copyVariantRecipeConfirmBtn');
+  btn.disabled = true;
+  try {
+    const p = products.find(x => x.id === ctx.productId);
+    const sourceRecipe = ((p.variantRecipes || {})[ctx.sourceKey] || []).map(r => ({ ...r }));
+    const variantRecipes = { ...(p.variantRecipes || {}) };
+    targetKeys.forEach(key => { variantRecipes[key] = sourceRecipe.map(r => ({ ...r })); });
+    await updateDoc(doc(db, 'products', ctx.productId), { variantRecipes, updatedAt: serverTimestamp() });
+    await refreshProductLocal(ctx.productId);
+    closeModal('copyVariantRecipeModal');
+    openProductDetail(ctx.productId);
+  } catch (e) {
+    alert('套用失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // 檢查規格貨號有沒有跟其他成品貨號或其他規格貨號重複
 function findDuplicateProductCode(code, { excludeProductId, excludeComboKey } = {}) {
@@ -1810,7 +1912,7 @@ function openProductDetail(id) {
 
   const hasVariants = Object.keys(p.variantSkus || {}).length > 0;
   const missingMaterialNotice = (!hasVariants && recipeHasMissingMaterial(p.recipe))
-    ? `<div class="ta-cost-change-notice">⚠️ 配方裡有材料已經被刪除,上面的材料成本沒有算進那些材料,實際成本會比顯示的更高,建議進「編輯配方」確認</div>`
+    ? `<div class="ta-cost-change-notice">⚠️ 配方裡有材料已經被刪除,上面的材料成本沒有算進那些材料,實際成本會比顯示的更高,建議進「編輯基礎配方」確認</div>`
     : '';
 
   const body = document.getElementById('productDetailBody');
@@ -1818,7 +1920,7 @@ function openProductDetail(id) {
     <div class="ta-detail-header">
       <div class="ta-detail-title">${escapeHtml(p.name)}</div>
       <div>
-        ${hasVariants ? '' : '<button class="ta-btn ta-btn-sm" id="editRecipeBtn">編輯配方</button>'}
+        <button class="ta-btn ta-btn-sm" id="editRecipeBtn">編輯基礎配方</button>
         ${hasVariants ? '' : '<button class="ta-btn ta-btn-sm" id="productionRegisterBtn">生產登記</button>'}
         <button class="ta-btn ta-btn-sm" id="productionLogsBtn">生產登記紀錄</button>
         ${hasVariants ? '' : '<button class="ta-btn ta-btn-sm" id="shipmentRegisterBtn">登記出貨</button>'}
@@ -1851,6 +1953,7 @@ function openProductDetail(id) {
       <div class="ta-variant-section-header">
         <h3>商品規格</h3>
         <button type="button" class="ta-btn ta-btn-sm" id="addVariantGroupBtn">＋ 新增規格</button>
+        ${hasVariants ? '<button type="button" class="ta-btn ta-btn-sm" id="applyBaseRecipeToAllBtn">套用基礎配方到全部規格</button>' : ''}
       </div>
       <div id="variantGroupsContainer"></div>
       <button type="button" class="ta-btn ta-btn-sm" id="generateVariantCombosBtn" style="margin-bottom:10px;">產生規格組合</button>
@@ -1861,7 +1964,8 @@ function openProductDetail(id) {
     </div>
   `;
 
-  if (!hasVariants) document.getElementById('editRecipeBtn').addEventListener('click', () => openRecipeModal(p));
+  document.getElementById('editRecipeBtn').addEventListener('click', () => openRecipeModal(p));
+  if (hasVariants) document.getElementById('applyBaseRecipeToAllBtn').addEventListener('click', () => applyBaseRecipeToAllVariants(p.id));
   if (!hasVariants) document.getElementById('productionRegisterBtn').addEventListener('click', () => openProductionRegisterModal(p));
   document.getElementById('productionLogsBtn').addEventListener('click', () => openProductionLogsModal(p));
   if (!hasVariants) document.getElementById('shipmentRegisterBtn').addEventListener('click', () => openShipmentRegisterModal(p));
