@@ -291,6 +291,10 @@
   .ta-pos-restock-row-name { font-weight: 600; margin-bottom: 4px; }
   .ta-pos-restock-row-match { color: var(--success); }
   .ta-pos-restock-row-mismatch { color: var(--warn); font-weight: 600; }
+  .ta-import-errors {
+    padding: 12px 14px; border-radius: 8px; background: #fdf0ef; border: 1px solid #f0d0cc;
+    font-size: 12.5px; color: var(--danger); margin: 14px 0; max-height: 220px; overflow-y: auto;
+  }
 
   .ta-placeholder {
     background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
@@ -364,6 +368,7 @@
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item" id="openProductCategoryManageBtn">分類管理</button>
   <button class="ta-drawer-item" id="openExportRecipeBtn">匯出配方</button>
+  <button class="ta-drawer-item" id="openImportProductBtn">匯入成品</button>
   <div class="ta-drawer-divider"></div>
   <div class="ta-drawer-pos-status" id="posLoginStatus">POS：尚未登入</div>
   <button class="ta-drawer-item" id="openPosLoginBtn">登入 POS</button>
@@ -661,6 +666,20 @@
     <div id="posRestockReminderList"></div>
     <div class="ta-modal-actions">
       <button class="ta-btn ta-btn-primary" data-close="posRestockReminderModal">知道了</button>
+    </div>
+  </div>
+</div>
+
+<!-- 匯入成品 Modal -->
+<div class="ta-modal-overlay" id="importProductModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="importProductModal">✕</span>
+    <h2>匯入成品</h2>
+    <div class="ta-modal-text">Excel 欄位：成品分類 / 成品名稱 / 售價(選填) / 備註(選填) / 略過。成品編號由系統自動產生,不用填;配方跟規格請匯入後再手動設定。「略過」欄位填任何文字,該列就不會被匯入。</div>
+    <input type="file" id="importProductFileInput" accept=".xlsx,.xls">
+    <div id="importProductResult"></div>
+    <div class="ta-modal-actions ta-is-hidden" id="importProductConfirmRow">
+      <button class="ta-btn ta-btn-primary" id="confirmImportProductBtn">確認匯入</button>
     </div>
   </div>
 </div>
@@ -3060,6 +3079,109 @@ async function showPosRestockReminder(bomProductId, bomVariantKey) {
   document.getElementById('posRestockReminderList').innerHTML = rows;
   openModal('posRestockReminderModal');
 }
+
+// ---------- 匯入成品(只建立基本資料,不含配方/規格) ----------
+let importProductParsedRows = null;
+
+document.getElementById('openImportProductBtn').addEventListener('click', () => {
+  closeDrawer();
+  document.getElementById('importProductFileInput').value = '';
+  document.getElementById('importProductResult').innerHTML = '';
+  document.getElementById('importProductConfirmRow').classList.add('ta-is-hidden');
+  importProductParsedRows = null;
+  openModal('importProductModal');
+});
+
+document.getElementById('importProductFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const resultEl = document.getElementById('importProductResult');
+  resultEl.innerHTML = '讀取中...';
+  document.getElementById('importProductConfirmRow').classList.add('ta-is-hidden');
+  importProductParsedRows = null;
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', blankrows: true });
+    processImportProductRows(rows);
+  } catch (err) {
+    resultEl.innerHTML = `<div class="ta-import-errors">讀取檔案失敗:${escapeHtml(err.message)}</div>`;
+  }
+});
+
+function processImportProductRows(rows) {
+  const resultEl = document.getElementById('importProductResult');
+  if (!rows.length) {
+    resultEl.innerHTML = '<div class="ta-empty-hint">檔案裡沒有讀到任何資料列</div>';
+    return;
+  }
+
+  let skippedCount = 0;
+  const parsed = [];
+  const missingCategories = new Set();
+  const validCategories = new Set(Object.keys(productOptions.categoryCodes || {}));
+
+  rows.forEach(row => {
+    if (Object.values(row).every(v => v === '' || v == null)) return; // 完全空白的列不算資料
+    if (String(row['略過'] ?? '').trim()) { skippedCount++; return; }
+    const category = String(row['成品分類'] ?? '').trim();
+    const name = String(row['成品名稱'] ?? '').trim();
+    const note = String(row['備註'] ?? '').trim();
+    if (!category || !name) return; // 沒填分類或名稱,視為無效列,忽略不處理
+    if (!validCategories.has(category)) missingCategories.add(category);
+    const sellingPriceRaw = row['售價'];
+    const sellingPrice = sellingPriceRaw !== '' && sellingPriceRaw != null && !isNaN(Number(sellingPriceRaw)) ? Number(sellingPriceRaw) : null;
+    parsed.push({ category, name, sellingPrice, note });
+  });
+
+  if (missingCategories.size) {
+    resultEl.innerHTML = `<div class="ta-import-errors">以下分類系統裡還沒有,請先到「分類管理」手動建立後再重新匯入(本次不會匯入任何資料):<br>${[...missingCategories].map(c => escapeHtml(c)).join('、')}</div>`;
+    return;
+  }
+
+  if (!parsed.length) {
+    resultEl.innerHTML = `<div class="ta-empty-hint">沒有可以匯入的資料列${skippedCount ? `(略過 ${skippedCount} 列)` : ''}</div>`;
+    return;
+  }
+
+  importProductParsedRows = parsed;
+  resultEl.innerHTML = `<div class="ta-modal-text">共讀取 ${parsed.length} 筆成品資料可以匯入${skippedCount ? `(另外略過 ${skippedCount} 列)` : ''}</div>`;
+  document.getElementById('importProductConfirmRow').classList.remove('ta-is-hidden');
+}
+
+document.getElementById('confirmImportProductBtn').addEventListener('click', async () => {
+  const rows = importProductParsedRows;
+  if (!rows || !rows.length) return;
+  const btn = document.getElementById('confirmImportProductBtn');
+  btn.disabled = true;
+  const resultEl = document.getElementById('importProductResult');
+  let successCount = 0;
+  try {
+    // 逐列依序處理(不平行 Promise.all),確保成品編號的順序完全對應 Excel 表格由上到下的順序,
+    // 每次匯入結果都一致,不會因為交易搶跑而讓編號順序跑掉
+    for (const row of rows) {
+      const productCode = await getNextProductCode(row.category);
+      if (!productCode) continue; // 驗證階段已經擋過分類不存在的情況,這裡只是防呆
+      const payload = {
+        category: row.category, name: row.name, note: row.note, productCode,
+        archived: false, recipe: [],
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      };
+      if (row.sellingPrice != null) payload.sellingPrice = row.sellingPrice;
+      const newRef = await addDoc(collection(db, 'products'), payload);
+      await refreshProductLocal(newRef.id);
+      successCount++;
+    }
+    resultEl.innerHTML = `<div class="ta-modal-text">✓ 匯入完成,共新增 ${successCount} 筆成品</div>`;
+    document.getElementById('importProductConfirmRow').classList.add('ta-is-hidden');
+    importProductParsedRows = null;
+  } catch (e) {
+    resultEl.innerHTML += `<div class="ta-import-errors">匯入中斷:${escapeHtml(e.message)}(已成功匯入 ${successCount} 筆)</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // ---------- 編輯配方 / 設定分類必備材料(共用同一套彈窗+搜尋邏輯) ----------
 let currentRecipe = []; // 目前編輯中的配方(尚未儲存): [{materialId, quantity}]
