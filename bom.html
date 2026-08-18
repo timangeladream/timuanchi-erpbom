@@ -340,6 +340,7 @@
         <th data-col="name">成品名稱</th>
         <th class="ta-col-right" data-col="sellingPrice">售價</th>
         <th class="ta-col-center" data-col="variantCount">多規格</th>
+        <th class="ta-col-right" data-col="preMadeStock">已製作未售出</th>
         <th class="ta-col-center" data-col="status">狀態</th>
       </tr>
     </thead>
@@ -1354,12 +1355,16 @@ function renderProductTable() {
     const tr = document.createElement('tr');
     if (p.archived) tr.classList.add('ta-row--archived');
     const variantCount = Object.keys(p.variantSkus || {}).length;
+    const preMadeStock = variantCount
+      ? Object.values(p.variantPreMadeStock || {}).reduce((sum, v) => sum + (v || 0), 0)
+      : (p.preMadeStock || 0);
     tr.innerHTML = `
       <td>${escapeHtml(p.productCode)}</td>
       <td>${escapeHtml(p.category)}</td>
       <td>${escapeHtml(p.name)}</td>
       <td class="ta-col-right">${p.sellingPrice != null ? 'NT$ ' + Number(p.sellingPrice).toFixed(0) : ''}</td>
       <td class="ta-col-center">${variantCount ? `${variantCount} 個規格` : ''}</td>
+      <td class="ta-col-right">${preMadeStock.toLocaleString()}</td>
       <td class="ta-col-center">${p.archived ? '<span class="ta-status-tag">已下架</span>' : ''}${productHasMissingMaterial(p) ? ' <span class="ta-status-tag ta-status-tag--danger">⚠️有異動</span>' : ''}</td>
     `;
     tr.addEventListener('click', () => openProductDetail(p.id));
