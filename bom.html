@@ -192,6 +192,10 @@
   .ta-recipe-row-unit { width: 40px; font-size: 12px; color: var(--text-muted); }
   .ta-recipe-row-subtotal { width: 100px; text-align: right; font-size: 13px; }
   .ta-recipe-row-del { cursor: pointer; color: var(--danger); font-size: 12px; white-space: nowrap; }
+  .ta-recipe-item { border-bottom: 1px solid var(--border); padding: 4px 0; }
+  .ta-recipe-item .ta-recipe-row { border-bottom: none; padding-bottom: 2px; }
+  .ta-recipe-row-note { padding: 0 0 8px; }
+  .ta-recipe-row-note input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
   .ta-recipe-total { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 0 0; font-size: 15px; font-weight: 600; color: var(--primary-dark); }
 
   .ta-production-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
@@ -2003,7 +2007,7 @@ function renderProductionForm() {
     const lossVal = existingLossInputs.hasOwnProperty(m.id) ? existingLossInputs[m.id] : ((ctx.initialLosses || {})[r.materialId] || 0);
     return `
       <div class="ta-production-row" data-material-id="${escapeHtml(m.id)}">
-        <div class="ta-production-row-name">${escapeHtml(materialDisplayName(m))}</div>
+        <div class="ta-production-row-name">${escapeHtml(materialDisplayName(m))}${r.note ? `<br><span style="font-size:11px;color:var(--text-muted);">${escapeHtml(r.note)}</span>` : ''}</div>
         <div class="ta-production-row-consumed">配方消耗：${consumed} ${escapeHtml(m.unit || '')} → 已預留</div>
         <div class="ta-production-row-loss">
           <span>額外損耗</span>
@@ -2324,7 +2328,7 @@ function renderShipmentForm() {
     const consumed = (r.quantity || 0) * qty;
     return `
       <div class="ta-production-row">
-        <div class="ta-production-row-name">${escapeHtml(materialDisplayName(m))}</div>
+        <div class="ta-production-row-name">${escapeHtml(materialDisplayName(m))}${r.note ? `<br><span style="font-size:11px;color:var(--text-muted);">${escapeHtml(r.note)}</span>` : ''}</div>
         <div class="ta-production-row-consumed">消耗：${consumed} ${escapeHtml(m.unit || '')}(已預留 → 真正扣除)</div>
       </div>
     `;
@@ -3449,20 +3453,25 @@ function renderRecipeList() {
     wrap.innerHTML = currentRecipe.map((r, idx) => {
       const m = materials.find(x => x.id === r.materialId);
       if (!m) {
-        return `<div class="ta-recipe-row">
-          <div class="ta-recipe-row-name" style="color:var(--danger);">材料已刪除(無法顯示名稱)</div>
-          <span class="ta-recipe-row-del" data-idx="${idx}">移除</span>
+        return `<div class="ta-recipe-item">
+          <div class="ta-recipe-row">
+            <div class="ta-recipe-row-name" style="color:var(--danger);">材料已刪除(無法顯示名稱)</div>
+            <span class="ta-recipe-row-del" data-idx="${idx}">移除</span>
+          </div>
         </div>`;
       }
       const cost = m.currentUnitCostWeightedAvg || 0;
       const subtotal = cost * (r.quantity || 0);
       const step = isContinuousUnit(m.unit) ? '0.01' : '1';
-      return `<div class="ta-recipe-row">
-        <div class="ta-recipe-row-name">${escapeHtml(materialDisplayName(m))}</div>
-        <div class="ta-recipe-row-qty"><input type="number" min="0" step="${step}" value="${r.quantity}" data-idx="${idx}"></div>
-        <div class="ta-recipe-row-unit">${escapeHtml(m.unit || '')}</div>
-        <div class="ta-recipe-row-subtotal" data-idx="${idx}">NT$${subtotal.toFixed(2)}</div>
-        <span class="ta-recipe-row-del" data-idx="${idx}">移除</span>
+      return `<div class="ta-recipe-item">
+        <div class="ta-recipe-row">
+          <div class="ta-recipe-row-name">${escapeHtml(materialDisplayName(m))}</div>
+          <div class="ta-recipe-row-qty"><input type="number" min="0" step="${step}" value="${r.quantity}" data-idx="${idx}"></div>
+          <div class="ta-recipe-row-unit">${escapeHtml(m.unit || '')}</div>
+          <div class="ta-recipe-row-subtotal" data-idx="${idx}">NT$${subtotal.toFixed(2)}</div>
+          <span class="ta-recipe-row-del" data-idx="${idx}">移除</span>
+        </div>
+        <div class="ta-recipe-row-note"><input type="text" placeholder="用途備註(選填,例如:1cm×2條＋2.1cm×2條)" value="${escapeHtml(r.note || '')}" data-note-idx="${idx}"></div>
       </div>`;
     }).join('');
   }
@@ -3496,6 +3505,12 @@ function renderRecipeList() {
     el.addEventListener('click', () => {
       currentRecipe.splice(Number(el.dataset.idx), 1);
       renderRecipeList();
+    });
+  });
+  wrap.querySelectorAll('.ta-recipe-row-note input').forEach(input => {
+    input.addEventListener('input', () => {
+      const idx = Number(input.dataset.noteIdx);
+      currentRecipe[idx].note = input.value;
     });
   });
   renderRecipeTotal();
