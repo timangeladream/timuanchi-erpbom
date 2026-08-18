@@ -287,6 +287,10 @@
   .ta-pos-preview-row { padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .ta-pos-preview-item { padding: 2px 0 2px 16px; font-size: 12px; color: var(--text-muted); }
   .ta-pos-preview-item--warn { color: var(--warn); }
+  .ta-pos-restock-row { padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .ta-pos-restock-row-name { font-weight: 600; margin-bottom: 4px; }
+  .ta-pos-restock-row-match { color: var(--success); }
+  .ta-pos-restock-row-mismatch { color: var(--warn); font-weight: 600; }
 
   .ta-placeholder {
     background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
@@ -645,6 +649,18 @@
     <span class="ta-modal-close" data-close="posSyncLogsModal">✕</span>
     <h2>POS 同步紀錄</h2>
     <div id="posSyncLogsList"></div>
+  </div>
+</div>
+
+<!-- 生產登記/登記出貨完成後的 POS 補貨提醒 Modal -->
+<div class="ta-modal-overlay" id="posRestockReminderModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="posRestockReminderModal">✕</span>
+    <h2>記得同步 POS 庫存</h2>
+    <div id="posRestockReminderList"></div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn ta-btn-primary" data-close="posRestockReminderModal">知道了</button>
+    </div>
   </div>
 </div>
 
@@ -2160,6 +2176,7 @@ document.getElementById('productionFormSaveBtn').addEventListener('click', async
     }
     closeModal('productionFormModal');
     openProductDetail(ctx.productId);
+    showPosRestockReminder(ctx.productId, ctx.variantKey || null);
   } catch (e) {
     alert('登記失敗:' + e.message);
   } finally {
@@ -2464,6 +2481,7 @@ document.getElementById('shipmentFormSaveBtn').addEventListener('click', async (
     }
     closeModal('shipmentFormModal');
     openProductDetail(ctx.productId);
+    showPosRestockReminder(ctx.productId, ctx.variantKey || null);
   } catch (e) {
     alert('登記失敗:' + e.message);
   } finally {
@@ -2967,6 +2985,76 @@ document.getElementById('openPosSyncLogsBtn').addEventListener('click', async ()
   }
   openModal('posSyncLogsModal');
 });
+
+// ---------- 生產登記/登記出貨完成後的 POS 補貨提醒 ----------
+// 完全不寫入 POS,只是讀取 POS 目前庫存(唯讀)拿來比對、提醒你要手動去 POS 更新,
+// 避免自動寫入 POS 庫存欄位,跟 POS 自己結帳時即時扣庫存的機制互相打架。
+
+// 反查:這個 BOM 成品(規格)有沒有被設定成某個 POS 商品對應的目標,一個 BOM 成品可能同時
+// 被好幾個 POS 商品用到(單獨賣 + 出現在某個組合包裡),所以回傳的是陣列
+function findPosMappingsForBomTarget(bomProductId, bomVariantKey) {
+  return posMappingsCache.filter(m =>
+    (m.bomTargets || []).some(t => t.bomProductId === bomProductId && (t.bomVariantKey || null) === (bomVariantKey || null))
+  );
+}
+
+function getBomPreMadeStock(bomProductId, bomVariantKey) {
+  const p = products.find(x => x.id === bomProductId);
+  if (!p) return 0;
+  return bomVariantKey ? ((p.variantPreMadeStock || {})[bomVariantKey] || 0) : (p.preMadeStock || 0);
+}
+
+// 這個 POS 商品對應算出來「目前能配出幾組」:單純一對一就是 BOM 已製作未售出本身,
+// 組合包(好幾個 bomTargets)則是「各自的已製作未售出 ÷ 各自的數量,取最小值」
+function computeMappingTargetStock(mapping) {
+  const targets = mapping.bomTargets || [];
+  if (!targets.length) return 0;
+  return Math.min(...targets.map(t => {
+    const preMade = getBomPreMadeStock(t.bomProductId, t.bomVariantKey);
+    return Math.floor(preMade / (t.quantityPerUnit || 1));
+  }));
+}
+
+async function showPosRestockReminder(bomProductId, bomVariantKey) {
+  // 每次都重新讀一次對應表(集合很小,讀取成本低),確保反查用的是最新設定,
+  // 不依賴使用者剛好有沒有打開過「POS商品對應設定」讓快取先被填好
+  try { await loadPosMappings(); } catch (e) { return; }
+
+  const relatedMappings = findPosMappingsForBomTarget(bomProductId, bomVariantKey);
+  if (!relatedMappings.length) return; // 這個成品根本沒設定過 POS 對應,沒什麼好提醒的
+
+  // 如果有登入 POS,順便抓一次最新的 POS 商品資料來比對;沒登入就只顯示 BOM 這邊算出來的建議值
+  if (posUser) {
+    try { await loadPosProducts(); } catch (e) { /* 讀取失敗不影響提醒本身,只是少了比對 */ }
+  }
+
+  const rows = relatedMappings.map(mapping => {
+    const targetStock = computeMappingTargetStock(mapping);
+    let posCurrentStock = null;
+    if (posUser) {
+      const posProduct = posProductsCache.find(p => p.id === mapping.posProductId);
+      if (posProduct) {
+        posCurrentStock = mapping.posVariantKey
+          ? (posProduct.variantStock || {})[mapping.posVariantKey]
+          : posProduct.stock;
+      }
+    }
+    const hasComparison = posCurrentStock !== null && posCurrentStock !== undefined;
+    const matched = hasComparison && Number(posCurrentStock) === targetStock;
+    return `
+      <div class="ta-pos-restock-row">
+        <div class="ta-pos-restock-row-name">${escapeHtml(mapping.posProductName || mapping.posProductId)}</div>
+        <div>建議設成：<strong>${targetStock}</strong> 件${hasComparison ? `　POS目前：${posCurrentStock} 件` : ''}</div>
+        ${hasComparison
+          ? (matched ? '<div class="ta-pos-restock-row-match">✓ 一致,不用調整</div>' : '<div class="ta-pos-restock-row-mismatch">⚠️ 跟 POS 目前庫存不一致,記得去 POS 更新</div>')
+          : '<div class="ta-modal-text" style="margin:0;">(尚未登入 POS,無法比對目前庫存,記得手動確認)</div>'}
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('posRestockReminderList').innerHTML = rows;
+  openModal('posRestockReminderModal');
+}
 
 // ---------- 編輯配方 / 設定分類必備材料(共用同一套彈窗+搜尋邏輯) ----------
 let currentRecipe = []; // 目前編輯中的配方(尚未儲存): [{materialId, quantity}]
