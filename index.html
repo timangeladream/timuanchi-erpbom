@@ -2907,7 +2907,7 @@ async function openDetail(id) {
   const cost = m.currentUnitCost || 0;
   const weightedAvgCost = m.currentUnitCostWeightedAvg || 0;
   const unit = m.unit || '';
-  const value = stock * cost;
+  const value = stock * weightedAvgCost; // 跟材料清單頁的「庫存總值」用同一套邏輯(加權平均成本),避免兩邊數字對不起來
   const reservedStock = m.reservedStock || 0;
   const availableStock = stock - reservedStock;
 
