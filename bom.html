@@ -385,6 +385,7 @@
   <button class="ta-drawer-item" id="openProductCategoryManageBtn">分類管理</button>
   <button class="ta-drawer-item" id="openExportRecipeBtn">匯出配方</button>
   <button class="ta-drawer-item" id="openImportProductBtn">匯入成品</button>
+  <button class="ta-drawer-item" id="openPricingTemplateBtn">定價公式範本設定</button>
   <button class="ta-drawer-item ta-drawer-item--danger" id="openWipeProductBtn">清除成品資料</button>
   <div class="ta-drawer-divider"></div>
   <div class="ta-drawer-pos-status" id="posLoginStatus">POS：尚未登入</div>
@@ -816,12 +817,12 @@
   </div>
 </div>
 
-<!-- 定價試算 Modal -->
+<!-- 定價試算 / 定價公式範本設定 Modal(共用同一套介面) -->
 <div class="ta-modal-overlay" id="pricingModal">
   <div class="ta-modal ta-modal--wide">
     <span class="ta-modal-close" data-close="pricingModal">✕</span>
-    <h2>定價試算</h2>
-    <p class="ta-modal-text" style="margin-top:-10px;">成本欄位已自動帶入這個成品目前的材料成本;其餘欄位(含成本項目/手續費項目)都是這個成品自己的設定,編輯時不會即時存檔,要按下方按鈕才會真正寫入。</p>
+    <h2 id="pricingModalTitle">定價試算</h2>
+    <p class="ta-modal-text" style="margin-top:-10px;" id="pricingModalDesc">成本欄位已自動帶入這個成品目前的材料成本;其餘欄位(含成本項目/手續費項目)都是這個成品自己的設定,編輯時不會即時存檔,要按下方按鈕才會真正寫入。</p>
     <p class="ta-pc-status" id="pcStatusLabel"></p>
 
     <div class="ta-pc-toggle-row">
@@ -883,7 +884,9 @@
     <p class="ta-modal-text" style="margin-top:-8px;">勾選「獨立售價」的項目(如寄櫃)不會併入稅後售價的手續費加總,而是另外算出一個獨立售價</p>
     <div id="pcFeeList" style="margin-bottom:1rem;"></div>
 
-    <p class="ta-modal-text" style="font-weight:600;">設計成本(三種比較情境)</p>
+    <div class="ta-form-row" style="max-width:320px;">
+      <input type="text" id="pcAaLabel" value="設計成本(三種比較情境)" style="font-weight:600;border:none;padding:0;background:transparent;">
+    </div>
     <div class="ta-pc-grid ta-pc-grid-3">
       <input type="number" id="pcAa1" value="100" step="1">
       <input type="number" id="pcAa2" value="50" step="1">
@@ -892,7 +895,7 @@
 
     <div class="ta-pc-cards" id="pcCards"></div>
 
-    <div class="ta-form-row">
+    <div class="ta-form-row" id="pcSellingPriceRow">
       <label>售價(確認後可以存回這個成品)</label>
       <input type="number" id="pcSellingPrice" step="1">
     </div>
@@ -903,6 +906,7 @@
       <button class="ta-btn ta-btn-primary" id="pcSaveInputsBtn">儲存個別設定</button>
       <button class="ta-btn ta-btn-primary" id="pcApplyGlobalBtn">全區套用</button>
       <button class="ta-btn ta-btn-primary" id="pcSaveBtn">儲存售價到成品</button>
+      <button class="ta-btn ta-btn-primary ta-is-hidden" id="pcSaveTemplateBtn">儲存範本</button>
     </div>
   </div>
 </div>
@@ -3927,9 +3931,18 @@ let pcCurrentInputs = null; // 目前彈窗編輯中的完整設定(本地暫存
 let pcNextCostId = 1, pcNextFeeId = 1;
 let pricingEditProductId = null;
 let pricingEditVariantKey = null; // 有值代表目前在編輯某個規格組合自己的售價
+let pricingEditIsTemplate = false; // true代表目前在編輯「定價公式範本」,不是綁定某個成品
+let pricingTemplateCache = null; // 定價公式範本的本地快取(讀過一次就記住,不用每次都問)
 
 function pcBlankInputs() {
-  return { rate: 0, marginMode: false, q: 0, u: 0, r: 0, aa1: 0, aa2: 0, aa3: 0, costItems: [], feeItems: [] };
+  return { rate: 0, marginMode: false, q: 0, u: 0, r: 0, aa1: 0, aa2: 0, aa3: 0, aaLabel: '設計成本(三種比較情境)', costItems: [], feeItems: [] };
+}
+
+async function loadPricingTemplate() {
+  if (pricingTemplateCache !== null) return pricingTemplateCache;
+  const snap = await getDoc(doc(db, 'settings', 'pricingTemplate'));
+  pricingTemplateCache = snap.exists() ? snap.data() : false; // false代表確認問過、範本不存在,不用每次都重問
+  return pricingTemplateCache;
 }
 
 function pcGatherCurrentInputs() {
@@ -3942,6 +3955,7 @@ function pcGatherCurrentInputs() {
     aa1: parseFloat(document.getElementById('pcAa1').value) || 0,
     aa2: parseFloat(document.getElementById('pcAa2').value) || 0,
     aa3: parseFloat(document.getElementById('pcAa3').value) || 0,
+    aaLabel: document.getElementById('pcAaLabel').value.trim() || '設計成本(三種比較情境)',
     costItems: pcCurrentInputs.costItems,
     feeItems: pcCurrentInputs.feeItems,
   };
@@ -4050,10 +4064,11 @@ function renderPcCards() {
   const AA2 = parseFloat(document.getElementById('pcAa2').value) || 0;
   const AA3 = parseFloat(document.getElementById('pcAa3').value) || 0;
 
+  const aaLabel = document.getElementById('pcAaLabel').value.trim() || '設計成本';
   const results = [
-    { label: '設計成本 ' + AA1, r: pcCalcOne(L, Q, R, AA1) },
-    { label: '設計成本 ' + AA2, r: pcCalcOne(L, Q, R, AA2) },
-    { label: '設計成本 ' + AA3, r: pcCalcOne(L, Q, R, AA3) },
+    { label: aaLabel + ' ' + AA1, r: pcCalcOne(L, Q, R, AA1) },
+    { label: aaLabel + ' ' + AA2, r: pcCalcOne(L, Q, R, AA2) },
+    { label: aaLabel + ' ' + AA3, r: pcCalcOne(L, Q, R, AA3) },
   ];
 
   document.getElementById('pcCards').innerHTML = results.map(({ label, r }) => {
@@ -4144,15 +4159,24 @@ function pcApplyMarginMode() {
 }
 document.getElementById('pcMarginModeToggle').addEventListener('change', () => { pcApplyMarginMode(); renderPcCards(); });
 
-['pcRmb', 'pcRate', 'pcQ', 'pcR', 'pcAa1', 'pcAa2', 'pcAa3', 'pcTwd', 'pcU'].forEach(id => {
+['pcRmb', 'pcRate', 'pcQ', 'pcR', 'pcAa1', 'pcAa2', 'pcAa3', 'pcTwd', 'pcU', 'pcAaLabel'].forEach(id => {
   document.getElementById(id).addEventListener('input', renderPcCards);
 });
 
 // variantKey 有給的話,代表是在編輯「某一個規格組合」自己的售價,不是成品共用的售價;
 // 定價試算的計算方式(成本項目/手續費項目/倍數公式)維持成品共用同一套,只有最後儲存的售價分開存
-function openPricingModal(p, variantKey = null) {
+async function openPricingModal(p, variantKey = null) {
   pricingEditProductId = p.id;
   pricingEditVariantKey = variantKey;
+  pricingEditIsTemplate = false;
+  document.getElementById('pricingModalTitle').textContent = '定價試算';
+  document.getElementById('pricingModalDesc').textContent = '成本欄位已自動帶入這個成品目前的材料成本;其餘欄位(含成本項目/手續費項目)都是這個成品自己的設定,編輯時不會即時存檔,要按下方按鈕才會真正寫入。';
+  document.getElementById('pcSellingPriceRow').classList.remove('ta-is-hidden');
+  document.getElementById('pcSaveInputsBtn').classList.remove('ta-is-hidden');
+  document.getElementById('pcApplyGlobalBtn').classList.remove('ta-is-hidden');
+  document.getElementById('pcSaveBtn').classList.remove('ta-is-hidden');
+  document.getElementById('pcSaveTemplateBtn').classList.add('ta-is-hidden');
+
   const pi = p.pricingInputs;
   pcCurrentInputs = pi
     ? { ...pcBlankInputs(), ...pi, costItems: (pi.costItems || []).map(it => ({ ...it })), feeItems: (pi.feeItems || []).map(it => ({ ...it })) }
@@ -4176,6 +4200,7 @@ function openPricingModal(p, variantKey = null) {
   document.getElementById('pcAa1').value = pcCurrentInputs.aa1;
   document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
   document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
+  document.getElementById('pcAaLabel').value = pcCurrentInputs.aaLabel || '設計成本(三種比較情境)';
   document.getElementById('pcSellingPrice').value = existingSellingPrice != null ? existingSellingPrice : '';
 
   pcApplyCurrencyMode();
@@ -4186,7 +4211,97 @@ function openPricingModal(p, variantKey = null) {
   renderPcStatusLabel(p);
 
   openModal('pricingModal');
+
+  // 這個成品(規格)從沒設定過定價試算,如果有定價公式範本,問一下要不要套用當起點
+  if (!pi) {
+    const template = await loadPricingTemplate();
+    if (template && pricingEditProductId === p.id && pricingEditVariantKey === variantKey) {
+      const apply = await showConfirmModal({
+        title: '套用定價公式範本',
+        text: '這個成品(規格)還沒有設定過定價試算,要不要套用已經建立好的定價公式範本(匯率/倍數/包裝成本/成本項目/手續費項目/設計成本標題)當作起點?套用後你還是可以自己再調整。',
+      });
+      if (apply && pricingEditProductId === p.id && pricingEditVariantKey === variantKey) {
+        pcCurrentInputs = { ...pcBlankInputs(), ...template, costItems: (template.costItems || []).map(it => ({ ...it })), feeItems: (template.feeItems || []).map(it => ({ ...it })) };
+        pcNextCostId = Math.max(0, ...pcCurrentInputs.costItems.map(c => c.id)) + 1;
+        pcNextFeeId = Math.max(0, ...pcCurrentInputs.feeItems.map(f => f.id)) + 1;
+        document.getElementById('pcRate').value = pcCurrentInputs.rate;
+        document.getElementById('pcQ').value = pcCurrentInputs.q;
+        document.getElementById('pcMarginModeToggle').checked = pcCurrentInputs.marginMode;
+        document.getElementById('pcR').value = pcCurrentInputs.r;
+        document.getElementById('pcAa1').value = pcCurrentInputs.aa1;
+        document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
+        document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
+        document.getElementById('pcAaLabel').value = pcCurrentInputs.aaLabel;
+        pcApplyMarginMode();
+        renderPcCostList();
+        renderPcFeeList();
+        renderPcCards();
+      }
+    }
+  }
 }
+
+// ---------- 定價公式範本設定(獨立於任何成品,新成品第一次打開定價試算時可以選擇套用) ----------
+document.getElementById('openPricingTemplateBtn').addEventListener('click', async () => {
+  closeDrawer();
+  pricingEditProductId = null;
+  pricingEditVariantKey = null;
+  pricingEditIsTemplate = true;
+  document.getElementById('pricingModalTitle').textContent = '定價公式範本設定';
+  document.getElementById('pricingModalDesc').textContent = '這裡設定的是「公版範本」,不綁定任何成品。成品第一次打開定價試算、還沒有自己的設定時,可以選擇套用這裡的內容當起點,之後範本更新不會回頭影響已經套用過的成品。';
+  document.getElementById('pcSellingPriceRow').classList.add('ta-is-hidden');
+  document.getElementById('pcSaveInputsBtn').classList.add('ta-is-hidden');
+  document.getElementById('pcApplyGlobalBtn').classList.add('ta-is-hidden');
+  document.getElementById('pcSaveBtn').classList.add('ta-is-hidden');
+  document.getElementById('pcSaveTemplateBtn').classList.remove('ta-is-hidden');
+
+  const template = await loadPricingTemplate();
+  pcCurrentInputs = template
+    ? { ...pcBlankInputs(), ...template, costItems: (template.costItems || []).map(it => ({ ...it })), feeItems: (template.feeItems || []).map(it => ({ ...it })) }
+    : pcBlankInputs();
+  pcNextCostId = Math.max(0, ...pcCurrentInputs.costItems.map(c => c.id)) + 1;
+  pcNextFeeId = Math.max(0, ...pcCurrentInputs.feeItems.map(f => f.id)) + 1;
+
+  document.getElementById('pcCurrencyModeToggle').checked = true;
+  document.getElementById('pcTwd').value = 0; // 範本不綁定成品,沒有真實材料成本可以帶入,純粹讓你預覽卡片用
+  document.getElementById('pcRate').value = pcCurrentInputs.rate;
+  document.getElementById('pcQ').value = pcCurrentInputs.q;
+  document.getElementById('pcU').value = pcCurrentInputs.u;
+  document.getElementById('pcMarginModeToggle').checked = pcCurrentInputs.marginMode;
+  document.getElementById('pcR').value = pcCurrentInputs.r;
+  document.getElementById('pcAa1').value = pcCurrentInputs.aa1;
+  document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
+  document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
+  document.getElementById('pcAaLabel').value = pcCurrentInputs.aaLabel || '設計成本(三種比較情境)';
+  document.getElementById('pcStatusLabel').textContent = template ? '範本已建立' : '尚未建立範本,目前為空白';
+
+  pcApplyCurrencyMode();
+  pcApplyMarginMode();
+  renderPcCostList();
+  renderPcFeeList();
+  renderPcCards();
+
+  openModal('pricingModal');
+});
+
+document.getElementById('pcSaveTemplateBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('pcSaveTemplateBtn');
+  btn.disabled = true;
+  try {
+    const templateData = pcGatherCurrentInputs();
+    delete templateData.u; // u是毛利率,是算出來的結果,範本不需要存這個
+    await setDoc(doc(db, 'settings', 'pricingTemplate'), { ...templateData, updatedAt: serverTimestamp() });
+    pricingTemplateCache = templateData;
+    document.getElementById('pcStatusLabel').textContent = '範本已建立';
+    const originalLabel = btn.textContent;
+    btn.textContent = '已儲存!';
+    setTimeout(() => { btn.textContent = originalLabel; }, 1200);
+  } catch (e) {
+    alert('儲存失敗:' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 document.getElementById('pcResetBlankBtn').addEventListener('click', () => {
   pcCurrentInputs = pcBlankInputs();
@@ -4200,6 +4315,7 @@ document.getElementById('pcResetBlankBtn').addEventListener('click', () => {
   document.getElementById('pcAa1').value = 0;
   document.getElementById('pcAa2').value = 0;
   document.getElementById('pcAa3').value = 0;
+  document.getElementById('pcAaLabel').value = '設計成本(三種比較情境)';
   pcApplyMarginMode();
   renderPcCostList();
   renderPcFeeList();
