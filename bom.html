@@ -2424,7 +2424,10 @@ async function deleteProductionLog(productId, log) {
           productId, productName: log.productName || '',
           variantKey: log.variantKey || null, variantLabel: log.variantLabel || null,
           consumedQuantity: m.consumedQuantity || 0,
-          extraLossQuantity: m.extraLossQuantity || 0,
+          extraLossReturned: m.extraLossQuantity || 0, // 純顯示用:這次加回了多少額外損耗
+          // 原本那筆「生產登記」的紀錄有把額外損耗算進「累計製作損耗數量/金額」,這裡要用負值扣掉,
+          // 不然這筆損耗明明已經還回來了,累計製作損耗卻還是把它算進去,對不起來
+          extraLossQuantity: -(m.extraLossQuantity || 0),
           unitCost: data.currentUnitCostWeightedAvg || 0,
           timestamp: serverTimestamp(),
         });
@@ -2689,6 +2692,9 @@ async function deleteShipmentLog(productId, log) {
           productId, productName: log.productName || '',
           variantKey: log.variantKey || null, variantLabel: log.variantLabel || null,
           consumedQuantity: m.consumedQuantity || 0,
+          // 原本那筆「登記出貨」的紀錄有算進「累計非銷售數量」,這裡要用負值扣掉,
+          // 不然這筆出貨明明已經復原了,累計非銷售數量卻還是把它算進去,對不起來
+          nonSalesQuantity: -(m.consumedQuantity || 0),
           reason: log.reason || '',
           unitCost: data.currentUnitCostWeightedAvg || 0,
           timestamp: serverTimestamp(),

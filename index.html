@@ -3164,7 +3164,7 @@ function renderTimeline(logs, unit, materialId) {
       typeLabel = '生產登記紀錄已刪除(還原)'; cls = 'production';
       detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
         釋放已預留：${log.consumedQuantity} ${escapeHtml(unit)}
-        ${log.extraLossQuantity ? `<br>加回額外損耗：${log.extraLossQuantity} ${escapeHtml(unit)}` : ''}`;
+        ${log.extraLossReturned ? `<br>加回額外損耗：${log.extraLossReturned} ${escapeHtml(unit)}` : ''}`;
     } else if (log.type === 'shipmentLogDeleted') {
       typeLabel = '出貨紀錄已刪除(還原)'; cls = 'shipment';
       detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
