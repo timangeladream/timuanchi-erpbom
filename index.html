@@ -3255,6 +3255,16 @@ function renderTimeline(logs, unit, materialId) {
   timelineExpandedIds = new Set();
   renderTimelineTabs();
   renderTimelineList();
+  // historyToggleAllBtn 是這次 openDetail() 剛注入的全新按鈕(不是重複綁定),
+  // 綁在這裡而不是頂層,是因為這顆按鈕只存在材料詳情彈窗打開後的 DOM 裡,
+  // 頁面剛載入時還沒有這個元素,頂層綁定會直接對 null 呼叫 addEventListener 而丟出例外
+  document.getElementById('historyToggleAllBtn').addEventListener('click', () => {
+    const filtered = getFilteredTimelineLogs();
+    const allExpanded = filtered.length > 0 && filtered.every(l => timelineExpandedIds.has(l.id));
+    if (allExpanded) filtered.forEach(l => timelineExpandedIds.delete(l.id));
+    else filtered.forEach(l => timelineExpandedIds.add(l.id));
+    renderTimelineList();
+  });
 }
 
 function renderTimelineTabs() {
@@ -3323,14 +3333,6 @@ function renderTimelineList() {
   const allExpanded = filtered.length > 0 && filtered.every(l => timelineExpandedIds.has(l.id));
   document.getElementById('historyToggleAllBtn').textContent = allExpanded ? '全部收合' : '全部展開';
 }
-
-document.getElementById('historyToggleAllBtn').addEventListener('click', () => {
-  const filtered = getFilteredTimelineLogs();
-  const allExpanded = filtered.length > 0 && filtered.every(l => timelineExpandedIds.has(l.id));
-  if (allExpanded) filtered.forEach(l => timelineExpandedIds.delete(l.id));
-  else filtered.forEach(l => timelineExpandedIds.add(l.id));
-  renderTimelineList();
-});
 
 async function toggleArchive(m) {
   const newState = !m.archived;
