@@ -2446,6 +2446,11 @@ async function deleteProductionLog(productId, log) {
 
     await refreshMaterialsLocal(materialIds);
     if (products.find(p => p.id === productId)) await refreshProductLocal(productId);
+    // 底下的成品詳情頁如果還開著(已製作未售出的數字),也要跟著刷新,不然要重新整理頁面才會看到正確數字;
+    // 先刷新詳情頁、最後才重新開生產登記紀錄視窗,讓紀錄視窗的 z-index 蓋回最上層,不會被詳情頁蓋住
+    if (document.getElementById('productDetailModal').classList.contains('ta-is-open') && products.find(p => p.id === productId)) {
+      openProductDetail(productId);
+    }
     openProductionLogsModal(products.find(p => p.id === productId) || { id: productId });
   } catch (e) {
     alert('刪除失敗:' + e.message);
@@ -2706,6 +2711,11 @@ async function deleteShipmentLog(productId, log) {
 
     await refreshMaterialsLocal(materialIds);
     if (products.find(p => p.id === productId)) await refreshProductLocal(productId);
+    // 底下的成品詳情頁如果還開著(已製作未售出的數字),也要跟著刷新,不然要重新整理頁面才會看到正確數字;
+    // 先刷新詳情頁、最後才重新開出貨紀錄視窗,讓紀錄視窗的 z-index 蓋回最上層,不會被詳情頁蓋住
+    if (document.getElementById('productDetailModal').classList.contains('ta-is-open') && products.find(p => p.id === productId)) {
+      openProductDetail(productId);
+    }
     openShipmentLogsModal(products.find(p => p.id === productId) || { id: productId });
   } catch (e) {
     alert('刪除失敗:' + e.message);
