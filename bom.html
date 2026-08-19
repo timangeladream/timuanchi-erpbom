@@ -3686,15 +3686,32 @@ function renderRequiredMaterialsManageList() {
     <div class="ta-category-row">
       <div class="ta-category-row-info"><span class="ta-category-row-name">${escapeHtml(combo.name)}</span><span class="ta-tag">${combo.items.length}項材料</span></div>
       <button type="button" class="ta-btn ta-btn-sm" data-combo-edit="${escapeHtml(combo.id)}">編輯</button>
+      <button type="button" class="ta-btn ta-btn-sm" data-combo-copy="${escapeHtml(combo.id)}">複製</button>
       <button type="button" class="ta-btn ta-btn-sm ta-btn-danger" data-combo-del="${escapeHtml(combo.id)}">刪除</button>
     </div>
   `).join('');
   wrap.querySelectorAll('[data-combo-edit]').forEach(btn => {
     btn.addEventListener('click', () => openComboEditor(requiredComboManageCategory, btn.dataset.comboEdit));
   });
+  wrap.querySelectorAll('[data-combo-copy]').forEach(btn => {
+    btn.addEventListener('click', () => openComboCopyEditor(requiredComboManageCategory, btn.dataset.comboCopy));
+  });
   wrap.querySelectorAll('[data-combo-del]').forEach(btn => {
     btn.addEventListener('click', () => deleteRequiredCombo(requiredComboManageCategory, btn.dataset.comboDel));
   });
+}
+
+// 複製組合:比照「新增組合」開啟編輯畫面(comboId 帶 null,存檔時才會建立新的一筆、不會覆蓋原本的組合),
+// 差別只在於材料項目跟名稱都預先帶入來源組合的內容(名稱加上「(複製)」),方便使用者存檔前再調整
+function openComboCopyEditor(category, comboId) {
+  const combos = (productOptions.requiredMaterials || {})[category] || [];
+  const source = combos.find(c => c.id === comboId);
+  if (!source) return;
+  openComboEditor(category, null);
+  document.getElementById('recipeModalTitle').textContent = `複製組合：${source.name}`;
+  document.getElementById('recipeComboName').value = `${source.name} (複製)`;
+  currentRecipe = source.items.map(r => ({ ...r }));
+  renderRecipeList();
 }
 
 document.getElementById('openRequiredComboAddBtn').addEventListener('click', () => {

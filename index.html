@@ -3044,6 +3044,9 @@ async function deleteMaterial(m) {
   // 除了成品共用的那份配方(recipe),也要檢查每個規格組合各自的配方(variantRecipes),
   // 不然材料只被用在某個規格的配方裡時,刪除材料不會跳出警告
   let referencingProducts = [];
+  // 另外也要檢查 BOM 的「必備材料組合」(存在 settings/productOptions.requiredMaterials,
+  // 是某個成品分類共用的組合,不屬於任何一個成品自己的配方,不會被上面那段掃描到)
+  let referencingCombos = [];
   try {
     const productsSnap = await getDocs(collection(db, 'products'));
     referencingProducts = productsSnap.docs
@@ -3053,6 +3056,13 @@ async function deleteMaterial(m) {
         const inVariantRecipes = Object.values(p.variantRecipes || {}).some(recipe => (recipe || []).some(r => r.materialId === m.id));
         return inBaseRecipe || inVariantRecipes;
       });
+    const productOptSnap = await getDoc(doc(db, 'settings', 'productOptions'));
+    const requiredMaterials = productOptSnap.exists() ? (productOptSnap.data().requiredMaterials || {}) : {};
+    Object.values(requiredMaterials).forEach(combos => {
+      (combos || []).forEach(combo => {
+        if ((combo.items || []).some(it => it.materialId === m.id)) referencingCombos.push(combo.name);
+      });
+    });
   } catch (e) {
     // 讀取失敗不擋刪除流程,只是少了這項提醒
   }
@@ -3069,6 +3079,9 @@ async function deleteMaterial(m) {
   if (referencingProducts.length) {
     const names = referencingProducts.map(p => p.name).join('、');
     messages.push(`目前被 ${referencingProducts.length} 個成品的配方使用中(${names}),刪除後這些成品的配方會找不到這款材料`);
+  }
+  if (referencingCombos.length) {
+    messages.push(`目前被 ${referencingCombos.length} 個成品分類的必備材料組合使用中(${referencingCombos.join('、')}),刪除後這些組合會找不到這款材料`);
   }
 
   deleteTargetRequiresConfirmName = messages.length > 0;
@@ -4315,7 +4328,20 @@ document.getElementById('wipeScopeSelect').addEventListener('change', async () =
       if (inBaseRecipe || inVariantRecipes) referencingNames.push(p.name);
     });
     if (referencingNames.length) {
-      referenceWarning = ` ⚠️ 其中有材料被 ${referencingNames.length} 個成品的配方使用中(${referencingNames.join('、')}),清除後這些配方會找不到對應的材料。`;
+      referenceWarning += ` ⚠️ 其中有材料被 ${referencingNames.length} 個成品的配方使用中(${referencingNames.join('、')}),清除後這些配方會找不到對應的材料。`;
+    }
+    // 同時檢查 BOM 的「必備材料組合」(settings/productOptions.requiredMaterials),
+    // 這是成品分類共用的組合,不屬於任何成品自己的配方,不會被上面那段掃描到
+    const productOptSnap = await getDoc(doc(db, 'settings', 'productOptions'));
+    const requiredMaterials = productOptSnap.exists() ? (productOptSnap.data().requiredMaterials || {}) : {};
+    const referencingComboNames = [];
+    Object.values(requiredMaterials).forEach(combos => {
+      (combos || []).forEach(combo => {
+        if ((combo.items || []).some(it => targetIds.has(it.materialId))) referencingComboNames.push(combo.name);
+      });
+    });
+    if (referencingComboNames.length) {
+      referenceWarning += ` ⚠️ 其中有材料被 ${referencingComboNames.length} 個成品分類的必備材料組合使用中(${referencingComboNames.join('、')}),清除後這些組合會找不到對應的材料。`;
     }
   } catch (e) {
     // 讀取失敗不擋清除流程,只是少了這項提醒
