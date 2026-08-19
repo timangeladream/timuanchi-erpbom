@@ -268,8 +268,19 @@
   .ta-timeline-type--production { color: var(--primary); }
   .ta-timeline-type--shipment { color: var(--accent); }
   .ta-timeline-type--migration { color: var(--text-muted); }
-  .ta-timeline-detail { font-size: 12px; color: var(--text); line-height: 1.6; }
+  .ta-timeline-detail { font-size: 12px; color: var(--text); line-height: 1.6; margin-top: 4px; }
   .ta-timeline-item--clickable { cursor: pointer; border-radius: 6px; padding: 4px 6px; margin-left: -6px; }
+  .ta-timeline-summary-row { cursor: pointer; border-radius: 6px; padding: 4px 6px; margin-left: -6px; display: flex; align-items: baseline; gap: 8px; }
+  .ta-timeline-summary-row:hover { background: #eff3f7; }
+  .ta-timeline-summary-extra { font-size: 12px; color: var(--text-muted); }
+  .ta-timeline-edit-btn { font-size: 11px; padding: 3px 8px; margin-top: 6px; }
+  .ta-timeline-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  .ta-timeline-tab {
+    font-size: 12px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border);
+    background: #fff; color: var(--text-muted); cursor: pointer;
+  }
+  .ta-timeline-tab--active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .ta-timeline-controls { margin-bottom: 8px; }
   .ta-timeline-item--clickable:hover { background: #eff3f7; }
 
   .ta-detail-header { display: flex; flex-direction: column; align-items: flex-start; margin-bottom: 6px; padding-right: 32px; gap: 8px; }
@@ -2935,6 +2946,10 @@ async function openDetail(id) {
     <hr class="ta-section-divider">
     ${alternativesSection}
     <div class="ta-timeline-heading" id="historyHeading">完整異動歷史</div>
+    <div class="ta-timeline-tabs" id="historyTabs"></div>
+    <div class="ta-timeline-controls">
+      <button type="button" class="ta-btn ta-btn-sm" id="historyToggleAllBtn">全部展開</button>
+    </div>
     <div class="ta-timeline" id="historyTimeline"><div class="ta-empty-hint">載入中...</div></div>
   `;
 
@@ -2958,10 +2973,7 @@ async function openDetail(id) {
   const histSnap = await getDocs(query(collection(db, 'materials', id, 'history'), orderBy('timestamp', 'desc')));
   const logs = histSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   renderTimeline(logs, unit, id);
-
-  const purchaseCount = logs.filter(log => log.type === 'purchase').length;
-  const adjustCount = logs.filter(log => log.type === 'adjust').length;
-  document.getElementById('historyHeading').textContent = `完整異動歷史（進貨：${purchaseCount}次、人工盤點調整：${adjustCount}次）`;
+  document.getElementById('historyHeading').textContent = '完整異動歷史';
 
   // 總進貨數量 = 正品 + 短少 + 報廢 + 次品(這批貨物理上總共收到/處理過的量,不管後來分類到哪裡);
   // 不含「損耗」,因為損耗是生產登記時做東西才會發生的事,跟進貨是不相干的兩個階段
@@ -3087,12 +3099,44 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async () =
   }
 });
 
-function renderTimeline(logs, unit, materialId) {
-  const el = document.getElementById('historyTimeline');
-  if (!logs.length) { el.innerHTML = '<div class="ta-empty-hint">尚無紀錄</div>'; return; }
-  el.innerHTML = logs.map(log => {
-    const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('zh-TW') : '(時間處理中)';
-    let typeLabel = '', cls = '', detail = '';
+// ---- 完整異動歷史:分頁(全部/進貨/其他) + 逐筆預設摺疊,點擊展開看詳細 ----
+let timelineAllLogs = [];
+let timelineUnit = '';
+let timelineMaterialId = null;
+let timelineActiveTab = 'all'; // 'all' | 'purchase' | 'other'
+let timelineExpandedIds = new Set();
+
+function getFilteredTimelineLogs() {
+  if (timelineActiveTab === 'purchase') return timelineAllLogs.filter(l => l.type === 'purchase');
+  if (timelineActiveTab === 'other') return timelineAllLogs.filter(l => l.type !== 'purchase');
+  return timelineAllLogs;
+}
+
+// 算出每種類型的「收合摘要」:不用展開就能大概掃過去知道量體,異常狀況才需要展開細看
+function buildLogSummary(log, unit) {
+  if (log.type === 'purchase') {
+    const logUnit = log.quantityUnit || unit;
+    const hasIssue = log.shortageQuantity || log.scrapQuantity || log.extraQuantity;
+    return `+${log.quantity} ${logUnit}${hasIssue ? ' ⚠️' : ''}`;
+  }
+  if (log.type === 'adjust') {
+    if (log.scrapQuantity) return `-${log.scrapQuantity} ${unit}`;
+    return `${log.diff >= 0 ? '+' : ''}${log.diff} ${unit}`;
+  }
+  if (log.type === 'production') return `${log.quantityProduced} 件`;
+  if (log.type === 'productionAdjust') return `${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${unit}`;
+  if (log.type === 'shipment') return `${log.quantityShipped} 件`;
+  if (log.type === 'shipmentAdjust') return `${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${unit}`;
+  if (log.type === 'productionLogDeleted' || log.type === 'shipmentLogDeleted' || log.type === 'posSaleConfirm') {
+    return `${log.consumedQuantity} ${unit}`;
+  }
+  if (log.type === 'historyMigration') return `${log.diff >= 0 ? '+' : ''}${log.diff} ${unit}`;
+  return '';
+}
+
+function buildLogView(log, unit) {
+  const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('zh-TW') : '(時間處理中)';
+  let typeLabel = '', cls = '', detail = '';
     if (log.type === 'purchase') {
       typeLabel = '進貨'; cls = 'purchase';
       const logUnit = log.quantityUnit || unit;
@@ -3186,26 +3230,96 @@ function renderTimeline(logs, unit, materialId) {
       typeLabel = '歷史資料搬遷'; cls = 'migration';
       detail = `庫存：${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff >= 0 ? '+' : ''}${log.diff})<br>
         這次新增歷史銷售：${log.salesQuantityAdded || 0} ${escapeHtml(unit)}<br>
-        這次新增歷史非銷售：${log.nonSalesQuantityAdded || 0} ${escapeHtml(unit)}<br>
-        <span style="color:var(--text-muted);font-size:12px;">(點這筆可以修正)</span>`;
+        這次新增歷史非銷售：${log.nonSalesQuantityAdded || 0} ${escapeHtml(unit)}`;
     }
-    const clickable = log.type === 'purchase' || log.type === 'historyMigration';
-    return `<div class="ta-timeline-item${clickable ? ' ta-timeline-item--clickable' : ''}"${clickable ? ` data-log-id="${escapeHtml(log.id)}"` : ''}>
-      <div class="ta-timeline-time">${time}</div>
-      <div class="ta-timeline-type ta-timeline-type--${cls}">${typeLabel}</div>
-      <div class="ta-timeline-detail">${detail}</div>
-    </div>`;
-  }).join('');
+    const editable = log.type === 'purchase' || log.type === 'historyMigration';
+    return { time, typeLabel, cls, detail, summary: buildLogSummary(log, unit), editable };
+}
 
-  el.querySelectorAll('.ta-timeline-item--clickable').forEach(itemEl => {
-    itemEl.addEventListener('click', () => {
-      const log = logs.find(l => l.id === itemEl.dataset.logId);
-      if (!log) return;
-      if (log.type === 'historyMigration') openHistoryMigrationEditModal(materialId, log.id, log);
-      else openEditPurchaseModal(materialId, log.id, log, unit);
+function renderTimeline(logs, unit, materialId) {
+  timelineAllLogs = logs;
+  timelineUnit = unit;
+  timelineMaterialId = materialId;
+  timelineActiveTab = 'all';
+  timelineExpandedIds = new Set();
+  renderTimelineTabs();
+  renderTimelineList();
+}
+
+function renderTimelineTabs() {
+  const wrap = document.getElementById('historyTabs');
+  const allCount = timelineAllLogs.length;
+  const purchaseCount = timelineAllLogs.filter(l => l.type === 'purchase').length;
+  const otherCount = allCount - purchaseCount;
+  const tabs = [
+    { key: 'all', label: `全部(${allCount})` },
+    { key: 'purchase', label: `進貨(${purchaseCount})` },
+    { key: 'other', label: `其他(${otherCount})` },
+  ];
+  wrap.innerHTML = tabs.map(t => `<span class="ta-timeline-tab${timelineActiveTab === t.key ? ' ta-timeline-tab--active' : ''}" data-tab="${t.key}">${escapeHtml(t.label)}</span>`).join('');
+  wrap.querySelectorAll('.ta-timeline-tab').forEach(el => {
+    el.addEventListener('click', () => {
+      timelineActiveTab = el.dataset.tab;
+      renderTimelineTabs();
+      renderTimelineList();
     });
   });
 }
+
+function renderTimelineList() {
+  const el = document.getElementById('historyTimeline');
+  const filtered = getFilteredTimelineLogs();
+
+  if (!filtered.length) {
+    el.innerHTML = '<div class="ta-empty-hint">尚無紀錄</div>';
+  } else {
+    el.innerHTML = filtered.map(log => {
+      const view = buildLogView(log, timelineUnit);
+      const expanded = timelineExpandedIds.has(log.id);
+      const editBtn = (view.editable && expanded)
+        ? `<button type="button" class="ta-btn ta-btn-sm ta-timeline-edit-btn" data-edit-log="${escapeHtml(log.id)}">編輯</button>`
+        : '';
+      return `<div class="ta-timeline-item">
+        <div class="ta-timeline-summary-row" data-log-id="${escapeHtml(log.id)}">
+          <div>
+            <div class="ta-timeline-time">${view.time}</div>
+            <div class="ta-timeline-type ta-timeline-type--${view.cls}">${view.typeLabel}</div>
+          </div>
+          ${view.summary ? `<div class="ta-timeline-summary-extra">${escapeHtml(view.summary)}</div>` : ''}
+        </div>
+        ${expanded ? `<div class="ta-timeline-detail">${view.detail}${editBtn}</div>` : ''}
+      </div>`;
+    }).join('');
+
+    el.querySelectorAll('.ta-timeline-summary-row').forEach(rowEl => {
+      rowEl.addEventListener('click', () => {
+        const id = rowEl.dataset.logId;
+        if (timelineExpandedIds.has(id)) timelineExpandedIds.delete(id); else timelineExpandedIds.add(id);
+        renderTimelineList();
+      });
+    });
+    el.querySelectorAll('[data-edit-log]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // 不要連帶觸發外層摘要列的展開/收合
+        const log = timelineAllLogs.find(l => l.id === btn.dataset.editLog);
+        if (!log) return;
+        if (log.type === 'historyMigration') openHistoryMigrationEditModal(timelineMaterialId, log.id, log);
+        else openEditPurchaseModal(timelineMaterialId, log.id, log, timelineUnit);
+      });
+    });
+  }
+
+  const allExpanded = filtered.length > 0 && filtered.every(l => timelineExpandedIds.has(l.id));
+  document.getElementById('historyToggleAllBtn').textContent = allExpanded ? '全部收合' : '全部展開';
+}
+
+document.getElementById('historyToggleAllBtn').addEventListener('click', () => {
+  const filtered = getFilteredTimelineLogs();
+  const allExpanded = filtered.length > 0 && filtered.every(l => timelineExpandedIds.has(l.id));
+  if (allExpanded) filtered.forEach(l => timelineExpandedIds.delete(l.id));
+  else filtered.forEach(l => timelineExpandedIds.add(l.id));
+  renderTimelineList();
+});
 
 async function toggleArchive(m) {
   const newState = !m.archived;
