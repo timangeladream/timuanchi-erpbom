@@ -220,6 +220,10 @@
   }
   .ta-modal h2 { margin: 0 0 16px; font-size: 17px; color: var(--primary-dark); }
   .ta-modal--wide { max-width: 720px; }
+  /* 上方固定、下方獨立捲動:視窗固定高度,裡面拆成不捲動的固定區+自己捲動的區塊 */
+  .ta-modal--split { height: 88vh; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+  .ta-modal-fixed { flex-shrink: 0; }
+  .ta-modal-scroll { flex: 1; overflow-y: auto; min-height: 0; padding-bottom: 24px; }
   .ta-modal-text { font-size: 13px; color: var(--text); line-height: 1.6; margin-bottom: 14px; }
   .ta-modal-error { font-size: 12.5px; color: var(--danger); margin: -6px 0 14px; }
 
@@ -830,7 +834,7 @@
 
 <!-- 材料詳情 Modal -->
 <div class="ta-modal-overlay" id="detailModal">
-  <div class="ta-modal ta-modal--wide">
+  <div class="ta-modal ta-modal--wide ta-modal--split">
     <span class="ta-modal-close" data-close="detailModal">✕</span>
     <div id="detailBody"></div>
   </div>
@@ -2905,53 +2909,57 @@ async function openDetail(id) {
 
   const body = document.getElementById('detailBody');
   body.innerHTML = `
-    <div class="ta-detail-header">
-      <div class="ta-detail-title">${escapeHtml(displayName(m))}</div>
-      <div>
-        <button class="ta-btn ta-btn-sm" id="editFieldsBtn">編輯屬性</button>
-        <button class="ta-btn ta-btn-sm" id="adjustBtn">人工盤點調整</button>
-        <button class="ta-btn ta-btn-sm" id="historyMigrationBtn">歷史資料搬遷</button>
-        <button class="ta-btn ta-btn-sm" id="refreshDetailBtn">重新整理</button>
-        <button class="ta-btn ta-btn-sm ${m.archived ? '' : 'ta-btn-danger'}" id="archiveBtn">${m.archived ? '上架' : '下架'}</button>
-        <button class="ta-btn ta-btn-sm ta-btn-danger" id="deleteBtn">刪除</button>
+    <div class="ta-modal-fixed">
+      <div class="ta-detail-header">
+        <div class="ta-detail-title">${escapeHtml(displayName(m))}</div>
+        <div>
+          <button class="ta-btn ta-btn-sm" id="editFieldsBtn">編輯屬性</button>
+          <button class="ta-btn ta-btn-sm" id="adjustBtn">人工盤點調整</button>
+          <button class="ta-btn ta-btn-sm" id="historyMigrationBtn">歷史資料搬遷</button>
+          <button class="ta-btn ta-btn-sm" id="refreshDetailBtn">重新整理</button>
+          <button class="ta-btn ta-btn-sm ${m.archived ? '' : 'ta-btn-danger'}" id="archiveBtn">${m.archived ? '上架' : '下架'}</button>
+          <button class="ta-btn ta-btn-sm ta-btn-danger" id="deleteBtn">刪除</button>
+        </div>
       </div>
+      <div class="ta-detail-category"><span class="ta-tag">${escapeHtml(m.category || '未分類')}</span>${m.materialCode ? ` <span class="ta-tag">${escapeHtml(m.materialCode)}</span>` : ''}${m.colorSeries ? ` <span class="ta-tag">色系:${escapeHtml(m.colorSeries)}</span>` : ''}${m.colorTag ? ` <span class="ta-tag">同色標籤:${escapeHtml(m.colorTag)}</span>` : ''}</div>
+      ${m.note ? `<div class="ta-modal-text">備註:${escapeHtml(m.note)}</div>` : ''}
+      <div class="ta-detail-stats">
+        <div><div class="ta-stat-label">總進貨數量</div><div class="ta-stat-value" id="totalPurchasedQtyStat">-</div></div>
+        <div><div class="ta-stat-label">總進貨數量價值</div><div class="ta-stat-value" id="totalPurchasedValueStat">-</div></div>
+      </div>
+      <div class="ta-detail-stats">
+        <div><div class="ta-stat-label">進價(歷史最高單價)</div><div class="ta-stat-value">NT$ ${cost.toFixed(2)} / ${escapeHtml(unit)}</div></div>
+        <div><div class="ta-stat-label">加權平均成本(BOM成本用這個)</div><div class="ta-stat-value">NT$ ${weightedAvgCost.toFixed(4)} / ${escapeHtml(unit)}</div></div>
+        <div><div class="ta-stat-label">目前庫存價值</div><div class="ta-stat-value">NT$ ${value.toFixed(2)}</div></div>
+      </div>
+      <div class="ta-detail-stats">
+        <div><div class="ta-stat-label">目前庫存</div><div class="ta-stat-value">${stock.toLocaleString()} ${escapeHtml(unit)}</div></div>
+        <div><div class="ta-stat-label">已預留數量</div><div class="ta-stat-value">${reservedStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
+        <div><div class="ta-stat-label">真正可用庫存</div><div class="ta-stat-value">${availableStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
+        <div><div class="ta-stat-label">次品庫存</div><div class="ta-stat-value">${secondaryStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
+        <div><div class="ta-stat-label">累計銷售數量</div><div class="ta-stat-value" id="salesConfirmedStat">-</div></div>
+        <div><div class="ta-stat-label">累計非銷售數量</div><div class="ta-stat-value" id="nonSalesStat">-</div></div>
+      </div>
+      <div class="ta-detail-stats">
+        <div><div class="ta-stat-label">累計報廢數量</div><div class="ta-stat-value" id="scrapQtyStat">-</div></div>
+        <div><div class="ta-stat-label">累計報廢損失</div><div class="ta-stat-value" id="scrapLossStat">-</div></div>
+        <div><div class="ta-stat-label">累計短少數量</div><div class="ta-stat-value" id="shortageQtyStat">-</div></div>
+        <div><div class="ta-stat-label">累計短少損失</div><div class="ta-stat-value" id="shortageLossStat">-</div></div>
+        <div><div class="ta-stat-label">累計多給數量</div><div class="ta-stat-value" id="extraQtyStat">-</div></div>
+        <div><div class="ta-stat-label">累計製作損耗數量</div><div class="ta-stat-value" id="productionLossQtyStat">-</div></div>
+        <div><div class="ta-stat-label">累計製作損耗金額</div><div class="ta-stat-value" id="productionLossAmountStat">-</div></div>
+      </div>
+      <hr class="ta-section-divider">
+      ${alternativesSection}
     </div>
-    <div class="ta-detail-category"><span class="ta-tag">${escapeHtml(m.category || '未分類')}</span>${m.materialCode ? ` <span class="ta-tag">${escapeHtml(m.materialCode)}</span>` : ''}${m.colorSeries ? ` <span class="ta-tag">色系:${escapeHtml(m.colorSeries)}</span>` : ''}${m.colorTag ? ` <span class="ta-tag">同色標籤:${escapeHtml(m.colorTag)}</span>` : ''}</div>
-    ${m.note ? `<div class="ta-modal-text">備註:${escapeHtml(m.note)}</div>` : ''}
-    <div class="ta-detail-stats">
-      <div><div class="ta-stat-label">總進貨數量</div><div class="ta-stat-value" id="totalPurchasedQtyStat">-</div></div>
-      <div><div class="ta-stat-label">總進貨數量價值</div><div class="ta-stat-value" id="totalPurchasedValueStat">-</div></div>
+    <div class="ta-modal-scroll">
+      <div class="ta-timeline-heading" id="historyHeading">完整異動歷史</div>
+      <div class="ta-timeline-tabs" id="historyTabs"></div>
+      <div class="ta-timeline-controls">
+        <button type="button" class="ta-btn ta-btn-sm" id="historyToggleAllBtn">全部展開</button>
+      </div>
+      <div class="ta-timeline" id="historyTimeline"><div class="ta-empty-hint">載入中...</div></div>
     </div>
-    <div class="ta-detail-stats">
-      <div><div class="ta-stat-label">進價(歷史最高單價)</div><div class="ta-stat-value">NT$ ${cost.toFixed(2)} / ${escapeHtml(unit)}</div></div>
-      <div><div class="ta-stat-label">加權平均成本(BOM成本用這個)</div><div class="ta-stat-value">NT$ ${weightedAvgCost.toFixed(4)} / ${escapeHtml(unit)}</div></div>
-      <div><div class="ta-stat-label">目前庫存價值</div><div class="ta-stat-value">NT$ ${value.toFixed(2)}</div></div>
-    </div>
-    <div class="ta-detail-stats">
-      <div><div class="ta-stat-label">目前庫存</div><div class="ta-stat-value">${stock.toLocaleString()} ${escapeHtml(unit)}</div></div>
-      <div><div class="ta-stat-label">已預留數量</div><div class="ta-stat-value">${reservedStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
-      <div><div class="ta-stat-label">真正可用庫存</div><div class="ta-stat-value">${availableStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
-      <div><div class="ta-stat-label">次品庫存</div><div class="ta-stat-value">${secondaryStock.toLocaleString()} ${escapeHtml(unit)}</div></div>
-      <div><div class="ta-stat-label">累計銷售數量</div><div class="ta-stat-value" id="salesConfirmedStat">-</div></div>
-      <div><div class="ta-stat-label">累計非銷售數量</div><div class="ta-stat-value" id="nonSalesStat">-</div></div>
-    </div>
-    <div class="ta-detail-stats">
-      <div><div class="ta-stat-label">累計報廢數量</div><div class="ta-stat-value" id="scrapQtyStat">-</div></div>
-      <div><div class="ta-stat-label">累計報廢損失</div><div class="ta-stat-value" id="scrapLossStat">-</div></div>
-      <div><div class="ta-stat-label">累計短少數量</div><div class="ta-stat-value" id="shortageQtyStat">-</div></div>
-      <div><div class="ta-stat-label">累計短少損失</div><div class="ta-stat-value" id="shortageLossStat">-</div></div>
-      <div><div class="ta-stat-label">累計多給數量</div><div class="ta-stat-value" id="extraQtyStat">-</div></div>
-      <div><div class="ta-stat-label">累計製作損耗數量</div><div class="ta-stat-value" id="productionLossQtyStat">-</div></div>
-      <div><div class="ta-stat-label">累計製作損耗金額</div><div class="ta-stat-value" id="productionLossAmountStat">-</div></div>
-    </div>
-    <hr class="ta-section-divider">
-    ${alternativesSection}
-    <div class="ta-timeline-heading" id="historyHeading">完整異動歷史</div>
-    <div class="ta-timeline-tabs" id="historyTabs"></div>
-    <div class="ta-timeline-controls">
-      <button type="button" class="ta-btn ta-btn-sm" id="historyToggleAllBtn">全部展開</button>
-    </div>
-    <div class="ta-timeline" id="historyTimeline"><div class="ta-empty-hint">載入中...</div></div>
   `;
 
   document.getElementById('adjustBtn').addEventListener('click', () => openAdjustModal(m));
