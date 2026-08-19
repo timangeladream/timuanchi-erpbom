@@ -2418,6 +2418,16 @@ async function deleteProductionLog(productId, log) {
           currentStock: (data.currentStock || 0) + (m.extraLossQuantity || 0),
           updatedAt: serverTimestamp(),
         });
+        const histRef = doc(collection(db, 'materials', m.materialId, 'history'));
+        transaction.set(histRef, {
+          type: 'productionLogDeleted',
+          productId, productName: log.productName || '',
+          variantKey: log.variantKey || null, variantLabel: log.variantLabel || null,
+          consumedQuantity: m.consumedQuantity || 0,
+          extraLossQuantity: m.extraLossQuantity || 0,
+          unitCost: data.currentUnitCostWeightedAvg || 0,
+          timestamp: serverTimestamp(),
+        });
       }
 
       if (productSnap.exists()) {
@@ -2667,6 +2677,16 @@ async function deleteShipmentLog(productId, log) {
           reservedStock: (data.reservedStock || 0) + (m.consumedQuantity || 0),
           currentStock: (data.currentStock || 0) + (m.consumedQuantity || 0),
           updatedAt: serverTimestamp(),
+        });
+        const histRef = doc(collection(db, 'materials', m.materialId, 'history'));
+        transaction.set(histRef, {
+          type: 'shipmentLogDeleted',
+          productId, productName: log.productName || '',
+          variantKey: log.variantKey || null, variantLabel: log.variantLabel || null,
+          consumedQuantity: m.consumedQuantity || 0,
+          reason: log.reason || '',
+          unitCost: data.currentUnitCostWeightedAvg || 0,
+          timestamp: serverTimestamp(),
         });
       }
 

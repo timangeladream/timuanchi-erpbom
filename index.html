@@ -3160,6 +3160,16 @@ function renderTimeline(logs, unit, materialId) {
       detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
         原因：${escapeHtml(log.reason || '')}<br>
         消耗調整：${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${escapeHtml(unit)}`;
+    } else if (log.type === 'productionLogDeleted') {
+      typeLabel = '生產登記紀錄已刪除(還原)'; cls = 'production';
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
+        釋放已預留：${log.consumedQuantity} ${escapeHtml(unit)}
+        ${log.extraLossQuantity ? `<br>加回額外損耗：${log.extraLossQuantity} ${escapeHtml(unit)}` : ''}`;
+    } else if (log.type === 'shipmentLogDeleted') {
+      typeLabel = '出貨紀錄已刪除(還原)'; cls = 'shipment';
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
+        原因：${escapeHtml(log.reason || '')}<br>
+        補回已預留+庫存：${log.consumedQuantity} ${escapeHtml(unit)}`;
     } else if (log.type === 'posSaleConfirm') {
       typeLabel = 'POS銷售確認'; cls = 'production';
       detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
