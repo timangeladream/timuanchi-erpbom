@@ -448,8 +448,12 @@
       <div class="ta-stat-value" id="statQty">-</div>
     </div>
     <div class="ta-summary-card">
-      <div class="ta-stat-label">庫存總值(NT$)</div>
+      <div class="ta-stat-label">庫存總值(NT$,加權平均成本)</div>
       <div class="ta-stat-value" id="statValue">-</div>
+    </div>
+    <div class="ta-summary-card">
+      <div class="ta-stat-label">累計進貨總額(NT$,含下架)</div>
+      <div class="ta-stat-value" id="statPurchasedValue">-</div>
     </div>
   </div>
 
@@ -1212,6 +1216,7 @@ let currentDetailId = null;
 let currentDetailScrapQtyTotal = 0; // 材料詳情頁算出的累計報廢數量,順手帶給人工盤點調整彈窗用,不用另外再讀一次歷史
 let dupMatchedMaterial = null; // 新增進貨時比對到的既有材料
 let categoryFilter = ''; // 目前選中的分類頁籤,空字串代表全部
+let purchaseValueByMaterialId = {}; // 每款材料的累計進貨總額(含下架材料),頁面載入時查一次,之後切換分類頁籤只是本地重新加總,不會重新查 Firestore
 let currentPage = 1;
 const PAGE_SIZE = 200;
 
@@ -1333,11 +1338,27 @@ async function syncMaterialsFromServer() {
 // 所以不需要用 onSnapshot 一直監聽伺服器變動——開頁時讀一次,之後每次自己寫入
 // 成功後,用 refreshMaterialLocal / refreshOptionsLocal / refreshExchangeRatesLocal
 // 重新讀「剛剛那一筆」資料回來更新畫面,不用整個集合持續監聽。
+// 累計進貨總額:用 collectionGroup 一次撈出「所有材料」的進貨歷史紀錄,依材料分組加總,
+// 只在頁面載入(含重新整理,本頁重新整理是整頁 location.reload())時查一次,不會每次切換分類頁籤都重新查
+async function loadCumulativePurchaseValue() {
+  purchaseValueByMaterialId = {};
+  const snap = await getDocs(collectionGroup(db, 'history'));
+  snap.docs.forEach(d => {
+    const data = d.data();
+    if (data.type !== 'purchase') return;
+    const materialId = d.ref.parent.parent.id;
+    purchaseValueByMaterialId[materialId] = (purchaseValueByMaterialId[materialId] || 0) + (data.twdAmount || 0);
+  });
+}
+
 async function initData() {
   await syncMaterialsFromServer();
   renderFilters();
   renderTable();
   renderSummary();
+  // 累計進貨總額不會拖慢上面幾個統計的顯示速度:先讓材料數量/庫存總值等秒開,
+  // 這個另外查的動作做完後再重新整理一次統計列,把累計進貨總額補上去
+  loadCumulativePurchaseValue().then(renderSummary);
 
   await refreshOptionsLocal();
 
@@ -2098,7 +2119,10 @@ function renderPagination(totalPages, totalItems) {
 function renderSummary() {
   const scoped = categoryFilter ? materials.filter(m => m.category === categoryFilter) : materials;
   const active = scoped.filter(m => !m.archived);
-  const totalValue = active.reduce((s, m) => s + (m.currentStock || 0) * (m.currentUnitCost || 0), 0);
+  // 庫存總值改用加權平均成本(BOM算配方成本也是用這個),比歷史最高單價更貼近真實花費
+  const totalValue = active.reduce((s, m) => s + (m.currentStock || 0) * (m.currentUnitCostWeightedAvg || 0), 0);
+  // 累計進貨總額刻意含下架材料(scoped,不是active):就算材料後來下架了,當初買它的錢還是真的花了
+  const totalPurchasedValue = scoped.reduce((s, m) => s + (purchaseValueByMaterialId[m.id] || 0), 0);
   const qtyByUnit = {};
   active.forEach(m => {
     const u = m.unit || '(未設單位)';
@@ -2108,6 +2132,7 @@ function renderSummary() {
   document.getElementById('statCount').textContent = active.length;
   document.getElementById('statQty').textContent = qtyText;
   document.getElementById('statValue').textContent = totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  document.getElementById('statPurchasedValue').textContent = totalPurchasedValue.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
 // ---------- Modal 開關 ----------
