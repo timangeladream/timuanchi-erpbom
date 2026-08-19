@@ -244,6 +244,7 @@
   .ta-switch input:checked + .track { background: var(--primary); }
   .ta-switch .thumb { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; background: #fff; border-radius: 50%; transition: 0.15s; }
   .ta-switch input:checked ~ .thumb { left: 17px; }
+  .ta-select-sm { font-size: 13px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); }
   .ta-pc-item-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
   .ta-pc-item-row.ta-is-disabled { opacity: 0.4; }
   .ta-pc-item-row input[type=text] { width: 110px; height: 34px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
@@ -831,6 +832,7 @@
         <span class="track"></span><span class="thumb"></span>
       </label>
       <span id="pcCurrencyModeLabel">目前輸入幣別：台幣</span>
+      <select id="pcForeignCurrencySelect" class="ta-select-sm"></select>
     </div>
 
     <div class="ta-pc-grid ta-pc-grid-4">
@@ -1207,6 +1209,12 @@ async function refreshProductOptionsLocal() {
 let materials = []; // 材料清單(之後配方材料選擇器會用到)
 let products = [];  // 成品清單(第3步才會真正建立寫入邏輯,這裡先宣告好讓分類管理可以查詢引用數量)
 let productOptions = { categories: [], categoryCodes: {}, disabledCategories: [], requiredMaterials: {} };
+let exchangeRates = {}; // 沿用材料系統的匯率設定(settings/exchangeRates),定價試算的幣別選單直接讀這份,不自己另外維護一套
+
+async function refreshExchangeRatesLocal() {
+  const snap = await getDoc(doc(db, 'settings', 'exchangeRates'));
+  exchangeRates = snap.exists() ? snap.data() : {};
+}
 
 async function initData() {
   await initMaterialsForBom();
@@ -1214,6 +1222,7 @@ async function initData() {
   // 所以開頁時要先確認一次。如果 initMaterialsForBom() 剛整包讀完,lastMaterialsSyncCheckAt
   // 已經是最新,這裡會自動跳過,不會產生多餘的查詢;只有沿用舊快取時,才會真的觸發這次的 delta 同步。
   await syncMaterialsDeltaThrottled();
+  await refreshExchangeRatesLocal();
 
   const prodSnap = await getDocs(collection(db, 'products'));
   products = prodSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -3935,7 +3944,16 @@ let pricingEditIsTemplate = false; // true代表目前在編輯「定價公式�
 let pricingTemplateCache = null; // 定價公式範本的本地快取(讀過一次就記住,不用每次都問)
 
 function pcBlankInputs() {
-  return { rate: 0, marginMode: false, q: 0, u: 0, r: 0, aa1: 0, aa2: 0, aa3: 0, aaLabel: '設計成本(三種比較情境)', costItems: [], feeItems: [] };
+  return { rate: 0, currency: 'CNY', marginMode: false, q: 0, u: 0, r: 0, aa1: 0, aa2: 0, aa3: 0, aaLabel: '設計成本(三種比較情境)', costItems: [], feeItems: [] };
+}
+
+// 幣別選單:選項來自材料系統的匯率設定(settings/exchangeRates),沒設定過就只剩savedCurrency這個保底選項可選
+function fillPcCurrencySelect(savedCurrency) {
+  const sel = document.getElementById('pcForeignCurrencySelect');
+  const codes = Object.keys(exchangeRates).sort();
+  if (savedCurrency && !codes.includes(savedCurrency)) codes.push(savedCurrency);
+  sel.innerHTML = codes.map(code => `<option value="${escapeHtml(code)}">${escapeHtml(code)}</option>`).join('');
+  sel.value = codes.includes(savedCurrency) ? savedCurrency : (codes[0] || '');
 }
 
 async function loadPricingTemplate() {
@@ -3948,6 +3966,7 @@ async function loadPricingTemplate() {
 function pcGatherCurrentInputs() {
   return {
     rate: parseFloat(document.getElementById('pcRate').value) || 0,
+    currency: document.getElementById('pcForeignCurrencySelect').value || 'CNY',
     marginMode: document.getElementById('pcMarginModeToggle').checked,
     q: parseFloat(document.getElementById('pcQ').value) || 0,
     u: parseFloat(document.getElementById('pcU').value) || 0,
@@ -4140,14 +4159,25 @@ document.getElementById('pcFeeList').addEventListener('change', (e) => {
 });
 
 function pcApplyCurrencyMode() {
+  const sel = document.getElementById('pcForeignCurrencySelect');
+  const hasCurrency = !!sel.value;
+  const code = sel.value || 'CNY';
   const twdMode = document.getElementById('pcCurrencyModeToggle').checked;
-  document.getElementById('pcRmb').disabled = twdMode;
-  document.getElementById('pcTwd').disabled = !twdMode;
-  document.getElementById('pcCurrencyModeLabel').textContent = twdMode
-    ? '目前輸入幣別：台幣(自動換算成人民幣)'
-    : '目前輸入幣別：人民幣(自動換算成台幣)';
+  document.getElementById('pcCurrencyModeToggle').disabled = !hasCurrency;
+  document.getElementById('pcRmb').disabled = twdMode || !hasCurrency;
+  document.getElementById('pcTwd').disabled = !twdMode && hasCurrency;
+  document.getElementById('pcRmbLabel').textContent = `商品的進價或成本(${code})`;
+  document.getElementById('pcCurrencyModeLabel').textContent = !hasCurrency
+    ? '目前輸入幣別：台幣(材料系統尚未設定其他幣別匯率)'
+    : (twdMode ? `目前輸入幣別：台幣(自動換算成${code})` : `目前輸入幣別：${code}(自動換算成台幣)`);
 }
 document.getElementById('pcCurrencyModeToggle').addEventListener('change', () => { pcApplyCurrencyMode(); renderPcCards(); });
+document.getElementById('pcForeignCurrencySelect').addEventListener('change', () => {
+  const code = document.getElementById('pcForeignCurrencySelect').value;
+  if (code && exchangeRates[code] != null) document.getElementById('pcRate').value = exchangeRates[code];
+  pcApplyCurrencyMode();
+  renderPcCards();
+});
 
 function pcApplyMarginMode() {
   const marginMode = document.getElementById('pcMarginModeToggle').checked;
@@ -4192,6 +4222,7 @@ async function openPricingModal(p, variantKey = null) {
   // 避免跟自動帶入的成本互相覆蓋(見人民幣模式下 renderPcCards 會用人民幣欄位反推台幣)
   document.getElementById('pcCurrencyModeToggle').checked = true;
   document.getElementById('pcTwd').value = calcRecipeCost(recipeForCost).toFixed(2);
+  fillPcCurrencySelect(pcCurrentInputs.currency);
   document.getElementById('pcRate').value = pcCurrentInputs.rate;
   document.getElementById('pcQ').value = pcCurrentInputs.q;
   document.getElementById('pcU').value = pcCurrentInputs.u;
@@ -4224,6 +4255,7 @@ async function openPricingModal(p, variantKey = null) {
         pcCurrentInputs = { ...pcBlankInputs(), ...template, costItems: (template.costItems || []).map(it => ({ ...it })), feeItems: (template.feeItems || []).map(it => ({ ...it })) };
         pcNextCostId = Math.max(0, ...pcCurrentInputs.costItems.map(c => c.id)) + 1;
         pcNextFeeId = Math.max(0, ...pcCurrentInputs.feeItems.map(f => f.id)) + 1;
+        fillPcCurrencySelect(pcCurrentInputs.currency);
         document.getElementById('pcRate').value = pcCurrentInputs.rate;
         document.getElementById('pcQ').value = pcCurrentInputs.q;
         document.getElementById('pcMarginModeToggle').checked = pcCurrentInputs.marginMode;
@@ -4232,6 +4264,7 @@ async function openPricingModal(p, variantKey = null) {
         document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
         document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
         document.getElementById('pcAaLabel').value = pcCurrentInputs.aaLabel;
+        pcApplyCurrencyMode();
         pcApplyMarginMode();
         renderPcCostList();
         renderPcFeeList();
@@ -4264,6 +4297,7 @@ document.getElementById('openPricingTemplateBtn').addEventListener('click', asyn
 
   document.getElementById('pcCurrencyModeToggle').checked = true;
   document.getElementById('pcTwd').value = 0; // 範本不綁定成品,沒有真實材料成本可以帶入,純粹讓你預覽卡片用
+  fillPcCurrencySelect(pcCurrentInputs.currency);
   document.getElementById('pcRate').value = pcCurrentInputs.rate;
   document.getElementById('pcQ').value = pcCurrentInputs.q;
   document.getElementById('pcU').value = pcCurrentInputs.u;
@@ -4307,6 +4341,8 @@ document.getElementById('pcResetBlankBtn').addEventListener('click', () => {
   pcCurrentInputs = pcBlankInputs();
   pcNextCostId = 1;
   pcNextFeeId = 1;
+  document.getElementById('pcCurrencyModeToggle').checked = true;
+  fillPcCurrencySelect(pcCurrentInputs.currency);
   document.getElementById('pcRate').value = 0;
   document.getElementById('pcQ').value = 0;
   document.getElementById('pcU').value = 0;
@@ -4316,6 +4352,7 @@ document.getElementById('pcResetBlankBtn').addEventListener('click', () => {
   document.getElementById('pcAa2').value = 0;
   document.getElementById('pcAa3').value = 0;
   document.getElementById('pcAaLabel').value = '設計成本(三種比較情境)';
+  pcApplyCurrencyMode();
   pcApplyMarginMode();
   renderPcCostList();
   renderPcFeeList();
