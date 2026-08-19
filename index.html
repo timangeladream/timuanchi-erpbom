@@ -273,7 +273,8 @@
   .ta-timeline-summary-row { cursor: pointer; border-radius: 6px; padding: 4px 6px; margin-left: -6px; display: flex; align-items: baseline; gap: 8px; }
   .ta-timeline-summary-row:hover { background: #eff3f7; }
   .ta-timeline-summary-extra { font-size: 12px; color: var(--text-muted); }
-  .ta-timeline-edit-btn { font-size: 11px; padding: 3px 8px; margin-top: 6px; }
+  .ta-timeline-edit-btn-row { margin-top: 8px; }
+  .ta-timeline-edit-btn { font-size: 11px; padding: 3px 8px; }
   .ta-timeline-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
   .ta-timeline-tab {
     font-size: 12px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border);
@@ -3277,7 +3278,7 @@ function renderTimelineList() {
       const view = buildLogView(log, timelineUnit);
       const expanded = timelineExpandedIds.has(log.id);
       const editBtn = (view.editable && expanded)
-        ? `<button type="button" class="ta-btn ta-btn-sm ta-timeline-edit-btn" data-edit-log="${escapeHtml(log.id)}">編輯</button>`
+        ? `<div class="ta-timeline-edit-btn-row"><button type="button" class="ta-btn ta-btn-sm ta-timeline-edit-btn" data-edit-log="${escapeHtml(log.id)}">編輯</button></div>`
         : '';
       return `<div class="ta-timeline-item">
         <div class="ta-timeline-summary-row" data-log-id="${escapeHtml(log.id)}">
