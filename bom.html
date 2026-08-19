@@ -1989,6 +1989,7 @@ function openProductDetail(id) {
         <button class="ta-btn ta-btn-sm" id="shipmentLogsBtn">出貨紀錄</button>
         <button class="ta-btn ta-btn-sm" id="openPricingBtn">定價試算</button>
         <button class="ta-btn ta-btn-sm" id="editProductBtn">編輯屬性</button>
+        <button class="ta-btn ta-btn-sm" id="refreshProductDetailBtn">重新整理</button>
         <button class="ta-btn ta-btn-sm ${p.archived ? '' : 'ta-btn-danger'}" id="archiveProductBtn">${p.archived ? '上架' : '下架'}</button>
         <button class="ta-btn ta-btn-sm ta-btn-danger" id="resetProductBtn">重置成品</button>
         <button class="ta-btn ta-btn-sm ta-btn-danger" id="deleteProductBtn">刪除</button>
@@ -2035,6 +2036,15 @@ function openProductDetail(id) {
   document.getElementById('shipmentLogsBtn').addEventListener('click', () => openShipmentLogsModal(p));
   document.getElementById('openPricingBtn').addEventListener('click', () => openPricingModal(p));
   document.getElementById('editProductBtn').addEventListener('click', () => openProductEditForm(p));
+  document.getElementById('refreshProductDetailBtn').addEventListener('click', async () => {
+    // openProductDetail() 本身是從本機快取讀資料,不會自動抓最新的;這裡要先真的重新讀一次
+    // 這個成品,並且強制做一次不受節流限制的材料同步(平常材料同步 1 分鐘內只會問一次),
+    // 這樣才能看到其他分頁/系統剛寫入的最新異動,不用整頁重新整理
+    await refreshProductLocal(p.id);
+    lastMaterialsSyncCheckAt = 0;
+    await syncMaterialsDeltaThrottled();
+    openProductDetail(p.id);
+  });
   document.getElementById('archiveProductBtn').addEventListener('click', () => toggleProductArchive(p));
   document.getElementById('resetProductBtn').addEventListener('click', () => resetProduct(p.id));
   document.getElementById('deleteProductBtn').addEventListener('click', () => openDeleteProductModal(p));

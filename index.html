@@ -2899,6 +2899,7 @@ async function openDetail(id) {
         <button class="ta-btn ta-btn-sm" id="editFieldsBtn">編輯屬性</button>
         <button class="ta-btn ta-btn-sm" id="adjustBtn">人工盤點調整</button>
         <button class="ta-btn ta-btn-sm" id="historyMigrationBtn">歷史資料搬遷</button>
+        <button class="ta-btn ta-btn-sm" id="refreshDetailBtn">重新整理</button>
         <button class="ta-btn ta-btn-sm ${m.archived ? '' : 'ta-btn-danger'}" id="archiveBtn">${m.archived ? '上架' : '下架'}</button>
         <button class="ta-btn ta-btn-sm ta-btn-danger" id="deleteBtn">刪除</button>
       </div>
@@ -2939,6 +2940,12 @@ async function openDetail(id) {
 
   document.getElementById('adjustBtn').addEventListener('click', () => openAdjustModal(m));
   document.getElementById('historyMigrationBtn').addEventListener('click', () => openHistoryMigrationModal(m));
+  document.getElementById('refreshDetailBtn').addEventListener('click', async () => {
+    // openDetail() 本身是從本機快取的 materials 陣列讀資料,不會自動抓最新的;
+    // 這裡要先真的去 Firestore 重新讀一次這款材料,再重新畫面,才能看到其他分頁/系統寫入的最新異動
+    await refreshMaterialLocal(m.id);
+    openDetail(m.id);
+  });
   document.getElementById('archiveBtn').addEventListener('click', () => toggleArchive(m));
   document.getElementById('editFieldsBtn').addEventListener('click', () => editMaterialFields(m));
   document.getElementById('deleteBtn').addEventListener('click', () => deleteMaterial(m));
