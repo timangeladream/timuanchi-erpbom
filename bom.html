@@ -759,7 +759,7 @@
   <div class="ta-modal ta-modal--wide">
     <span class="ta-modal-close" data-close="importProductModal">✕</span>
     <h2>匯入成品</h2>
-    <div class="ta-modal-text">Excel 欄位：成品分類 / 成品名稱 / 自設編號(選填) / 售價(選填) / 備註(選填) / 略過。系統編號由系統自動產生,不用填;配方跟規格請匯入後再手動設定。「略過」欄位填任何文字,該列就不會被匯入。</div>
+    <div class="ta-modal-text">Excel 欄位：成品分類 / 成品名稱 / 自設編號(選填) / 售價(選填) / 是否上架(選填,填 Y 或 N,留空視為 Y 上架) / 備註(選填) / 略過。系統編號由系統自動產生,不用填;配方跟規格請匯入後再手動設定。「略過」欄位填任何文字,該列就不會被匯入。</div>
     <button class="ta-btn ta-btn-sm" id="downloadImportProductTemplateBtn">下載空白範例檔案</button>
     <input type="file" id="importProductFileInput" accept=".xlsx,.xls">
     <div id="importProductResult"></div>
@@ -3291,7 +3291,7 @@ async function showPosRestockReminder(bomProductId, bomVariantKey) {
 let importProductParsedRows = null;
 
 // 跟 processImportProductRows() 實際讀取的欄位名稱保持一致,兩邊有新增/異動欄位時務必同步修改
-const IMPORT_PRODUCT_TEMPLATE_HEADERS = ['成品分類', '成品名稱', '自設編號', '售價', '備註', '略過'];
+const IMPORT_PRODUCT_TEMPLATE_HEADERS = ['成品分類', '成品名稱', '自設編號', '售價', '是否上架', '備註', '略過'];
 
 document.getElementById('downloadImportProductTemplateBtn').addEventListener('click', () => {
   const wb = XLSX.utils.book_new();
@@ -3337,8 +3337,9 @@ function processImportProductRows(rows) {
   const parsed = [];
   const missingCategories = new Set();
   const validCategories = new Set(Object.keys(productOptions.categoryCodes || {}));
+  const invalidArchivedRows = []; // 「是否上架」欄位只接受 Y/N/留空,格式不對的話記下是第幾列、填了什麼
 
-  rows.forEach(row => {
+  rows.forEach((row, idx) => {
     if (Object.values(row).every(v => v === '' || v == null)) return; // 完全空白的列不算資料
     if (String(row['略過'] ?? '').trim()) { skippedCount++; return; }
     const category = String(row['成品分類'] ?? '').trim();
@@ -3349,8 +3350,20 @@ function processImportProductRows(rows) {
     if (!validCategories.has(category)) missingCategories.add(category);
     const sellingPriceRaw = row['售價'];
     const sellingPrice = sellingPriceRaw !== '' && sellingPriceRaw != null && !isNaN(Number(sellingPriceRaw)) ? Number(sellingPriceRaw) : null;
-    parsed.push({ category, name, sellingPrice, note, customCode });
+    // 全形Ｙ/Ｎ轉半形,大小寫都接受;只有Y/N/留空算合法,其他一律視為格式錯誤,擋下整批匯入
+    const archivedRaw = String(row['是否上架'] ?? '').trim();
+    const archivedNormalized = archivedRaw.replace(/Ｙ/g, 'Y').replace(/Ｎ/g, 'N').toUpperCase();
+    let archived = false; // 留空預設 Y(上架)
+    if (archivedNormalized === 'Y' || archivedNormalized === '') archived = false;
+    else if (archivedNormalized === 'N') archived = true;
+    else invalidArchivedRows.push({ rowNum: idx + 2, value: archivedRaw });
+    parsed.push({ category, name, sellingPrice, note, customCode, archived });
   });
+
+  if (invalidArchivedRows.length) {
+    resultEl.innerHTML = `<div class="ta-import-errors">以下列的「是否上架」欄位格式不對(只能填 Y、N 或留空),請修正後再重新匯入(本次不會匯入任何資料):<br>${invalidArchivedRows.map(r => `第 ${r.rowNum} 列:「${escapeHtml(r.value)}」`).join('、')}</div>`;
+    return;
+  }
 
   if (missingCategories.size) {
     resultEl.innerHTML = `<div class="ta-import-errors">以下分類系統裡還沒有,請先到「分類管理」手動建立後再重新匯入(本次不會匯入任何資料):<br>${[...missingCategories].map(c => escapeHtml(c)).join('、')}</div>`;
@@ -3397,7 +3410,7 @@ document.getElementById('confirmImportProductBtn').addEventListener('click', asy
       if (!productCode) continue; // 驗證階段已經擋過分類不存在的情況,這裡只是防呆
       const payload = {
         category: row.category, name: row.name, note: row.note, productCode,
-        archived: false, recipe: [],
+        archived: row.archived, recipe: [],
         createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       };
       if (row.sellingPrice != null) payload.sellingPrice = row.sellingPrice;
