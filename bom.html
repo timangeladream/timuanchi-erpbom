@@ -1721,7 +1721,6 @@ function refreshVariantCombosPreview(productId) {
         <div class="ta-variant-combo-label">${escapeHtml(label)}</div>
         <input type="text" class="ta-variant-combo-sku" placeholder="規格貨號">
         <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-recipe>編輯規格配方</button>
-        <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-pricing>定價試算</button>
       </div>
     `;
   }).join('');
@@ -1758,16 +1757,14 @@ function renderVariantSection(p) {
     combosWrap.innerHTML = combos.map(combo => {
       const key = variantComboKey(combo.values);
       const label = combo.labels.join(' + ');
-      const priceVal = (p.variantSellingPrices || {})[key];
       const costVal = calcRecipeCost((p.variantRecipes || {})[key]);
       const missingMaterial = recipeHasMissingMaterial((p.variantRecipes || {})[key]);
       const preMade = (p.variantPreMadeStock || {})[key] || 0;
       return `
         <div class="ta-variant-combo-row" data-combo-key="${escapeHtml(key)}" data-combo-label="${escapeHtml(label)}">
-          <div class="ta-variant-combo-label">${escapeHtml(label)} <span class="ta-tag">成本 NT$${costVal.toFixed(2)}</span>${priceVal != null ? ` <span class="ta-tag">售價 NT$${Number(priceVal).toFixed(0)}</span>` : ''}${preMade ? ` <span class="ta-tag">已製作未售出 ${preMade}</span>` : ''}${missingMaterial ? ' <span class="ta-tag" style="color:var(--danger);">⚠️ 含已刪除材料</span>' : ''}</div>
+          <div class="ta-variant-combo-label">${escapeHtml(label)} <span class="ta-tag">成本 NT$${costVal.toFixed(2)}</span>${preMade ? ` <span class="ta-tag">已製作未售出 ${preMade}</span>` : ''}${missingMaterial ? ' <span class="ta-tag" style="color:var(--danger);">⚠️ 含已刪除材料</span>' : ''}</div>
           <input type="text" class="ta-variant-combo-sku" placeholder="規格貨號" value="${escapeHtml((p.variantSkus || {})[key] || '')}">
           <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-recipe>編輯規格配方</button>
-          <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-pricing>定價試算</button>
           <button type="button" class="ta-btn ta-btn-sm" data-register-production>生產登記</button>
           <button type="button" class="ta-btn ta-btn-sm" data-register-shipment>登記出貨</button>
           <button type="button" class="ta-btn ta-btn-sm" data-copy-recipe>複製配方到其他規格</button>
@@ -1809,20 +1806,6 @@ function wireVariantComboEditButtons(productId) {
         if (!saved) return;
         const p = products.find(x => x.id === productId);
         openVariantRecipeModal(p, row.dataset.comboKey, row.dataset.comboLabel);
-      } finally {
-        btn.disabled = false;
-      }
-    });
-  });
-  document.querySelectorAll('#variantCombosList [data-edit-variant-pricing]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const row = btn.closest('.ta-variant-combo-row');
-      btn.disabled = true;
-      try {
-        const saved = await saveVariantSettings(productId);
-        if (!saved) return;
-        const p = products.find(x => x.id === productId);
-        openPricingModal(p, row.dataset.comboKey);
       } finally {
         btn.disabled = false;
       }
@@ -3992,7 +3975,6 @@ document.getElementById('recipeSaveBtn').addEventListener('click', async () => {
 let pcCurrentInputs = null; // 目前彈窗編輯中的完整設定(本地暫存,尚未存檔)
 let pcNextCostId = 1, pcNextFeeId = 1;
 let pricingEditProductId = null;
-let pricingEditVariantKey = null; // 有值代表目前在編輯某個規格組合自己的售價
 let pricingEditIsTemplate = false; // true代表目前在編輯「定價公式範本」,不是綁定某個成品
 let pricingTemplateCache = null; // 定價公式範本的本地快取(讀過一次就記住,不用每次都問)
 
@@ -4248,9 +4230,8 @@ document.getElementById('pcMarginModeToggle').addEventListener('change', () => {
 
 // variantKey 有給的話,代表是在編輯「某一個規格組合」自己的售價,不是成品共用的售價;
 // 定價試算的計算方式(成本項目/手續費項目/倍數公式)維持成品共用同一套,只有最後儲存的售價分開存
-async function openPricingModal(p, variantKey = null) {
+async function openPricingModal(p) {
   pricingEditProductId = p.id;
-  pricingEditVariantKey = variantKey;
   pricingEditIsTemplate = false;
   document.getElementById('pricingModalTitle').textContent = '定價試算';
   document.getElementById('pricingModalDesc').textContent = '成本欄位已自動帶入這個成品目前的材料成本;其餘欄位(含成本項目/手續費項目)都是這個成品自己的設定,編輯時不會即時存檔,要按下方按鈕才會真正寫入。';
@@ -4267,14 +4248,21 @@ async function openPricingModal(p, variantKey = null) {
   pcNextCostId = Math.max(0, ...pcCurrentInputs.costItems.map(c => c.id)) + 1;
   pcNextFeeId = Math.max(0, ...pcCurrentInputs.feeItems.map(f => f.id)) + 1;
 
-  const recipeForCost = variantKey ? (p.variantRecipes || {})[variantKey] : p.recipe;
-  const existingSellingPrice = variantKey ? (p.variantSellingPrices || {})[variantKey] : p.sellingPrice;
+  // 有規格的成品,成本改用「基礎配方」跟「每個規格自己的配方」裡最高的那一個,
+  // 不再各自分開試算——一律只有一個共用售價,並用最高成本的規格去試算,確保賣得最貴的
+  // 那個規格也不會虧本。納入基礎配方一起比較,是避免只設定了基礎配方、規格配方都是空的
+  // 情況下,成本被誤算成0
+  const hasVariants = Object.keys(p.variantSkus || {}).length > 0;
+  const cost = hasVariants
+    ? Math.max(calcRecipeCost(p.recipe), ...Object.values(p.variantRecipes || {}).map(r => calcRecipeCost(r)), 0)
+    : calcRecipeCost(p.recipe);
+  const existingSellingPrice = p.sellingPrice;
 
-  // 成本欄位一律自動帶入這個成品(或規格)「目前」的材料成本(台幣),不套用之前儲存的舊值,
+  // 成本欄位一律自動帶入這個成品「目前」的材料成本(台幣),不套用之前儲存的舊值,
   // 這樣配方材料漲價時才能馬上反映最新真實成本;連帶幣別模式也固定用台幣輸入,
   // 避免跟自動帶入的成本互相覆蓋(見人民幣模式下 renderPcCards 會用人民幣欄位反推台幣)
   document.getElementById('pcCurrencyModeToggle').checked = true;
-  document.getElementById('pcTwd').value = calcRecipeCost(recipeForCost).toFixed(2);
+  document.getElementById('pcTwd').value = cost.toFixed(2);
   fillPcCurrencySelect(pcCurrentInputs.currency);
   document.getElementById('pcRate').value = pcCurrentInputs.rate;
   document.getElementById('pcQ').value = pcCurrentInputs.q;
@@ -4296,15 +4284,15 @@ async function openPricingModal(p, variantKey = null) {
 
   openModal('pricingModal');
 
-  // 這個成品(規格)從沒設定過定價試算,如果有定價公式範本,問一下要不要套用當起點
+  // 這個成品從沒設定過定價試算,如果有定價公式範本,問一下要不要套用當起點
   if (!pi) {
     const template = await loadPricingTemplate();
-    if (template && pricingEditProductId === p.id && pricingEditVariantKey === variantKey) {
+    if (template && pricingEditProductId === p.id) {
       const apply = await showConfirmModal({
         title: '套用定價公式範本',
-        text: '這個成品(規格)還沒有設定過定價試算,要不要套用已經建立好的定價公式範本(匯率/倍數/包裝成本/成本項目/手續費項目/設計成本標題)當作起點?套用後你還是可以自己再調整。',
+        text: '這個成品還沒有設定過定價試算,要不要套用已經建立好的定價公式範本(匯率/倍數/包裝成本/成本項目/手續費項目/設計成本標題)當作起點?套用後你還是可以自己再調整。',
       });
-      if (apply && pricingEditProductId === p.id && pricingEditVariantKey === variantKey) {
+      if (apply && pricingEditProductId === p.id) {
         pcCurrentInputs = { ...pcBlankInputs(), ...template, costItems: (template.costItems || []).map(it => ({ ...it })), feeItems: (template.feeItems || []).map(it => ({ ...it })) };
         pcNextCostId = Math.max(0, ...pcCurrentInputs.costItems.map(c => c.id)) + 1;
         pcNextFeeId = Math.max(0, ...pcCurrentInputs.feeItems.map(f => f.id)) + 1;
@@ -4331,7 +4319,6 @@ async function openPricingModal(p, variantKey = null) {
 document.getElementById('openPricingTemplateBtn').addEventListener('click', async () => {
   closeDrawer();
   pricingEditProductId = null;
-  pricingEditVariantKey = null;
   pricingEditIsTemplate = true;
   document.getElementById('pricingModalTitle').textContent = '定價公式範本設定';
   document.getElementById('pricingModalDesc').textContent = '這裡設定的是「公版範本」,不綁定任何成品。成品第一次打開定價試算、還沒有自己的設定時,可以選擇套用這裡的內容當起點,之後範本更新不會回頭影響已經套用過的成品。';
@@ -4467,19 +4454,12 @@ document.getElementById('pcApplyGlobalBtn').addEventListener('click', async () =
 document.getElementById('pcSaveBtn').addEventListener('click', async () => {
   if (!pricingEditProductId) return;
   const savedProductId = pricingEditProductId;
-  const savedVariantKey = pricingEditVariantKey;
   const priceVal = parseFloat(document.getElementById('pcSellingPrice').value);
   if (isNaN(priceVal) || priceVal < 0) { alert('請輸入正確的售價'); return; }
   const btn = document.getElementById('pcSaveBtn');
   btn.disabled = true;
   try {
-    if (savedVariantKey) {
-      const p = products.find(x => x.id === savedProductId);
-      const variantSellingPrices = { ...(p.variantSellingPrices || {}), [savedVariantKey]: priceVal };
-      await updateDoc(doc(db, 'products', savedProductId), { variantSellingPrices, updatedAt: serverTimestamp() });
-    } else {
-      await updateDoc(doc(db, 'products', savedProductId), { sellingPrice: priceVal, updatedAt: serverTimestamp() });
-    }
+    await updateDoc(doc(db, 'products', savedProductId), { sellingPrice: priceVal, updatedAt: serverTimestamp() });
     await refreshProductLocal(savedProductId);
     closeModal('pricingModal');
     if (document.getElementById('productDetailModal').classList.contains('ta-is-open')) {
