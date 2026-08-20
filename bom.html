@@ -142,6 +142,38 @@
   .ta-filter-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
   .ta-filter-bar input[type=text] { padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
 
+  .ta-pagination {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    gap: 12px; margin-bottom: 14px;
+  }
+  .ta-pagination-info { text-align: left; font-size: 12px; color: var(--text-muted); }
+  .ta-pagination-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-self: center; }
+  .ta-pagination-numbers { display: flex; gap: 4px; flex-wrap: wrap; }
+  .ta-pagination-arrow, .ta-pagination-num {
+    width: 25px; height: 20px; padding: 0; border: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; color: var(--text); background: #eef1f5; cursor: pointer;
+  }
+  .ta-pagination-arrow { border-radius: 50%; }
+  .ta-pagination-num { border-radius: 6px; }
+  .ta-pagination-arrow:hover, .ta-pagination-num:hover { background: var(--border); }
+  .ta-pagination-arrow:disabled { opacity: 0.4; cursor: not-allowed; }
+  .ta-pagination-arrow:disabled:hover { background: #eef1f5; }
+  .ta-pagination-num.ta-is-active { background: var(--primary-dark); color: #fff; font-weight: 600; }
+  .ta-pagination-num.ta-is-active:hover { background: var(--primary-dark); }
+  .ta-pagination-ellipsis { padding: 0 4px; color: var(--text-muted); }
+  .ta-pagination-jump { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-muted); justify-self: end; }
+  .ta-pagination-jump input {
+    width: 60px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 10px;
+  }
+  @media (max-width: 640px) {
+    .ta-pagination-jump input { width: 40px; }
+    .ta-pagination { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+    .ta-pagination-info { text-align: right; }
+    .ta-pagination-controls { justify-self: auto; }
+    .ta-pagination-jump { justify-self: auto; }
+  }
+
   .ta-table-scroll { overflow-x: auto; }
   table { width: 100%; min-width: 600px; margin: 0 auto; border-collapse: collapse; background: var(--card-bg); border-radius: 10px; overflow: hidden; }
   thead th {
@@ -351,6 +383,8 @@
   <div class="ta-filter-bar">
     <input type="text" id="productSearchInput" placeholder="搜尋成品名稱 / 編號">
   </div>
+
+  <div class="ta-pagination" id="productPagination"></div>
 
   <div class="ta-table-scroll">
   <table>
@@ -1428,6 +1462,8 @@ async function getNextProductCode(category) {
 
 // ---------- 成品清單 ----------
 let productCategoryFilter = '';
+const PRODUCT_PAGE_SIZE = 200; // 跟材料清單系統的分頁大小一致
+let productCurrentPage = 1;
 
 function renderProductCategoryTabs() {
   const wrap = document.getElementById('productCategoryTabs');
@@ -1455,6 +1491,7 @@ function renderProductCategoryTabs() {
 }
 
 function switchProductCategory() {
+  productCurrentPage = 1;
   renderProductCategoryTabs();
   renderProductTable();
 }
@@ -1474,10 +1511,15 @@ function renderProductTable() {
     return true;
   });
 
+  const totalPages = Math.max(1, Math.ceil(list.length / PRODUCT_PAGE_SIZE));
+  if (productCurrentPage > totalPages) productCurrentPage = totalPages;
+  const pagedList = list.slice((productCurrentPage - 1) * PRODUCT_PAGE_SIZE, productCurrentPage * PRODUCT_PAGE_SIZE);
+
   tbody.innerHTML = '';
   document.getElementById('productEmptyHint').classList.toggle('ta-is-hidden', list.length > 0);
+  renderProductPagination(totalPages, list.length);
 
-  for (const p of list) {
+  for (const p of pagedList) {
     const tr = document.createElement('tr');
     if (p.archived) tr.classList.add('ta-row--archived');
     const variantCount = Object.keys(p.variantSkus || {}).length;
@@ -1499,7 +1541,64 @@ function renderProductTable() {
   }
 }
 
-document.getElementById('productSearchInput').addEventListener('input', renderProductTable);
+function renderProductPagination(totalPages, totalItems) {
+  const wrap = document.getElementById('productPagination');
+
+  let infoText;
+  if (totalItems === 0) {
+    infoText = '顯示第 0 筆,共 0 筆';
+  } else {
+    const startIdx = (productCurrentPage - 1) * PRODUCT_PAGE_SIZE + 1;
+    const endIdx = Math.min(productCurrentPage * PRODUCT_PAGE_SIZE, totalItems);
+    infoText = `顯示第 ${startIdx.toLocaleString()}–${endIdx.toLocaleString()} 筆,共 ${totalItems.toLocaleString()} 筆`;
+  }
+
+  const pageNumbers = [];
+  for (let p = 1; p <= totalPages; p++) {
+    if (p === 1 || p === totalPages || (p >= productCurrentPage - 2 && p <= productCurrentPage + 2)) {
+      pageNumbers.push(p);
+    } else if (pageNumbers[pageNumbers.length - 1] !== '...') {
+      pageNumbers.push('...');
+    }
+  }
+
+  wrap.innerHTML = `
+    <div class="ta-pagination-info">${escapeHtml(infoText)}</div>
+    <div class="ta-pagination-controls">
+      <button class="ta-pagination-arrow" id="productPrevPageBtn" aria-label="上一頁" ${productCurrentPage === 1 ? 'disabled' : ''}>◀</button>
+      <span class="ta-pagination-numbers">
+        ${pageNumbers.map(p => p === '...'
+          ? `<span class="ta-pagination-ellipsis">...</span>`
+          : `<button class="ta-pagination-num${p === productCurrentPage ? ' ta-is-active' : ''}" data-page="${p}">${p}</button>`
+        ).join('')}
+      </span>
+      <button class="ta-pagination-arrow" id="productNextPageBtn" aria-label="下一頁" ${productCurrentPage === totalPages ? 'disabled' : ''}>▶</button>
+    </div>
+    <span class="ta-pagination-jump">
+      <input type="number" id="productJumpPageInput" min="1" max="${totalPages}" value="${productCurrentPage}"> / ${totalPages}
+      <button class="ta-btn ta-btn-sm" id="productJumpPageBtn">跳轉</button>
+    </span>
+  `;
+
+  document.getElementById('productPrevPageBtn').addEventListener('click', () => {
+    if (productCurrentPage > 1) { productCurrentPage--; renderProductTable(); }
+  });
+  document.getElementById('productNextPageBtn').addEventListener('click', () => {
+    if (productCurrentPage < totalPages) { productCurrentPage++; renderProductTable(); }
+  });
+  wrap.querySelectorAll('.ta-pagination-num').forEach(btn => {
+    btn.addEventListener('click', () => { productCurrentPage = parseInt(btn.dataset.page); renderProductTable(); });
+  });
+  const jumpInput = document.getElementById('productJumpPageInput');
+  const doJump = () => {
+    const val = parseInt(jumpInput.value);
+    if (!isNaN(val) && val >= 1 && val <= totalPages) { productCurrentPage = val; renderProductTable(); }
+  };
+  document.getElementById('productJumpPageBtn').addEventListener('click', doJump);
+  jumpInput.addEventListener('keydown', e => { if (e.key === 'Enter') doJump(); });
+}
+
+document.getElementById('productSearchInput').addEventListener('input', () => { productCurrentPage = 1; renderProductTable(); });
 
 // ---------- 新增/編輯成品 ----------
 let productFormEditId = null;
