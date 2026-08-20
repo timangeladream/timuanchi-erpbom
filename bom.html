@@ -362,6 +362,7 @@
         <th class="ta-col-right" data-col="sellingPrice">售價</th>
         <th class="ta-col-center" data-col="variantCount">多規格</th>
         <th class="ta-col-right" data-col="preMadeStock">已製作未售出</th>
+        <th class="ta-col-center" data-col="recipeStatus">配方狀態</th>
         <th class="ta-col-center" data-col="status">狀態</th>
       </tr>
     </thead>
@@ -1490,6 +1491,7 @@ function renderProductTable() {
       <td class="ta-col-right">${p.sellingPrice != null ? 'NT$ ' + Number(p.sellingPrice).toFixed(0) : ''}</td>
       <td class="ta-col-center">${variantCount ? `${variantCount} 個規格` : ''}</td>
       <td class="ta-col-right">${preMadeStock.toLocaleString()}</td>
+      <td class="ta-col-center">${escapeHtml(productRecipeStatusLabel(p))}</td>
       <td class="ta-col-center">${p.archived ? '<span class="ta-status-tag">已下架</span>' : ''}${productHasMissingMaterial(p) ? ' <span class="ta-status-tag ta-status-tag--danger">⚠️有異動</span>' : ''}</td>
     `;
     tr.addEventListener('click', () => openProductDetail(p.id));
@@ -1605,6 +1607,20 @@ function productHasMissingMaterial(p) {
   const hasVariants = Object.keys(p.variantSkus || {}).length > 0;
   if (!hasVariants) return recipeHasMissingMaterial(p.recipe);
   return Object.values(p.variantRecipes || {}).some(recipe => recipeHasMissingMaterial(recipe));
+}
+
+// 成品列表「配方狀態」欄位用:沒有規格的成品只看基礎配方;有規格的成品分開判斷基礎配方
+// 跟「任一規格」有沒有配方,兩者是獨立的(規格配方是基礎配方之外「額外」的客製化部分,
+// 不是互斥關係),所以會出現四種組合,不是單純的有/沒有二分
+function productRecipeStatusLabel(p) {
+  const hasBaseRecipe = (p.recipe || []).length > 0;
+  const hasVariants = Object.keys(p.variantSkus || {}).length > 0;
+  if (!hasVariants) return hasBaseRecipe ? '有基礎配方' : '尚未設定';
+  const hasAnyVariantRecipe = Object.values(p.variantRecipes || {}).some(recipe => (recipe || []).length > 0);
+  if (hasBaseRecipe && hasAnyVariantRecipe) return '有基礎配方,有規格配方';
+  if (hasBaseRecipe) return '有基礎配方';
+  if (hasAnyVariantRecipe) return '有規格配方';
+  return '尚未設定';
 }
 
 // ---------- 成品規格(多維度組合) ----------
@@ -3774,7 +3790,10 @@ function getFrequentMaterialsForProduct(p, categoryFilter) {
     .slice(0, 8);
 }
 
-// 全部在瀏覽器端篩選已經載入的材料清單,不會產生額外的 Firestore 讀取
+// 全部在瀏覽器端篩選已經載入的材料清單,不會產生額外的 Firestore 讀取。
+// 不設筆數上限(結果框本來就是固定高度、超過會自動捲動,不會撐爆畫面);
+// 依分類、分類內再依材料編號排序,不管背後 materials 陣列的原始順序是什麼(Firestore
+// 沒指定排序時本來就不保證每次一致),同樣的關鍵字每次搜尋結果順序都會固定、可預期
 function searchMaterials(kw, categoryFilter) {
   const q = kw.trim().toLowerCase();
   if (!q) return [];
@@ -3782,7 +3801,11 @@ function searchMaterials(kw, categoryFilter) {
     if (categoryFilter && m.category !== categoryFilter) return false;
     const fields = [materialDisplayName(m), m.materialCode, m.category, m.brand, m.material, m.beadType, m.size, m.colorSeries, m.colorCode, m.colorTag];
     return fields.some(f => (f || '').toLowerCase().includes(q));
-  }).slice(0, 20);
+  }).sort((a, b) => {
+    const catCompare = (a.category || '').localeCompare(b.category || '', 'zh-Hant');
+    if (catCompare !== 0) return catCompare;
+    return (a.materialCode || '').localeCompare(b.materialCode || '', 'zh-Hant');
+  });
 }
 
 function renderSearchResults(list) {
