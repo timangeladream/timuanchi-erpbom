@@ -234,6 +234,7 @@
   .ta-recipe-row-qty { width: 80px; }
   .ta-recipe-row-qty input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
   .ta-recipe-row-unit { width: 40px; font-size: 12px; color: var(--text-muted); }
+  .ta-recipe-row-unitprice { width: 90px; text-align: right; font-size: 12px; color: var(--text-muted); }
   .ta-recipe-row-subtotal { width: 100px; text-align: right; font-size: 13px; }
   .ta-recipe-row-del { cursor: pointer; color: var(--danger); font-size: 12px; white-space: nowrap; }
   .ta-recipe-item { border-bottom: 1px solid var(--border); padding: 4px 0; }
@@ -3963,9 +3964,10 @@ function renderRecipeList() {
       const step = isContinuousUnit(m.unit) ? '0.01' : '1';
       return `<div class="ta-recipe-item">
         <div class="ta-recipe-row">
-          <div class="ta-recipe-row-name">${escapeHtml(materialDisplayName(m))}</div>
+          <div class="ta-recipe-row-name">${m.materialCode ? escapeHtml(m.materialCode) + ' ' : ''}${escapeHtml(materialDisplayName(m))}</div>
           <div class="ta-recipe-row-qty"><input type="number" min="0" step="${step}" value="${r.quantity}" data-idx="${idx}"></div>
           <div class="ta-recipe-row-unit">${escapeHtml(m.unit || '')}</div>
+          <div class="ta-recipe-row-unitprice">NT$${cost.toFixed(2)} / ${escapeHtml(m.unit || '')}</div>
           <div class="ta-recipe-row-subtotal" data-idx="${idx}">NT$${subtotal.toFixed(2)}</div>
           <span class="ta-recipe-row-del" data-idx="${idx}">移除</span>
         </div>
