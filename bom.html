@@ -4585,7 +4585,7 @@ function buildExportRowsForProduct(p) {
     const profit = sellingPrice != null ? sellingPrice - materialCost : null;
     if (!recipe.length) {
       return [[
-        p.productCode || '', p.category || '', p.name || '', statusLabel,
+        p.productCode || '', p.customCode || '', p.category || '', p.name || '', statusLabel,
         ...variantCols,
         '', '', '', '', '', '',
         0, Number(materialCost.toFixed(2)),
@@ -4597,7 +4597,7 @@ function buildExportRowsForProduct(p) {
       const unitCost = m ? (m.currentUnitCostWeightedAvg || 0) : 0;
       const qty = r.quantity || 0;
       return [
-        p.productCode || '', p.category || '', p.name || '', statusLabel,
+        p.productCode || '', p.customCode || '', p.category || '', p.name || '', statusLabel,
         ...variantCols,
         m ? (m.materialCode || '') : '(材料已刪除)',
         m ? materialDisplayName(m) : '',
@@ -4630,7 +4630,10 @@ function buildExportRowsForProduct(p) {
     variantCols.push(p.variantSkus[key] || '');
     const recipe = (p.variantRecipes || {})[key] || [];
     const materialCost = calcRecipeCost(recipe);
-    const sellingPrice = (p.variantSellingPrices || {})[key] != null ? Number(p.variantSellingPrices[key]) : null;
+    // 定價試算已經改成不分規格、全部共用成品的售價(p.sellingPrice),不再各自存 variantSellingPrices;
+    // 這裡沿用同一個共用售價,但毛利還是用「這個規格自己的材料成本」去算,才能看出不同規格在同一個
+    // 售價下毛利各是多少
+    const sellingPrice = p.sellingPrice != null ? Number(p.sellingPrice) : null;
     rows.push(...materialRows(recipe, materialCost, sellingPrice, variantCols));
   });
   return rows;
@@ -4685,7 +4688,7 @@ document.getElementById('confirmExportRecipeBtn').addEventListener('click', asyn
     }
 
     const headers = [
-      '成品編號', '成品分類', '成品名稱', '成品狀態',
+      '成品編號', '自設編號', '成品分類', '成品名稱', '成品狀態',
       '規格1名稱', '規格1', '規格2名稱', '規格2', '規格3名稱', '規格3', '規格貨號',
       '材料編號', '材料名稱', '材料分類', '用量', '單位', '材料單價', '小計', '材料總成本', '售價', '毛利',
     ];
