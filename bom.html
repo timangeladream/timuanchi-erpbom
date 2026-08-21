@@ -3681,9 +3681,22 @@ let currentRecipe = []; // 目前編輯中的配方(尚未儲存): [{materialId,
 // recipeEditContext: { mode: 'product', productId } 或 { mode: 'category', category }
 let recipeEditContext = null;
 
+// 依材料分類、分類內再依材料編號排序,固定順序方便核對(材料已刪除的話分類/編號視為空字串,排最前面)。
+// 只在「打開編輯畫面/載入配方」的當下排一次,這次編輯過程中新增的材料先加在清單最後面、不會邊加邊跳動,
+// 下次重新打開才會照這個順序重新排——跟配方搜尋結果的排序邏輯一致
+function sortRecipeByMaterial(recipe) {
+  return [...recipe].sort((a, b) => {
+    const ma = materials.find(x => x.id === a.materialId);
+    const mb = materials.find(x => x.id === b.materialId);
+    const catCompare = (ma?.category || '').localeCompare(mb?.category || '', 'zh-Hant');
+    if (catCompare !== 0) return catCompare;
+    return (ma?.materialCode || '').localeCompare(mb?.materialCode || '', 'zh-Hant');
+  });
+}
+
 function openRecipeModal(p) {
   recipeEditContext = { mode: 'product', productId: p.id };
-  currentRecipe = (p.recipe || []).map(r => ({ ...r }));
+  currentRecipe = sortRecipeByMaterial((p.recipe || []).map(r => ({ ...r })));
   document.getElementById('recipeModalTitle').textContent = '編輯配方';
   document.getElementById('recipeSaveBtn').textContent = '儲存配方';
   document.getElementById('recipeComboNameRow').classList.add('ta-is-hidden');
@@ -3716,7 +3729,7 @@ function openRecipeModal(p) {
 // 編輯單一規格組合自己的配方(跟編輯成品共用的配方,是分開獨立的兩份資料)
 function openVariantRecipeModal(p, variantKey, variantLabel) {
   recipeEditContext = { mode: 'variant', productId: p.id, variantKey };
-  currentRecipe = ((p.variantRecipes || {})[variantKey] || []).map(r => ({ ...r }));
+  currentRecipe = sortRecipeByMaterial(((p.variantRecipes || {})[variantKey] || []).map(r => ({ ...r })));
   document.getElementById('recipeModalTitle').textContent = `編輯規格配方:${variantLabel}`;
   document.getElementById('recipeSaveBtn').textContent = '儲存規格配方';
   document.getElementById('recipeComboNameRow').classList.add('ta-is-hidden');
@@ -3809,7 +3822,7 @@ function openComboCopyEditor(category, comboId) {
   openComboEditor(category, null);
   document.getElementById('recipeModalTitle').textContent = `複製組合：${source.name}`;
   document.getElementById('recipeComboName').value = `${source.name} (複製)`;
-  currentRecipe = source.items.map(r => ({ ...r }));
+  currentRecipe = sortRecipeByMaterial(source.items.map(r => ({ ...r })));
   renderRecipeList();
 }
 
@@ -3834,7 +3847,7 @@ function openComboEditor(category, comboId) {
   const combos = (productOptions.requiredMaterials || {})[category] || [];
   const existing = comboId ? combos.find(c => c.id === comboId) : null;
   recipeEditContext = { mode: 'combo', category, comboId };
-  currentRecipe = existing ? existing.items.map(r => ({ ...r })) : [];
+  currentRecipe = existing ? sortRecipeByMaterial(existing.items.map(r => ({ ...r }))) : [];
 
   document.getElementById('recipeModalTitle').textContent = existing ? `編輯組合：${existing.name}` : `新增組合(${category})`;
   document.getElementById('recipeSaveBtn').textContent = '儲存組合';
