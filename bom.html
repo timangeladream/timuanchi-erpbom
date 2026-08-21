@@ -211,11 +211,16 @@
   .ta-variant-option { display: flex; align-items: center; gap: 4px; }
   .ta-variant-option input { width: 100px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
   .ta-variant-combo-row {
-    display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border);
   }
+  .ta-variant-combo-top { display: flex; align-items: center; gap: 10px; }
   .ta-variant-combo-label { flex: 1; font-size: 13px; }
-  .ta-variant-combo-cost { width: 100px; flex-shrink: 0; text-align: right; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
-  .ta-variant-combo-sku { width: 160px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .ta-variant-combo-cost { flex-shrink: 0; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+  /* 貨號輸入框+動作按鈕放同一行:空間不夠時整行水平捲動,不換行——換行會讓每一列規格高度都不一樣,
+     手機上看起來反而更擠、更亂,捲動可以維持每一列固定高度、瀏覽起來更穩定 */
+  .ta-variant-combo-actions { display: flex; align-items: center; gap: 10px; overflow-x: auto; padding-bottom: 2px; }
+  .ta-variant-combo-sku { flex-shrink: 0; width: 160px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .ta-variant-combo-actions .ta-btn { flex-shrink: 0; white-space: nowrap; }
   .ta-variant-link { font-size: 12.5px; color: var(--primary); cursor: pointer; text-decoration: underline; }
 
   .ta-recipe-search-wrap { position: relative; }
@@ -1819,9 +1824,13 @@ function refreshVariantCombosPreview(productId) {
     const skuVal = existingSkuInputs[key] != null ? existingSkuInputs[key] : '';
     return `
       <div class="ta-variant-combo-row" data-combo-key="${escapeHtml(key)}" data-combo-label="${escapeHtml(label)}">
-        <div class="ta-variant-combo-label">${escapeHtml(label)}</div>
-        <input type="text" class="ta-variant-combo-sku" placeholder="規格貨號">
-        <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-recipe>編輯規格配方</button>
+        <div class="ta-variant-combo-top">
+          <div class="ta-variant-combo-label">${escapeHtml(label)}</div>
+        </div>
+        <div class="ta-variant-combo-actions">
+          <input type="text" class="ta-variant-combo-sku" placeholder="規格貨號">
+          <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-recipe>編輯規格配方</button>
+        </div>
       </div>
     `;
   }).join('');
@@ -1863,13 +1872,17 @@ function renderVariantSection(p) {
       const preMade = (p.variantPreMadeStock || {})[key] || 0;
       return `
         <div class="ta-variant-combo-row" data-combo-key="${escapeHtml(key)}" data-combo-label="${escapeHtml(label)}">
-          <div class="ta-variant-combo-label">${escapeHtml(label)}${preMade ? ` <span class="ta-tag">已製作未售出 ${preMade}</span>` : ''}${missingMaterial ? ' <span class="ta-tag" style="color:var(--danger);">⚠️ 含已刪除材料</span>' : ''}</div>
-          <div class="ta-variant-combo-cost">成本 NT$${costVal.toFixed(2)}</div>
-          <input type="text" class="ta-variant-combo-sku" placeholder="規格貨號" value="${escapeHtml((p.variantSkus || {})[key] || '')}">
-          <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-recipe>編輯規格配方</button>
-          <button type="button" class="ta-btn ta-btn-sm" data-register-production>生產登記</button>
-          <button type="button" class="ta-btn ta-btn-sm" data-register-shipment>登記出貨</button>
-          <button type="button" class="ta-btn ta-btn-sm" data-copy-recipe>複製配方到其他規格</button>
+          <div class="ta-variant-combo-top">
+            <div class="ta-variant-combo-label">${escapeHtml(label)}${preMade ? ` <span class="ta-tag">已製作未售出 ${preMade}</span>` : ''}${missingMaterial ? ' <span class="ta-tag" style="color:var(--danger);">⚠️ 含已刪除材料</span>' : ''}</div>
+            <div class="ta-variant-combo-cost">成本 NT$${costVal.toFixed(2)}</div>
+          </div>
+          <div class="ta-variant-combo-actions">
+            <input type="text" class="ta-variant-combo-sku" placeholder="規格貨號" value="${escapeHtml((p.variantSkus || {})[key] || '')}">
+            <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-recipe>編輯規格配方</button>
+            <button type="button" class="ta-btn ta-btn-sm" data-register-production>生產登記</button>
+            <button type="button" class="ta-btn ta-btn-sm" data-register-shipment>登記出貨</button>
+            <button type="button" class="ta-btn ta-btn-sm" data-copy-recipe>複製配方到其他規格</button>
+          </div>
         </div>
       `;
     }).join('');
@@ -4629,9 +4642,13 @@ function buildExportRowsForProduct(p) {
   }
 
   if (!variantKeys.length) {
-    const materialCost = calcRecipeCost(p.recipe);
+    // 匯出時獨立重新排序一次(分類→材料編號),不依賴 Firestore 裡實際存的順序——
+    // 配方的儲存順序不保證一定是排好的(只有打開編輯畫面那個當下會重排一次),
+    // 這樣才能確保匯出結果穩定一致
+    const recipe = sortRecipeByMaterial(p.recipe || []);
+    const materialCost = calcRecipeCost(recipe);
     const sellingPrice = p.sellingPrice != null ? Number(p.sellingPrice) : null;
-    return materialRows(p.recipe || [], materialCost, sellingPrice, ['', '', '', '', '', '', '']);
+    return materialRows(recipe, materialCost, sellingPrice, ['', '', '', '', '', '', '']);
   }
 
   const dimNames = p.variantKeyOrder || Object.keys(p.variants || {});
@@ -4643,7 +4660,7 @@ function buildExportRowsForProduct(p) {
       variantCols.push(dimNames[i] || '', values[i] || '');
     }
     variantCols.push(p.variantSkus[key] || '');
-    const recipe = (p.variantRecipes || {})[key] || [];
+    const recipe = sortRecipeByMaterial((p.variantRecipes || {})[key] || []);
     const materialCost = calcRecipeCost(recipe);
     // 定價試算已經改成不分規格、全部共用成品的售價(p.sellingPrice),不再各自存 variantSellingPrices;
     // 這裡沿用同一個共用售價,但毛利還是用「這個規格自己的材料成本」去算,才能看出不同規格在同一個
