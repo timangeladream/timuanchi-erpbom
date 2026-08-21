@@ -1340,7 +1340,26 @@ async function syncMaterialsFromServer() {
 // 重新讀「剛剛那一筆」資料回來更新畫面,不用整個集合持續監聽。
 // 累計進貨總額:用 collectionGroup 一次撈出「所有材料」的進貨歷史紀錄,依材料分組加總,
 // 只在頁面載入(含重新整理,本頁重新整理是整頁 location.reload())時查一次,不會每次切換分類頁籤都重新查
+// 進貨歷史紀錄沒有像材料主檔那樣的 updatedAt 可以做差異同步(而且還可能被編輯/連動刪除),
+// 用「時間快取」取代:30分鐘內重新整理頁面沿用快取,不會每次開頁都整批重新查一次全部材料的
+// 進貨歷史(這是集合群組查詢,量體遠大於材料主檔本身);超過30分鐘或第一次使用才整批重查一次
+const PURCHASE_VALUE_CACHE_KEY = 'ta_purchase_value_cache_v1';
+const PURCHASE_VALUE_CACHE_TTL_MS = 30 * 60 * 1000;
+
 async function loadCumulativePurchaseValue() {
+  try {
+    const cached = localStorage.getItem(PURCHASE_VALUE_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Date.now() - parsed.cachedAt < PURCHASE_VALUE_CACHE_TTL_MS) {
+        purchaseValueByMaterialId = parsed.data;
+        return;
+      }
+    }
+  } catch (e) {
+    // 快取格式壞掉就當作沒有快取,往下走整批重查
+  }
+
   purchaseValueByMaterialId = {};
   const snap = await getDocs(collectionGroup(db, 'history'));
   snap.docs.forEach(d => {
@@ -1349,6 +1368,12 @@ async function loadCumulativePurchaseValue() {
     const materialId = d.ref.parent.parent.id;
     purchaseValueByMaterialId[materialId] = (purchaseValueByMaterialId[materialId] || 0) + (data.twdAmount || 0);
   });
+
+  try {
+    localStorage.setItem(PURCHASE_VALUE_CACHE_KEY, JSON.stringify({ cachedAt: Date.now(), data: purchaseValueByMaterialId }));
+  } catch (e) {
+    // 存快取失敗(例如容量爆了)不影響功能,只是下次還是會重新查一次
+  }
 }
 
 async function initData() {
