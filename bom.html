@@ -2918,9 +2918,11 @@ document.getElementById('posLoginBtn').addEventListener('click', async () => {
   }
 });
 
+// POS系統後來把商品資料從 settings/system 的 products 欄位遷移到獨立的 products 集合
+// (每個商品各自一份文件),這裡跟著改成讀新的位置,不然商品清單會是空的
 async function loadPosProducts() {
-  const snap = await getDoc(doc(posDb, 'settings', 'system'));
-  posProductsCache = snap.exists() ? (snap.data().products || []) : [];
+  const snap = await getDocs(collection(posDb, 'products'));
+  posProductsCache = snap.docs.map(d => d.data());
 }
 
 async function loadPosMappings() {
@@ -4175,7 +4177,7 @@ function renderPcCostList() {
     '<div class="ta-pc-item-row' + (it.enabled ? '' : ' ta-is-disabled') + '">' +
     pcSwitchHtml('data-cost-toggle', it.id, it.enabled) +
     '<input type="text" data-cost-name="' + it.id + '" value="' + escapeHtml(it.name) + '">' +
-    '<input type="number" data-cost-value="' + it.id + '" value="' + it.value + '">' +
+    '<input type="number" data-cost-value="' + it.id + '" value="' + escapeHtml(Number(it.value) || 0) + '">' +
     '<span class="ta-pc-item-unit">元(台幣)</span>' +
     '<button type="button" class="ta-btn ta-btn-sm ta-btn-danger" data-cost-del="' + it.id + '">刪除</button>' +
     '</div>'
@@ -4187,7 +4189,7 @@ function renderPcFeeList() {
     '<div class="ta-pc-item-row' + (it.enabled ? '' : ' ta-is-disabled') + '">' +
     pcSwitchHtml('data-fee-toggle', it.id, it.enabled) +
     '<input type="text" data-fee-name="' + it.id + '" value="' + escapeHtml(it.name) + '">' +
-    '<input type="number" data-fee-value="' + it.id + '" value="' + it.percent + '">' +
+    '<input type="number" data-fee-value="' + it.id + '" value="' + escapeHtml(Number(it.percent) || 0) + '">' +
     '<span class="ta-pc-item-unit">%</span>' +
     '<label class="ta-pc-standalone-label"><input type="checkbox" data-fee-standalone="' + it.id + '" ' + (it.standalone ? 'checked' : '') + '> 獨立售價</label>' +
     '<button type="button" class="ta-btn ta-btn-sm ta-btn-danger" data-fee-del="' + it.id + '">刪除</button>' +
@@ -4281,7 +4283,7 @@ document.getElementById('pcAddFeeBtn').addEventListener('click', () => {
 document.getElementById('pcCostList').addEventListener('input', (e) => {
   const t = e.target;
   if (t.dataset.costName) { pcCurrentInputs.costItems.find(c => c.id == t.dataset.costName).name = t.value; }
-  if (t.dataset.costValue) { pcCurrentInputs.costItems.find(c => c.id == t.dataset.costValue).value = t.value; renderPcCards(); }
+  if (t.dataset.costValue) { pcCurrentInputs.costItems.find(c => c.id == t.dataset.costValue).value = parseFloat(t.value) || 0; renderPcCards(); }
 });
 document.getElementById('pcCostList').addEventListener('click', (e) => {
   const delBtn = e.target.closest('[data-cost-del]');
@@ -4301,7 +4303,7 @@ document.getElementById('pcCostList').addEventListener('change', (e) => {
 document.getElementById('pcFeeList').addEventListener('input', (e) => {
   const t = e.target;
   if (t.dataset.feeName) { pcCurrentInputs.feeItems.find(f => f.id == t.dataset.feeName).name = t.value; }
-  if (t.dataset.feeValue) { pcCurrentInputs.feeItems.find(f => f.id == t.dataset.feeValue).percent = t.value; renderPcCards(); }
+  if (t.dataset.feeValue) { pcCurrentInputs.feeItems.find(f => f.id == t.dataset.feeValue).percent = parseFloat(t.value) || 0; renderPcCards(); }
 });
 document.getElementById('pcFeeList').addEventListener('click', (e) => {
   const delBtn = e.target.closest('[data-fee-del]');
