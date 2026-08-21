@@ -1125,6 +1125,36 @@
   </div>
 </div>
 
+<!-- 匯出資料範圍 Modal -->
+<div class="ta-modal-overlay" id="exportScopeModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="exportScopeModal">✕</span>
+    <h2>匯出資料</h2>
+    <div class="ta-radio-row">
+      <input type="radio" name="exportScope" id="exportScopeAll" value="all" checked>
+      <label for="exportScopeAll">全部材料</label>
+    </div>
+    <div class="ta-radio-row">
+      <input type="radio" name="exportScope" id="exportScopeCategory" value="category">
+      <label for="exportScopeCategory">指定分類</label>
+    </div>
+    <div class="ta-form-row">
+      <select id="exportCategorySelect"></select>
+    </div>
+    <div class="ta-radio-row">
+      <input type="radio" name="exportScope" id="exportScopeSingle" value="single">
+      <label for="exportScopeSingle">單一材料</label>
+    </div>
+    <div class="ta-form-row">
+      <select id="exportMaterialSelect"></select>
+    </div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="exportScopeModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="confirmExportBtn">匯出</button>
+    </div>
+  </div>
+</div>
+
 <!-- 清除資料 Modal -->
 <div class="ta-modal-overlay" id="wipeModal">
   <div class="ta-modal">
@@ -4226,19 +4256,62 @@ function sanitizeSheetName(name) {
   return n || '未分類';
 }
 
-document.getElementById('openExportBtn').addEventListener('click', async () => {
+document.getElementById('openExportBtn').addEventListener('click', () => {
   closeDrawer();
-  const btn = document.getElementById('openExportBtn');
+  document.querySelector('input[name="exportScope"][value="all"]').checked = true;
+  const catSelect = document.getElementById('exportCategorySelect');
+  catSelect.innerHTML = (options.categories || []).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  const matSelect = document.getElementById('exportMaterialSelect');
+  matSelect.innerHTML = materials.map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.materialCode || '')} - ${escapeHtml(displayName(m))}</option>`).join('');
+  openModal('exportScopeModal');
+});
+document.getElementById('exportCategorySelect').addEventListener('change', () => {
+  document.getElementById('exportScopeCategory').checked = true;
+});
+document.getElementById('exportMaterialSelect').addEventListener('change', () => {
+  document.getElementById('exportScopeSingle').checked = true;
+});
+
+document.getElementById('confirmExportBtn').addEventListener('click', async () => {
+  const scope = document.querySelector('input[name="exportScope"]:checked').value;
+  let scopedMaterials;
+  let scopeLabel;
+  if (scope === 'category') {
+    const cat = document.getElementById('exportCategorySelect').value;
+    if (!cat) { alert('請選擇分類'); return; }
+    scopedMaterials = materials.filter(m => m.category === cat);
+    scopeLabel = cat;
+  } else if (scope === 'single') {
+    const id = document.getElementById('exportMaterialSelect').value;
+    if (!id) { alert('請選擇材料'); return; }
+    scopedMaterials = materials.filter(m => m.id === id);
+    scopeLabel = scopedMaterials[0] ? (scopedMaterials[0].materialCode || displayName(scopedMaterials[0])) : '';
+  } else {
+    scopedMaterials = materials;
+    scopeLabel = '全部';
+  }
+  if (!scopedMaterials.length) { alert('這個範圍內沒有材料資料可以匯出'); return; }
+
+  const btn = document.getElementById('confirmExportBtn');
   const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = '匯出中...';
 
   try {
-    // 平行讀取所有材料的完整進貨歷史
-    const historyResults = await Promise.all(materials.map(m =>
-      getDocs(query(collection(db, 'materials', m.id, 'history'), orderBy('timestamp', 'asc')))
-        .then(snap => ({ material: m, snap }))
-    ));
+    // 讀取範圍內材料的完整進貨歷史,但分批平行處理(不是一次把全部材料的查詢同時發出去)——
+    // 材料一多,一次性全部平行送出容易超過 Firestore 單一連線能同時承受的請求數量,
+    // 觸發「Too many outstanding requests」而失敗,分批可以兼顧速度又不會踩到這個限制。
+    // 選了「分類」或「單一材料」範圍時,這裡本來就只會處理範圍內的材料,查詢量自然小很多
+    const HISTORY_FETCH_CHUNK_SIZE = 15;
+    const historyResults = [];
+    for (let i = 0; i < scopedMaterials.length; i += HISTORY_FETCH_CHUNK_SIZE) {
+      const chunk = scopedMaterials.slice(i, i + HISTORY_FETCH_CHUNK_SIZE);
+      const chunkResults = await Promise.all(chunk.map(m =>
+        getDocs(query(collection(db, 'materials', m.id, 'history'), orderBy('timestamp', 'asc')))
+          .then(snap => ({ material: m, snap }))
+      ));
+      historyResults.push(...chunkResults);
+    }
     const cnyRate = exchangeRates.CNY || 5;
     const historyRows = [];
     const otherLogRows = [];
@@ -4274,7 +4347,7 @@ document.getElementById('openExportBtn').addEventListener('click', async () => {
     }
 
     // 材料主檔:一列一款材料的目前狀態快照(含下架材料),不是歷史紀錄
-    const masterRows = materials.map(m => [
+    const masterRows = scopedMaterials.map(m => [
       m.materialCode || '', m.category || '', m.brand || '', m.material || '', m.beadType || '', m.size || '',
       m.colorCode || '', m.unit || '',
       m.currentStock || 0, m.currentStockSecondary || 0, m.reservedStock || 0,
@@ -4287,30 +4360,34 @@ document.getElementById('openExportBtn').addEventListener('click', async () => {
     // 「材料主檔」放在最前面,是目前狀態的快照,跟後面歷史紀錄性質的分頁區分開來
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([EXPORT_MASTER_HEADERS, ...masterRows]), '材料主檔');
 
-    // 「全部」放所有分類的完整進貨歷史
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([EXPORT_HISTORY_HEADERS, ...historyRows]), '全部');
-
-    // 每個分類一個分頁,內容一樣是進貨歷史格式,只篩選該分類的紀錄
-    const usedNames = new Set(['材料主檔', '全部', '其他異動紀錄']);
-    const categoriesInData = [...new Set(materials.map(m => m.category || '未分類'))];
-    for (const cat of categoriesInData) {
-      const rows = historyRows.filter(r => (r[1] || '未分類') === cat);
-      let sheetName = sanitizeSheetName(cat);
-      let suffix = 1;
-      while (usedNames.has(sheetName)) { suffix++; sheetName = sanitizeSheetName(cat) + '_' + suffix; }
-      usedNames.add(sheetName);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([EXPORT_HISTORY_HEADERS, ...rows]), sheetName);
+    if (scope === 'all') {
+      // 全部範圍才需要「全部」+ 逐分類分頁;選了單一分類或單一材料,範圍本來就只有一個,
+      // 不需要「全部」跟分類分頁重複兩份一樣的內容
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([EXPORT_HISTORY_HEADERS, ...historyRows]), '全部');
+      const usedNames = new Set(['材料主檔', '全部', '其他異動紀錄']);
+      const categoriesInData = [...new Set(scopedMaterials.map(m => m.category || '未分類'))];
+      for (const cat of categoriesInData) {
+        const rows = historyRows.filter(r => (r[1] || '未分類') === cat);
+        let sheetName = sanitizeSheetName(cat);
+        let suffix = 1;
+        while (usedNames.has(sheetName)) { suffix++; sheetName = sanitizeSheetName(cat) + '_' + suffix; }
+        usedNames.add(sheetName);
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([EXPORT_HISTORY_HEADERS, ...rows]), sheetName);
+      }
+    } else {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([EXPORT_HISTORY_HEADERS, ...historyRows]), sanitizeSheetName(scopeLabel));
     }
 
     // 「其他異動紀錄」放最後:進貨以外的所有歷史紀錄類型,合在同一個分頁,不分分類
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([EXPORT_OTHER_LOGS_HEADERS, ...otherLogRows]), '其他異動紀錄');
 
     const dateStr = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `材料資料匯出_${dateStr}.xlsx`);
+    XLSX.writeFile(wb, `材料資料匯出_${sanitizeSheetName(scopeLabel)}_${dateStr}.xlsx`);
 
     await setDoc(doc(db, 'settings', 'options'), { lastExportAt: serverTimestamp() }, { merge: true });
     options.lastExportAt = Timestamp.now();
     checkExportReminder();
+    closeModal('exportScopeModal');
   } catch (err) {
     alert('匯出失敗:' + err.message);
   } finally {
