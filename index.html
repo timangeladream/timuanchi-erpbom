@@ -4180,6 +4180,18 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
 
 // ---------- 匯出資料 ----------
 const EXPORT_HISTORY_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','供應商原始顏色名稱/代號','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註','換算台幣總額','換算單價(台幣)','換算人民幣總額','換算單價(人民幣)'];
+const EXPORT_MASTER_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','顏色','單位','目前庫存','次品庫存','已預留數量','進價(歷史最高單價)','加權平均成本','狀態'];
+const EXPORT_OTHER_LOGS_HEADERS = ['材料編號','材料名稱','分類','紀錄類型','時間','摘要','說明'];
+
+// 材料詳情頁時間軸的 buildLogView() 是為了畫面顯示設計的,detail 欄位是帶 <br>/HTML實體escape的字串;
+// 匯出到 Excel 儲存格只需要乾淨的純文字,這裡做一次簡單轉換(換行符號+還原HTML實體),不需要完整的HTML剖析
+function htmlDetailToPlainText(html) {
+  return String(html || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .split('\n').map(line => line.trim()).filter(Boolean).join('\n');
+}
 
 // ---------- 定期匯出提醒(每月,純前端判斷,不需要後端) ----------
 const EXPORT_REMINDER_DAYS = 30;
@@ -4229,10 +4241,21 @@ document.getElementById('openExportBtn').addEventListener('click', async () => {
     ));
     const cnyRate = exchangeRates.CNY || 5;
     const historyRows = [];
+    const otherLogRows = [];
     for (const { material: m, snap } of historyResults) {
       snap.docs.forEach(d => {
         const log = d.data();
-        if (log.type !== 'purchase') return;
+        if (log.type !== 'purchase') {
+          // 「進貨」以外的紀錄類型(人工盤點調整/生產登記/登記出貨/POS銷售確認/歷史資料搬遷/刪除還原…)
+          // 欄位形狀差很多,沒辦法塞進跟進貨一樣的格式,另外歸到「其他異動紀錄」分頁,
+          // 摘要/說明沿用材料詳情頁時間軸本來就有的文字產生邏輯,不用重新設計一套
+          const view = buildLogView(log, m.unit || '');
+          otherLogRows.push([
+            m.materialCode || '', displayName(m), m.category || '', view.typeLabel, view.time,
+            view.summary, htmlDetailToPlainText(view.detail),
+          ]);
+          return;
+        }
         const twdAmount = log.twdAmount || 0;
         const unitCost = log.unitCost || 0;
         historyRows.push([
@@ -4250,13 +4273,25 @@ document.getElementById('openExportBtn').addEventListener('click', async () => {
       });
     }
 
+    // 材料主檔:一列一款材料的目前狀態快照(含下架材料),不是歷史紀錄
+    const masterRows = materials.map(m => [
+      m.materialCode || '', m.category || '', m.brand || '', m.material || '', m.beadType || '', m.size || '',
+      m.colorCode || '', m.unit || '',
+      m.currentStock || 0, m.currentStockSecondary || 0, m.reservedStock || 0,
+      Number((m.currentUnitCost || 0).toFixed(4)), Number((m.currentUnitCostWeightedAvg || 0).toFixed(4)),
+      m.archived ? '已下架' : '上架中',
+    ]);
+
     const wb = XLSX.utils.book_new();
+
+    // 「材料主檔」放在最前面,是目前狀態的快照,跟後面歷史紀錄性質的分頁區分開來
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([EXPORT_MASTER_HEADERS, ...masterRows]), '材料主檔');
 
     // 「全部」放所有分類的完整進貨歷史
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([EXPORT_HISTORY_HEADERS, ...historyRows]), '全部');
 
     // 每個分類一個分頁,內容一樣是進貨歷史格式,只篩選該分類的紀錄
-    const usedNames = new Set(['全部']);
+    const usedNames = new Set(['材料主檔', '全部', '其他異動紀錄']);
     const categoriesInData = [...new Set(materials.map(m => m.category || '未分類'))];
     for (const cat of categoriesInData) {
       const rows = historyRows.filter(r => (r[1] || '未分類') === cat);
@@ -4266,6 +4301,9 @@ document.getElementById('openExportBtn').addEventListener('click', async () => {
       usedNames.add(sheetName);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([EXPORT_HISTORY_HEADERS, ...rows]), sheetName);
     }
+
+    // 「其他異動紀錄」放最後:進貨以外的所有歷史紀錄類型,合在同一個分頁,不分分類
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([EXPORT_OTHER_LOGS_HEADERS, ...otherLogRows]), '其他異動紀錄');
 
     const dateStr = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(wb, `材料資料匯出_${dateStr}.xlsx`);
