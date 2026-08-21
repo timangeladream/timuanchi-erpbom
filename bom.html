@@ -214,6 +214,7 @@
     display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border);
   }
   .ta-variant-combo-label { flex: 1; font-size: 13px; }
+  .ta-variant-combo-cost { width: 100px; flex-shrink: 0; text-align: right; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
   .ta-variant-combo-sku { width: 160px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
   .ta-variant-link { font-size: 12.5px; color: var(--primary); cursor: pointer; text-decoration: underline; }
 
@@ -1862,7 +1863,8 @@ function renderVariantSection(p) {
       const preMade = (p.variantPreMadeStock || {})[key] || 0;
       return `
         <div class="ta-variant-combo-row" data-combo-key="${escapeHtml(key)}" data-combo-label="${escapeHtml(label)}">
-          <div class="ta-variant-combo-label">${escapeHtml(label)} <span class="ta-tag">成本 NT$${costVal.toFixed(2)}</span>${preMade ? ` <span class="ta-tag">已製作未售出 ${preMade}</span>` : ''}${missingMaterial ? ' <span class="ta-tag" style="color:var(--danger);">⚠️ 含已刪除材料</span>' : ''}</div>
+          <div class="ta-variant-combo-label">${escapeHtml(label)}${preMade ? ` <span class="ta-tag">已製作未售出 ${preMade}</span>` : ''}${missingMaterial ? ' <span class="ta-tag" style="color:var(--danger);">⚠️ 含已刪除材料</span>' : ''}</div>
+          <div class="ta-variant-combo-cost">成本 NT$${costVal.toFixed(2)}</div>
           <input type="text" class="ta-variant-combo-sku" placeholder="規格貨號" value="${escapeHtml((p.variantSkus || {})[key] || '')}">
           <button type="button" class="ta-btn ta-btn-sm" data-edit-variant-recipe>編輯規格配方</button>
           <button type="button" class="ta-btn ta-btn-sm" data-register-production>生產登記</button>
