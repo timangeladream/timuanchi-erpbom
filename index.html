@@ -3260,8 +3260,7 @@ function buildLogView(log, unit) {
         })).join(' ');
       detail = `${escapeHtml(log.platform || '')} ${log.seller ? ' / ' + escapeHtml(log.seller) : ''}<br>
         ${log.supplierColorName ? '供應商原始顏色名稱：' + escapeHtml(log.supplierColorName) + '<br>' : ''}
-        ${amountLine}
-        ${log.packageSpecValue ? '　包裝規格：' + log.packageSpecValue + escapeHtml(log.packageSpecUnit || '') : ''}<br>
+        ${amountLine}<br>
         進貨數量：+${log.quantity} ${escapeHtml(logUnit)}<br>
         ${log.shortageQuantity ? `短少：${log.shortageQuantity} ${escapeHtml(logUnit)}（損失約 NT$${(log.shortageQuantity * (log.unitCost||0)).toFixed(2)}）<br>` : ''}
         ${log.extraQuantity ? `多給：+${log.extraQuantity} ${escapeHtml(logUnit)}<br>` : ''}
