@@ -1699,7 +1699,14 @@ async function uploadImageToCloudinary(file) {
   const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
     method: 'POST', body: formData,
   });
-  if (!res.ok) throw new Error('圖片上傳失敗，請確認網路連線後再試一次');
+  if (!res.ok) {
+    let message = '圖片上傳失敗，請確認網路連線後再試一次';
+    try {
+      const errData = await res.json();
+      if (errData?.error?.message) message = `圖片上傳失敗：${errData.error.message}`;
+    } catch (e) {}
+    throw new Error(message);
+  }
   const data = await res.json();
   return data.secure_url;
 }
@@ -1712,6 +1719,38 @@ function cloudinaryTransform(url, transform) {
 }
 function materialThumbUrl(url) { return cloudinaryTransform(url, 'w_80,h_80,c_fill,q_auto,f_auto'); }
 function materialLargeUrl(url) { return cloudinaryTransform(url, 'w_1000,c_limit,q_auto,f_auto'); }
+
+// 上傳前的檔案檢查(兩層,都在瀏覽器端執行,防的是「透過網頁不小心選錯檔案」，
+// 真正的安全防線是 Cloudinary Upload Preset 本身的格式限制，這兩層繞不過去也繞不過攻擊者):
+// 第一層 MIME 類型白名單、第二層讀取檔案開頭的魔術字節，確認內容真的是圖片格式
+const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+
+function readFileHeaderBytes(file, byteCount) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(file.slice(0, byteCount));
+  });
+}
+function bytesMatch(bytes, offset, signature) {
+  return signature.every((b, i) => bytes[offset + i] === b);
+}
+const HEIC_BRANDS = ['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1', 'heim', 'heis', 'hevm', 'hevs'];
+
+async function isValidImageFile(file) {
+  if (file.type && !ALLOWED_IMAGE_MIME_TYPES.includes(file.type)) return false;
+
+  const bytes = await readFileHeaderBytes(file, 16);
+  if (bytesMatch(bytes, 0, [0xFF, 0xD8, 0xFF])) return true; // JPEG
+  if (bytesMatch(bytes, 0, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])) return true; // PNG
+  if (bytesMatch(bytes, 0, [0x52, 0x49, 0x46, 0x46]) && bytesMatch(bytes, 8, [0x57, 0x45, 0x42, 0x50])) return true; // WEBP
+  if (bytesMatch(bytes, 4, [0x66, 0x74, 0x79, 0x70])) { // HEIC/HEIF: ftyp box,檢查brand
+    const brand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+    if (HEIC_BRANDS.includes(brand)) return true;
+  }
+  return false;
+}
 
 // 材料照片選擇器(新增進貨/編輯屬性共用):在指定容器裡畫出最多3個縮圖格+1個新增格。
 // 每一項是 {type:'existing', url} (原本就有、已經上傳過的) 或 {type:'new', file, previewUrl}
@@ -1740,9 +1779,13 @@ function createImagePicker(containerId) {
     });
     const addInput = container.querySelector('.ta-image-picker-add input');
     if (addInput) {
-      addInput.addEventListener('change', () => {
+      addInput.addEventListener('change', async () => {
         const file = addInput.files[0];
         if (!file) return;
+        if (!(await isValidImageFile(file))) {
+          alert('這個檔案看起來不是支援的圖片格式（僅支援 JPEG/PNG/WEBP/HEIC），請重新選擇');
+          return;
+        }
         items.push({ type: 'new', file, previewUrl: URL.createObjectURL(file) });
         render();
       });
