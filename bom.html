@@ -831,7 +831,10 @@
         <input type="text" id="recipeComboName">
       </div>
       <div class="ta-form-row ta-is-hidden" id="requiredCombosApplySection">
-        <label>可套用的必備材料組合</label>
+        <div class="ta-pc-list-header">
+          <label style="margin:0;">可套用的必備材料組合</label>
+          <button type="button" class="ta-btn ta-btn-sm" id="manageRequiredCombosBtn">管理組合</button>
+        </div>
         <div id="requiredCombosApplyList"></div>
       </div>
       <div class="ta-form-row">
@@ -3743,6 +3746,7 @@ function openRecipeModal(p) {
 
   const combos = (productOptions.requiredMaterials || {})[p.category] || [];
   const applySection = document.getElementById('requiredCombosApplySection');
+  applySection.classList.remove('ta-is-hidden');
   if (combos.length) {
     document.getElementById('requiredCombosApplyList').innerHTML = combos.map(combo => `
       <div class="ta-category-row">
@@ -3750,13 +3754,13 @@ function openRecipeModal(p) {
         <button type="button" class="ta-btn ta-btn-sm" data-apply-combo="${escapeHtml(combo.id)}">加入</button>
       </div>
     `).join('');
-    applySection.classList.remove('ta-is-hidden');
     applySection.querySelectorAll('[data-apply-combo]').forEach(btn => {
       btn.addEventListener('click', () => applyRequiredCombo(btn.dataset.applyCombo));
     });
   } else {
-    applySection.classList.add('ta-is-hidden');
+    document.getElementById('requiredCombosApplyList').innerHTML = '<div class="ta-empty-hint">這個分類還沒有設定必備材料組合</div>';
   }
+  document.getElementById('manageRequiredCombosBtn').onclick = () => openRequiredMaterialsManageModal(p.category);
 
   document.getElementById('recipeSearchInput').value = '';
   document.getElementById('recipeSearchResults').classList.add('ta-is-hidden');
@@ -3776,6 +3780,7 @@ function openVariantRecipeModal(p, variantKey, variantLabel) {
 
   const combos = (productOptions.requiredMaterials || {})[p.category] || [];
   const applySection = document.getElementById('requiredCombosApplySection');
+  applySection.classList.remove('ta-is-hidden');
   if (combos.length) {
     document.getElementById('requiredCombosApplyList').innerHTML = combos.map(combo => `
       <div class="ta-category-row">
@@ -3783,13 +3788,13 @@ function openVariantRecipeModal(p, variantKey, variantLabel) {
         <button type="button" class="ta-btn ta-btn-sm" data-apply-combo="${escapeHtml(combo.id)}">加入</button>
       </div>
     `).join('');
-    applySection.classList.remove('ta-is-hidden');
     applySection.querySelectorAll('[data-apply-combo]').forEach(btn => {
       btn.addEventListener('click', () => applyRequiredCombo(btn.dataset.applyCombo));
     });
   } else {
-    applySection.classList.add('ta-is-hidden');
+    document.getElementById('requiredCombosApplyList').innerHTML = '<div class="ta-empty-hint">這個分類還沒有設定必備材料組合</div>';
   }
+  document.getElementById('manageRequiredCombosBtn').onclick = () => openRequiredMaterialsManageModal(p.category);
 
   document.getElementById('recipeSearchInput').value = '';
   document.getElementById('recipeSearchResults').classList.add('ta-is-hidden');
@@ -3836,7 +3841,7 @@ function renderRequiredMaterialsManageList() {
   }
   wrap.innerHTML = combos.map(combo => `
     <div class="ta-category-row">
-      <div class="ta-category-row-info"><span class="ta-category-row-name">${escapeHtml(combo.name)}</span><span class="ta-tag">${combo.items.length}項材料</span></div>
+      <div class="ta-category-row-info"><span class="ta-category-row-name">${escapeHtml(combo.name)}</span><span class="ta-tag">${combo.items.length}項材料</span>${recipeHasMissingMaterial(combo.items) ? ' <span class="ta-status-tag ta-status-tag--danger">⚠️有異動</span>' : ''}</div>
       <button type="button" class="ta-btn ta-btn-sm" data-combo-edit="${escapeHtml(combo.id)}">編輯</button>
       <button type="button" class="ta-btn ta-btn-sm" data-combo-copy="${escapeHtml(combo.id)}">複製</button>
       <button type="button" class="ta-btn ta-btn-sm ta-btn-danger" data-combo-del="${escapeHtml(combo.id)}">刪除</button>
@@ -3855,11 +3860,12 @@ function renderRequiredMaterialsManageList() {
 
 // 複製組合:比照「新增組合」開啟編輯畫面(comboId 帶 null,存檔時才會建立新的一筆、不會覆蓋原本的組合),
 // 差別只在於材料項目跟名稱都預先帶入來源組合的內容(名稱加上「(複製)」),方便使用者存檔前再調整
-function openComboCopyEditor(category, comboId) {
+async function openComboCopyEditor(category, comboId) {
   const combos = (productOptions.requiredMaterials || {})[category] || [];
   const source = combos.find(c => c.id === comboId);
   if (!source) return;
-  openComboEditor(category, null);
+  const proceeded = await openComboEditor(category, null);
+  if (!proceeded) return;
   document.getElementById('recipeModalTitle').textContent = `複製組合：${source.name}`;
   document.getElementById('recipeComboName').value = `${source.name}（複製）`;
   currentRecipe = sortRecipeByMaterial(source.items.map(r => ({ ...r })));
@@ -3882,8 +3888,17 @@ async function deleteRequiredCombo(category, comboId) {
   renderRequiredMaterialsManageList();
 }
 
-// 新增組合傳 comboId=null,編輯現有組合傳既有的 comboId
-function openComboEditor(category, comboId) {
+// 新增組合傳 comboId=null,編輯現有組合傳既有的 comboId。
+// 跟「編輯配方」共用同一個彈窗、同一份 currentRecipe/recipeEditContext 暫存,如果目前正在編輯
+// 某個成品(或規格)的配方、還沒存檔,直接切進來會把那份還沒存檔的配方蓋掉,所以要先跟使用者確認。
+async function openComboEditor(category, comboId) {
+  if (recipeEditContext && (recipeEditContext.mode === 'product' || recipeEditContext.mode === 'variant')) {
+    const ok = await showConfirmModal({
+      title: '目前配方尚未儲存',
+      text: '切換到必備材料組合的編輯畫面，會離開目前編輯中的成品配方，尚未儲存的變更將會遺失。確定要繼續嗎？',
+    });
+    if (!ok) return false;
+  }
   const combos = (productOptions.requiredMaterials || {})[category] || [];
   const existing = comboId ? combos.find(c => c.id === comboId) : null;
   recipeEditContext = { mode: 'combo', category, comboId };
@@ -3901,6 +3916,7 @@ function openComboEditor(category, comboId) {
   document.getElementById('recipeCategoryFilter').value = '';
   renderRecipeList();
   openModal('productRecipeModal');
+  return true;
 }
 
 // 材料分類選單依目前實際載入的材料清單動態產生,全部在瀏覽器端運算,不會有額外的 Firestore 讀取
