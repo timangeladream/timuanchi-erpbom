@@ -1692,10 +1692,17 @@ const CLOUDINARY_CLOUD_NAME = 'urosf86z';
 const CLOUDINARY_UPLOAD_PRESET = 'TAmaterials';
 const MATERIAL_IMAGE_MAX_COUNT = 3;
 
-async function uploadImageToCloudinary(file) {
+// 每次上傳都附加一段不會重複的短尾巴,搭配材料編號組出檔名(例如 TA-001-2-l3x9k2m1),
+// 這樣「刪除某張照片再補上新的」也不會撞到舊檔名,不用依賴 Cloudinary 的 Overwrite 設定
+function generateUploadSuffix() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+async function uploadImageToCloudinary(file, publicId) {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  if (publicId) formData.append('public_id', publicId);
   const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
     method: 'POST', body: formData,
   });
@@ -1798,10 +1805,13 @@ function createImagePicker(containerId) {
       render();
     },
     reset() { items = []; render(); },
-    async finalize() {
+    async finalize(materialCode) {
       const urls = [];
-      for (const it of items) {
-        urls.push(it.type === 'existing' ? it.url : await uploadImageToCloudinary(it.file));
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (it.type === 'existing') { urls.push(it.url); continue; }
+        const publicId = materialCode ? `${materialCode}-${i + 1}-${generateUploadSuffix()}` : undefined;
+        urls.push(await uploadImageToCloudinary(it.file, publicId));
       }
       return urls;
     },
@@ -3082,7 +3092,7 @@ async function submitPurchase() {
 
     if (!materialId) {
       const materialCode = await getNextMaterialCode(category);
-      const images = await purchaseImagePicker.finalize();
+      const images = await purchaseImagePicker.finalize(materialCode);
       const newDoc = await addDoc(collection(db, 'materials'), {
         category, brand, material, beadType, size, colorSeries, colorCode, colorTag, note,
         unit: finalUnit,
@@ -3687,7 +3697,7 @@ document.getElementById('submitEditBtn').addEventListener('click', async () => {
   const btn = document.getElementById('submitEditBtn');
   btn.disabled = true;
   try {
-    const newImages = await editImagePicker.finalize();
+    const newImages = await editImagePicker.finalize(m.materialCode);
     const oldImages = m.images || [];
     const imagesChanged = newImages.length !== oldImages.length || newImages.some((url, i) => url !== oldImages[i]);
     if (imagesChanged) { updates.images = newImages; }
@@ -3974,7 +3984,7 @@ document.getElementById('addCurrencyBtn').addEventListener('click', async () => 
 let importParsedGroups = null; // 驗證通過後暫存,供確認匯入時使用
 
 // 跟 processImportRows() 實際讀取的欄位名稱保持一致,兩邊有新增/異動欄位時務必同步修改
-const IMPORT_TEMPLATE_HEADERS = ['分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','供應商原始顏色名稱/代號','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註','略過'];
+const IMPORT_TEMPLATE_HEADERS = ['分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','供應商原始顏色名稱/代號','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註','圖片網址1','圖片網址2','圖片網址3','略過'];
 
 document.getElementById('downloadImportTemplateBtn').addEventListener('click', () => {
   const wb = XLSX.utils.book_new();
@@ -4068,6 +4078,9 @@ async function processImportRows(rows) {
     const colorCode = String(row['顏色'] ?? '').trim();
     const colorTag = String(row['同色標籤'] ?? '').trim();
     const note = String(row['材料備註'] ?? '').trim();
+    const imageUrl1 = String(row['圖片網址1'] ?? '').trim();
+    const imageUrl2 = String(row['圖片網址2'] ?? '').trim();
+    const imageUrl3 = String(row['圖片網址3'] ?? '').trim();
     const purchaseNote = String(row['進貨備註'] ?? '').trim();
     const platform = String(row['進貨國家/平台'] ?? '').trim();
     const seller = String(row['供應商名稱'] ?? '').trim();
@@ -4127,6 +4140,7 @@ async function processImportRows(rows) {
 
     parsedRows.push({
       rowNum, category, brand, material, beadType, size, colorSeries, colorCode, colorTag, note,
+      imageUrl1, imageUrl2, imageUrl3,
       platform, seller, supplierColorName, currency, amountMode, amount: Number(amount), purchaseNote,
       pkgUnit: amountMode === 'package' ? pkgUnit : null,
       pkgBaseQty: amountMode === 'package' ? pkgBaseQty : null,
@@ -4242,7 +4256,8 @@ async function processImportRows(rows) {
       newMaterialCount++;
       newRowCount += rowsToImport.length;
     }
-    groupInfos.push({ category, brand, material, beadType, size, colorSeries, colorCode, colorTag: groupRows[0].colorTag || '', note: groupRows[0].note || '', rows: rowsToImport, existingId: existing ? existing.id : null });
+    const images = [groupRows[0].imageUrl1, groupRows[0].imageUrl2, groupRows[0].imageUrl3].filter(Boolean);
+    groupInfos.push({ category, brand, material, beadType, size, colorSeries, colorCode, colorTag: groupRows[0].colorTag || '', note: groupRows[0].note || '', images, rows: rowsToImport, existingId: existing ? existing.id : null });
   }
 
   errorListEl.innerHTML = '';
@@ -4333,6 +4348,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
           size: g.size, colorSeries: g.colorSeries, colorCode: g.colorCode, colorTag: g.colorTag, note: g.note,
           unit: g.rows[0].quantityUnit,
           currentStock: 0, currentStockSecondary: 0, currentUnitCost: 0, currentUnitCostWeightedAvg: 0, archived: false, materialCode,
+          images: g.images,
           createdAt: earliestTs, updatedAt: serverTimestamp(),
         }});
         runningStock = 0;
@@ -4427,7 +4443,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
 
 // ---------- 匯出資料 ----------
 const EXPORT_HISTORY_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','供應商原始顏色名稱/代號','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註','換算台幣總額','換算單價（台幣）','換算人民幣總額','換算單價（人民幣）'];
-const EXPORT_MASTER_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','顏色','單位','目前庫存','次品庫存','已預留數量','進價（歷史最高單價）','加權平均成本','狀態'];
+const EXPORT_MASTER_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','顏色','單位','目前庫存','次品庫存','已預留數量','進價（歷史最高單價）','加權平均成本','狀態','圖片網址1','圖片網址2','圖片網址3'];
 const EXPORT_OTHER_LOGS_HEADERS = ['材料編號','材料名稱','分類','紀錄類型','時間','摘要','說明'];
 
 // 材料詳情頁時間軸的 buildLogView() 是為了畫面顯示設計的,detail 欄位是帶 <br>/HTML實體escape的字串;
@@ -4570,6 +4586,7 @@ document.getElementById('confirmExportBtn').addEventListener('click', async () =
       m.currentStock || 0, m.currentStockSecondary || 0, m.reservedStock || 0,
       Number((m.currentUnitCost || 0).toFixed(4)), Number((m.currentUnitCostWeightedAvg || 0).toFixed(4)),
       m.archived ? '已下架' : '上架中',
+      (m.images || [])[0] || '', (m.images || [])[1] || '', (m.images || [])[2] || '',
     ]);
 
     const wb = XLSX.utils.book_new();
