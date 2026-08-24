@@ -229,9 +229,17 @@
     background: #fff; border: 1px solid var(--border); border-radius: 8px;
     max-height: 280px; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
   }
-  .ta-recipe-search-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .ta-recipe-search-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
   .ta-recipe-search-item:last-child { border-bottom: none; }
   .ta-recipe-search-item:hover { background: #eff3f7; }
+  .ta-recipe-search-item-thumb { width: 40px; height: 40px; flex-shrink: 0; }
+  .ta-recipe-search-item-thumb img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; display: block; }
+  .ta-recipe-search-item-thumb-empty {
+    width: 40px; height: 40px; border-radius: 6px; background: #eef1f5; color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    font-size: 9px; line-height: 1.2; padding: 2px;
+  }
+  .ta-recipe-search-item-body { flex: 1; min-width: 0; }
   .ta-recipe-search-item-main { font-size: 13px; color: var(--text); }
   .ta-recipe-search-item-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
@@ -1010,6 +1018,14 @@ onAuthStateChanged(posAuth, user => {
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// 材料照片縮圖(選材料時用):在 Cloudinary secure_url 的 /upload/ 後面插入轉檔參數,不用另外上傳多種尺寸
+function cloudinaryTransform(url, transform) {
+  return url.replace('/upload/', `/upload/${transform}/`);
+}
+function materialThumbUrl(url) {
+  return cloudinaryTransform(url, 'w_80,h_80,c_fill,q_auto,f_auto');
 }
 
 document.getElementById('loginBtn').addEventListener('click', doLogin);
@@ -3931,12 +3947,21 @@ function searchMaterials(kw, categoryFilter) {
 function renderSearchResults(list) {
   const wrap = document.getElementById('recipeSearchResults');
   if (!list.length) { wrap.classList.add('ta-is-hidden'); wrap.innerHTML = ''; return; }
-  wrap.innerHTML = list.map(m => `
+  wrap.innerHTML = list.map(m => {
+    const firstImage = (m.images || [])[0];
+    const thumb = firstImage
+      ? `<img src="${escapeHtml(materialThumbUrl(firstImage))}" loading="lazy" alt="">`
+      : `<div class="ta-recipe-search-item-thumb-empty">無照片</div>`;
+    return `
     <div class="ta-recipe-search-item" data-material-id="${escapeHtml(m.id)}">
-      <div class="ta-recipe-search-item-main">${escapeHtml(materialDisplayName(m))}</div>
-      <div class="ta-recipe-search-item-sub">${escapeHtml(m.materialCode || '')} · ${escapeHtml(m.category || '')} · 庫存${(m.currentStock || 0).toLocaleString()}${escapeHtml(m.unit || '')}</div>
+      <div class="ta-recipe-search-item-thumb">${thumb}</div>
+      <div class="ta-recipe-search-item-body">
+        <div class="ta-recipe-search-item-main">${escapeHtml(materialDisplayName(m))}</div>
+        <div class="ta-recipe-search-item-sub">${escapeHtml(m.materialCode || '')} · ${escapeHtml(m.category || '')} · 庫存${(m.currentStock || 0).toLocaleString()}${escapeHtml(m.unit || '')}</div>
+      </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
   wrap.classList.remove('ta-is-hidden');
   wrap.querySelectorAll('.ta-recipe-search-item').forEach(el => {
     el.addEventListener('click', () => addMaterialToRecipe(el.dataset.materialId));

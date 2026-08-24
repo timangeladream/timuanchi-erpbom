@@ -229,6 +229,33 @@
   .ta-modal-text { font-size: 13px; color: var(--text); line-height: 1.6; margin-bottom: 14px; white-space: pre-line; }
   .ta-modal-error { font-size: 12.5px; color: var(--danger); margin: -6px 0 14px; }
 
+  /* 材料照片:清單縮圖用固定40x40小方塊,沒有照片時顯示淺灰底+文字,不留空白避免看起來像壞掉 */
+  .ta-thumb-cell { width: 40px; height: 40px; }
+  .ta-thumb-img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; display: block; }
+  .ta-thumb-empty {
+    width: 40px; height: 40px; border-radius: 6px; background: #eef1f5; color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    font-size: 9px; line-height: 1.2; padding: 2px;
+  }
+  /* 照片選擇器(新增進貨/編輯屬性共用):最多3個縮圖格 + 1個新增格,每格60x60 */
+  .ta-image-picker { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .ta-image-picker-item { position: relative; width: 60px; height: 60px; }
+  .ta-image-picker-item img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; display: block; border: 1px solid var(--border); }
+  .ta-image-picker-remove {
+    position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--danger); color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; line-height: 1;
+  }
+  .ta-image-picker-add {
+    width: 60px; height: 60px; border-radius: 6px; border: 1px dashed var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--text-muted);
+    cursor: pointer;
+  }
+  .ta-image-picker-add:hover { background: #f4f6f9; }
+  /* 材料詳情頁的「查看圖片」彈窗 */
+  .ta-material-images-view { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .ta-material-images-view img { max-width: 100%; max-height: 60vh; border-radius: 8px; }
+
   .ta-form-row { margin-bottom: 12px; }
   .ta-form-row label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
   .ta-form-row input, .ta-form-row select, .ta-form-row textarea {
@@ -469,6 +496,7 @@
   <table>
     <thead>
       <tr>
+        <th data-col="thumbnail">照片</th>
         <th data-col="materialCode">編號</th>
         <th data-col="lastPurchaseDate">最新進貨日期</th>
         <th data-col="category">分類</th>
@@ -552,6 +580,10 @@
       <div class="ta-form-row ta-form-row--full">
         <label>材料備註（選填，只在新增全新材料時生效，之後可從「編輯屬性」修改）</label>
         <textarea id="pNote" rows="2"></textarea>
+      </div>
+      <div class="ta-form-row ta-form-row--full">
+        <label>材料照片（選填，最多3張，只在新增全新材料時生效，之後可從「編輯屬性」修改）</label>
+        <div class="ta-image-picker" id="pImagesPicker"></div>
       </div>
     </div>
 
@@ -892,10 +924,26 @@
         <label>材料備註（選填）</label>
         <textarea id="eNote" rows="2"></textarea>
       </div>
+      <div class="ta-form-row ta-form-row--full">
+        <label>材料照片（選填，最多3張）</label>
+        <div class="ta-image-picker" id="eImagesPicker"></div>
+      </div>
     </div>
     <div class="ta-modal-actions">
       <button class="ta-btn" data-close="editModal">取消</button>
       <button class="ta-btn ta-btn-primary" id="submitEditBtn">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 查看材料圖片 Modal -->
+<div class="ta-modal-overlay" id="materialImagesModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="materialImagesModal">✕</span>
+    <h2>材料照片</h2>
+    <div class="ta-material-images-view" id="materialImagesView"></div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn ta-btn-primary" data-close="materialImagesModal">關閉</button>
     </div>
   </div>
 </div>
@@ -1544,6 +1592,7 @@ function renderCurrencyColumns() {
 
 // ---------- 欄位顯示管理(分類、狀態鎖定一律顯示,其餘欄位可自由勾選) ----------
 const COLUMN_DEFS = [
+  { key: 'thumbnail', label: '照片' },
   { key: 'materialCode', label: '編號' },
   { key: 'lastPurchaseDate', label: '最新進貨日期' },
   { key: 'brand', label: '品牌', filterId: 'filterBrand' },
@@ -1635,6 +1684,89 @@ function fillComboOptions(selectId, list) {
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+// ---------- 材料照片(Cloudinary) ----------
+// Cloud Name / Upload Preset 都是公開可見的設定值(不是密鑰),免簽署上傳的安全性是靠後台的
+// Upload Preset 設定把關(只允許圖片、限制大小等),不是靠這兩個字串保密
+const CLOUDINARY_CLOUD_NAME = 'urosf86z';
+const CLOUDINARY_UPLOAD_PRESET = 'TAmaterials';
+const MATERIAL_IMAGE_MAX_COUNT = 3;
+
+async function uploadImageToCloudinary(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+    method: 'POST', body: formData,
+  });
+  if (!res.ok) throw new Error('圖片上傳失敗，請確認網路連線後再試一次');
+  const data = await res.json();
+  return data.secure_url;
+}
+
+// 在 Cloudinary 網址裡插入轉換參數，現場請 Cloudinary 生成指定尺寸的版本，
+// 不用自己另外壓縮、也不用上傳好幾份不同尺寸的檔案
+function cloudinaryTransform(url, transform) {
+  if (!url) return url;
+  return url.replace('/upload/', `/upload/${transform}/`);
+}
+function materialThumbUrl(url) { return cloudinaryTransform(url, 'w_80,h_80,c_fill,q_auto,f_auto'); }
+function materialLargeUrl(url) { return cloudinaryTransform(url, 'w_1000,c_limit,q_auto,f_auto'); }
+
+// 材料照片選擇器(新增進貨/編輯屬性共用):在指定容器裡畫出最多3個縮圖格+1個新增格。
+// 每一項是 {type:'existing', url} (原本就有、已經上傳過的) 或 {type:'new', file, previewUrl}
+// (剛選的新檔案，還沒真的上傳)，存檔時才呼叫 finalize() 把新檔案實際上傳、組出最終網址清單
+function createImagePicker(containerId) {
+  let items = [];
+  const container = document.getElementById(containerId);
+
+  function render() {
+    container.innerHTML = items.map((it, idx) => `
+      <div class="ta-image-picker-item">
+        <img src="${it.type === 'existing' ? escapeHtml(materialThumbUrl(it.url)) : it.previewUrl}" alt="">
+        <span class="ta-image-picker-remove" data-idx="${idx}">✕</span>
+      </div>
+    `).join('') + (items.length < MATERIAL_IMAGE_MAX_COUNT
+      ? `<label class="ta-image-picker-add">＋<input type="file" accept="image/*" capture="environment" style="display:none;"></label>`
+      : '');
+
+    container.querySelectorAll('.ta-image-picker-remove').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = Number(el.dataset.idx);
+        if (items[idx].type === 'new' && items[idx].previewUrl) URL.revokeObjectURL(items[idx].previewUrl);
+        items.splice(idx, 1);
+        render();
+      });
+    });
+    const addInput = container.querySelector('.ta-image-picker-add input');
+    if (addInput) {
+      addInput.addEventListener('change', () => {
+        const file = addInput.files[0];
+        if (!file) return;
+        items.push({ type: 'new', file, previewUrl: URL.createObjectURL(file) });
+        render();
+      });
+    }
+  }
+
+  return {
+    setItems(urls) {
+      items = (urls || []).map(url => ({ type: 'existing', url }));
+      render();
+    },
+    reset() { items = []; render(); },
+    async finalize() {
+      const urls = [];
+      for (const it of items) {
+        urls.push(it.type === 'existing' ? it.url : await uploadImageToCloudinary(it.file));
+      }
+      return urls;
+    },
+  };
+}
+
+const purchaseImagePicker = createImagePicker('pImagesPicker');
+const editImagePicker = createImagePicker('eImagesPicker');
 
 // ---------- 篩選 / 列表渲染 ----------
 function resetPageAndRenderTable() { currentPage = 1; renderTable(); }
@@ -2094,7 +2226,11 @@ function renderTable() {
     const cost = m.currentUnitCost || 0;
     const unit = m.unit || '';
     const lastPurchaseText = m.lastPurchaseDate && m.lastPurchaseDate.toDate ? m.lastPurchaseDate.toDate().toLocaleDateString('zh-TW') : '-';
+    const firstImage = (m.images || [])[0];
     const cellDefs = [
+      { key: 'thumbnail', html: `<td class="ta-thumb-cell">${firstImage
+        ? `<img class="ta-thumb-img" src="${escapeHtml(materialThumbUrl(firstImage))}" loading="lazy" alt="">`
+        : `<div class="ta-thumb-empty">無照片</div>`}</td>` },
       { key: 'materialCode', html: `<td>${escapeHtml(m.materialCode)}</td>` },
       { key: 'lastPurchaseDate', html: `<td>${escapeHtml(lastPurchaseText)}</td>` },
       { key: 'category', html: `<td>${escapeHtml(m.category)}</td>` },
@@ -2331,6 +2467,7 @@ function resetPurchaseForm() {
   const hint = document.getElementById('dupHint');
   hint.className = 'ta-dup-hint';
   hint.textContent = '';
+  purchaseImagePicker.reset();
 }
 
 function updateAmountModeVisibility() {
@@ -2902,6 +3039,7 @@ async function submitPurchase() {
 
     if (!materialId) {
       const materialCode = await getNextMaterialCode(category);
+      const images = await purchaseImagePicker.finalize();
       const newDoc = await addDoc(collection(db, 'materials'), {
         category, brand, material, beadType, size, colorSeries, colorCode, colorTag, note,
         unit: finalUnit,
@@ -2910,6 +3048,7 @@ async function submitPurchase() {
         currentUnitCost: 0,
         archived: false,
         materialCode,
+        images,
         createdAt: purchaseTimestamp,
         updatedAt: serverTimestamp(),
       });
@@ -3012,6 +3151,7 @@ async function openDetail(id) {
         <div class="ta-detail-title">${escapeHtml(displayName(m))}</div>
         <div>
           <button class="ta-btn ta-btn-sm" id="editFieldsBtn">編輯屬性</button>
+          ${(m.images && m.images.length) ? `<button class="ta-btn ta-btn-sm" id="viewImagesBtn">查看圖片</button>` : ''}
           <button class="ta-btn ta-btn-sm" id="adjustBtn">人工盤點調整</button>
           <button class="ta-btn ta-btn-sm" id="historyMigrationBtn">歷史資料搬遷</button>
           <button class="ta-btn ta-btn-sm" id="refreshDetailBtn">重新整理</button>
@@ -3071,6 +3211,14 @@ async function openDetail(id) {
   document.getElementById('archiveBtn').addEventListener('click', () => toggleArchive(m));
   document.getElementById('editFieldsBtn').addEventListener('click', () => editMaterialFields(m));
   document.getElementById('deleteBtn').addEventListener('click', () => deleteMaterial(m));
+  const viewImagesBtn = document.getElementById('viewImagesBtn');
+  if (viewImagesBtn) {
+    viewImagesBtn.addEventListener('click', () => {
+      document.getElementById('materialImagesView').innerHTML = (m.images || [])
+        .map(url => `<img src="${escapeHtml(materialLargeUrl(url))}" alt="">`).join('');
+      openModal('materialImagesModal');
+    });
+  }
   document.querySelectorAll('.ta-alt-item').forEach(el => {
     el.addEventListener('click', () => openDetail(el.dataset.altId));
   });
@@ -3470,6 +3618,7 @@ function editMaterialFields(m) {
   document.getElementById('eColorCode').value = m.colorCode || '';
   document.getElementById('eColorTag').value = m.colorTag || '';
   document.getElementById('eNote').value = m.note || '';
+  editImagePicker.setItems(m.images || []);
   openModal('editModal');
 }
 
@@ -3492,11 +3641,16 @@ document.getElementById('submitEditBtn').addEventListener('click', async () => {
       logs.push({ type: 'edit', field: label, oldValue: oldVal, newValue: newVal, timestamp: serverTimestamp() });
     }
   }
-  if (Object.keys(updates).length === 0) { closeModal('editModal'); return; }
-
   const btn = document.getElementById('submitEditBtn');
   btn.disabled = true;
   try {
+    const newImages = await editImagePicker.finalize();
+    const oldImages = m.images || [];
+    const imagesChanged = newImages.length !== oldImages.length || newImages.some((url, i) => url !== oldImages[i]);
+    if (imagesChanged) { updates.images = newImages; }
+
+    if (Object.keys(updates).length === 0) { closeModal('editModal'); btn.disabled = false; return; }
+
     updates.updatedAt = serverTimestamp();
     await updateDoc(doc(db, 'materials', m.id), updates);
     for (const log of logs) {
