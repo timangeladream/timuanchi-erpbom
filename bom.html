@@ -267,6 +267,13 @@
   .ta-production-logs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
   .ta-production-logs-info { font-size: 13px; }
   .ta-production-logs-time { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  /* 生產/出貨紀錄清單:不管有沒有被刪除,一律預設收合(跟材料詳情頁的完整異動歷史同一套風格),
+     點一下摘要列展開/收合,已刪除的動作按鈕收在展開後的細節區才會出現,收合狀態不佔版面 */
+  .ta-production-logs-row--collapsible { cursor: pointer; }
+  .ta-production-logs-row--deleted .ta-production-logs-info,
+  .ta-production-logs-row--deleted .ta-production-logs-time { color: var(--text-muted); }
+  .ta-production-logs-detail { padding: 0 0 10px; font-size: 12.5px; color: var(--text-muted); }
+  .ta-production-logs-detail-actions { margin-top: 6px; }
 
   .ta-pc-grid { display: grid; gap: 12px 16px; margin-bottom: 1rem; }
   .ta-pc-grid-2 { grid-template-columns: repeat(2,1fr); }
@@ -2542,36 +2549,61 @@ document.getElementById('productionFormSaveBtn').addEventListener('click', async
   }
 });
 
+// 生產紀錄清單:預設全部收合(跟材料詳情頁的完整異動歷史同一套風格),點摘要列展開/收合。
+// 收合狀態只是畫面呈現,不用重新查 Firestore,所以查詢結果跟展開狀態分開存,展開/收合只重畫面。
+let productionLogsCache = [];
+let productionLogsExpandedIds = new Set();
+
 async function openProductionLogsModal(p) {
   // 只用 where 不加 orderBy,避免需要另外去 Firebase 主控台建立複合索引;筆數不多,直接在前端排序就好
   const logsSnap = await getDocs(query(collection(db, 'productionLogs'), where('productId', '==', p.id)));
-  const logs = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+  productionLogsCache = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
     .sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+  productionLogsExpandedIds = new Set();
+  renderProductionLogsList(p.id);
+  openModal('productionLogsModal');
+}
+
+function renderProductionLogsList(productId) {
+  const logs = productionLogsCache;
   const listEl = document.getElementById('productionLogsList');
   if (!logs.length) {
     listEl.innerHTML = '<div class="ta-empty-hint">尚無生產登記紀錄</div>';
-  } else {
-    listEl.innerHTML = logs.map(log => {
-      const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('zh-TW') : '（時間處理中）';
-      return `
-        <div class="ta-production-logs-row" data-log-id="${escapeHtml(log.id)}">
-          <div>
-            <div class="ta-production-logs-info">${log.variantLabel ? escapeHtml(log.variantLabel) + ' - ' : ''}${log.quantityProduced} 件${log.confirmedQuantity ? `（已確認賣出 ${log.confirmedQuantity} 件）` : ''}</div>
-            <div class="ta-production-logs-time">${time}</div>
-          </div>
-          <button type="button" class="ta-btn ta-btn-sm ta-btn-danger" data-delete-log>刪除</button>
-        </div>
-      `;
-    }).join('');
-    listEl.querySelectorAll('[data-delete-log]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const row = btn.closest('.ta-production-logs-row');
-        const log = logs.find(l => l.id === row.dataset.logId);
-        if (log) await deleteProductionLog(p.id, log);
-      });
-    });
+    return;
   }
-  openModal('productionLogsModal');
+  listEl.innerHTML = logs.map(log => {
+    const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('zh-TW') : '（時間處理中）';
+    const expanded = productionLogsExpandedIds.has(log.id);
+    const info = `${log.deleted ? '<span class="ta-status-tag">已刪除</span> ' : ''}${log.variantLabel ? escapeHtml(log.variantLabel) + ' - ' : ''}${log.quantityProduced} 件${log.confirmedQuantity ? `（已確認賣出 ${log.confirmedQuantity} 件）` : ''}`;
+    const deletedAtLine = log.deleted && log.deletedAt?.toDate ? `刪除時間：${log.deletedAt.toDate().toLocaleString('zh-TW')}` : '';
+    return `
+      <div class="ta-production-logs-row ta-production-logs-row--collapsible${log.deleted ? ' ta-production-logs-row--deleted' : ''}" data-log-id="${escapeHtml(log.id)}">
+        <div>
+          <div class="ta-production-logs-info">${info}</div>
+          <div class="ta-production-logs-time">${time}</div>
+        </div>
+      </div>
+      ${expanded ? `<div class="ta-production-logs-detail">
+        ${deletedAtLine}
+        ${!log.deleted ? `<div class="ta-production-logs-detail-actions"><button type="button" class="ta-btn ta-btn-sm ta-btn-danger" data-delete-log>刪除</button></div>` : ''}
+      </div>` : ''}
+    `;
+  }).join('');
+  listEl.querySelectorAll('.ta-production-logs-row--collapsible').forEach(rowEl => {
+    rowEl.addEventListener('click', () => {
+      const id = rowEl.dataset.logId;
+      if (productionLogsExpandedIds.has(id)) productionLogsExpandedIds.delete(id); else productionLogsExpandedIds.add(id);
+      renderProductionLogsList(productId);
+    });
+  });
+  listEl.querySelectorAll('[data-delete-log]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const row = btn.closest('.ta-production-logs-row');
+      const log = logs.find(l => l.id === row.dataset.logId);
+      if (log) await deleteProductionLog(productId, log);
+    });
+  });
 }
 
 // 刪除生產登記紀錄:盡可能把這筆登記的效果完整撤銷回去(材料還在的話釋放已預留數量、
@@ -2635,7 +2667,7 @@ async function deleteProductionLog(productId, log) {
         }
       }
 
-      transaction.delete(doc(db, 'productionLogs', log.id));
+      transaction.update(doc(db, 'productionLogs', log.id), { deleted: true, deletedAt: serverTimestamp() });
     });
 
     await refreshMaterialsLocal(materialIds);
@@ -2815,35 +2847,59 @@ document.getElementById('shipmentFormSaveBtn').addEventListener('click', async (
   }
 });
 
+// 出貨紀錄清單:預設全部收合,做法跟生產紀錄清單(renderProductionLogsList)完全對稱
+let shipmentLogsCache = [];
+let shipmentLogsExpandedIds = new Set();
+
 async function openShipmentLogsModal(p) {
   const logsSnap = await getDocs(query(collection(db, 'shipmentLogs'), where('productId', '==', p.id)));
-  const logs = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+  shipmentLogsCache = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
     .sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+  shipmentLogsExpandedIds = new Set();
+  renderShipmentLogsList(p.id);
+  openModal('shipmentLogsModal');
+}
+
+function renderShipmentLogsList(productId) {
+  const logs = shipmentLogsCache;
   const listEl = document.getElementById('shipmentLogsList');
   if (!logs.length) {
     listEl.innerHTML = '<div class="ta-empty-hint">尚無出貨紀錄</div>';
-  } else {
-    listEl.innerHTML = logs.map(log => {
-      const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('zh-TW') : '（時間處理中）';
-      return `
-        <div class="ta-production-logs-row" data-log-id="${escapeHtml(log.id)}">
-          <div>
-            <div class="ta-production-logs-info">${log.variantLabel ? escapeHtml(log.variantLabel) + ' - ' : ''}${log.quantityShipped} 件（${escapeHtml(log.reason || '')}）</div>
-            <div class="ta-production-logs-time">${time}</div>
-          </div>
-          <button type="button" class="ta-btn ta-btn-sm ta-btn-danger" data-delete-shipment-log>刪除</button>
-        </div>
-      `;
-    }).join('');
-    listEl.querySelectorAll('[data-delete-shipment-log]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const row = btn.closest('.ta-production-logs-row');
-        const log = logs.find(l => l.id === row.dataset.logId);
-        if (log) await deleteShipmentLog(p.id, log);
-      });
-    });
+    return;
   }
-  openModal('shipmentLogsModal');
+  listEl.innerHTML = logs.map(log => {
+    const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('zh-TW') : '（時間處理中）';
+    const expanded = shipmentLogsExpandedIds.has(log.id);
+    const info = `${log.deleted ? '<span class="ta-status-tag">已刪除</span> ' : ''}${log.variantLabel ? escapeHtml(log.variantLabel) + ' - ' : ''}${log.quantityShipped} 件（${escapeHtml(log.reason || '')}）`;
+    const deletedAtLine = log.deleted && log.deletedAt?.toDate ? `刪除時間：${log.deletedAt.toDate().toLocaleString('zh-TW')}` : '';
+    return `
+      <div class="ta-production-logs-row ta-production-logs-row--collapsible${log.deleted ? ' ta-production-logs-row--deleted' : ''}" data-log-id="${escapeHtml(log.id)}">
+        <div>
+          <div class="ta-production-logs-info">${info}</div>
+          <div class="ta-production-logs-time">${time}</div>
+        </div>
+      </div>
+      ${expanded ? `<div class="ta-production-logs-detail">
+        ${deletedAtLine}
+        ${!log.deleted ? `<div class="ta-production-logs-detail-actions"><button type="button" class="ta-btn ta-btn-sm ta-btn-danger" data-delete-shipment-log>刪除</button></div>` : ''}
+      </div>` : ''}
+    `;
+  }).join('');
+  listEl.querySelectorAll('.ta-production-logs-row--collapsible').forEach(rowEl => {
+    rowEl.addEventListener('click', () => {
+      const id = rowEl.dataset.logId;
+      if (shipmentLogsExpandedIds.has(id)) shipmentLogsExpandedIds.delete(id); else shipmentLogsExpandedIds.add(id);
+      renderShipmentLogsList(productId);
+    });
+  });
+  listEl.querySelectorAll('[data-delete-shipment-log]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const row = btn.closest('.ta-production-logs-row');
+      const log = logs.find(l => l.id === row.dataset.logId);
+      if (log) await deleteShipmentLog(productId, log);
+    });
+  });
 }
 
 // 刪除出貨紀錄:盡可能把這筆登記的效果完整撤銷回去(材料還在的話補回已預留數量、補回庫存;
@@ -2903,7 +2959,7 @@ async function deleteShipmentLog(productId, log) {
         }
       }
 
-      transaction.delete(doc(db, 'shipmentLogs', log.id));
+      transaction.update(doc(db, 'shipmentLogs', log.id), { deleted: true, deletedAt: serverTimestamp() });
     });
 
     await refreshMaterialsLocal(materialIds);
