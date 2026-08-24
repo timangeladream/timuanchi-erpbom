@@ -1202,6 +1202,7 @@
   <button class="ta-drawer-item" id="openImportBtn">匯入資料</button>
   <button class="ta-drawer-item" id="openExportBtn">匯出資料</button>
   <button class="ta-drawer-item" id="openHistoryCountBtn">查看進貨紀錄總筆數</button>
+  <button class="ta-drawer-item" id="recalcPurchaseValueBtn">重新核算累計進貨總額</button>
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item ta-drawer-item--danger" id="openWipeBtn">清除資料</button>
   <div class="ta-drawer-divider"></div>
@@ -1219,7 +1220,7 @@ import {
   getFirestore,
   collection, collectionGroup, doc, getDoc, getDocs, addDoc, updateDoc, setDoc, deleteDoc,
   query, where, orderBy, serverTimestamp, Timestamp, writeBatch, runTransaction, deleteField,
-  getCountFromServer
+  getCountFromServer, increment
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -1246,7 +1247,6 @@ let currentDetailId = null;
 let currentDetailScrapQtyTotal = 0; // 材料詳情頁算出的累計報廢數量,順手帶給人工盤點調整彈窗用,不用另外再讀一次歷史
 let dupMatchedMaterial = null; // 新增進貨時比對到的既有材料
 let categoryFilter = ''; // 目前選中的分類頁籤,空字串代表全部
-let purchaseValueByMaterialId = {}; // 每款材料的累計進貨總額(含下架材料),頁面載入時查一次,之後切換分類頁籤只是本地重新加總,不會重新查 Firestore
 let currentPage = 1;
 const PAGE_SIZE = 200;
 
@@ -1368,52 +1368,60 @@ async function syncMaterialsFromServer() {
 // 所以不需要用 onSnapshot 一直監聽伺服器變動——開頁時讀一次,之後每次自己寫入
 // 成功後,用 refreshMaterialLocal / refreshOptionsLocal / refreshExchangeRatesLocal
 // 重新讀「剛剛那一筆」資料回來更新畫面,不用整個集合持續監聽。
-// 累計進貨總額:用 collectionGroup 一次撈出「所有材料」的進貨歷史紀錄,依材料分組加總,
-// 只在頁面載入(含重新整理,本頁重新整理是整頁 location.reload())時查一次,不會每次切換分類頁籤都重新查
-// 進貨歷史紀錄沒有像材料主檔那樣的 updatedAt 可以做差異同步(而且還可能被編輯/連動刪除),
-// 用「時間快取」取代:30分鐘內重新整理頁面沿用快取,不會每次開頁都整批重新查一次全部材料的
-// 進貨歷史(這是集合群組查詢,量體遠大於材料主檔本身);超過30分鐘或第一次使用才整批重查一次
-const PURCHASE_VALUE_CACHE_KEY = 'ta_purchase_value_cache_v1';
-const PURCHASE_VALUE_CACHE_TTL_MS = 30 * 60 * 1000;
+// 累計進貨總額:直接存在每款材料自己身上的 cumulativePurchaseValue 欄位,新增進貨/編輯進貨紀錄/
+// 匯入資料時就順手維護好,renderSummary() 平常只是讀取這個欄位加總,不用另外查詢,完全不佔讀取額度。
 
-async function loadCumulativePurchaseValue() {
-  try {
-    const cached = localStorage.getItem(PURCHASE_VALUE_CACHE_KEY);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (Date.now() - parsed.cachedAt < PURCHASE_VALUE_CACHE_TTL_MS) {
-        purchaseValueByMaterialId = parsed.data;
-        return;
-      }
-    }
-  } catch (e) {
-    // 快取格式壞掉就當作沒有快取,往下走整批重查
-  }
-
-  purchaseValueByMaterialId = {};
+// 重新核算累計進貨總額(比照「查看進貨紀錄總筆數」,只在按下按鈕時才整批查一次):把「所有材料」的
+// 完整進貨歷史整批掃過一次,算出真正的加總,寫回每款材料的 cumulativePurchaseValue 欄位。平常不需要
+// 執行這個——只有在懷疑那個欄位跟實際歷史紀錄對不起來時(例如在 Firebase 後台被手動改過資料),
+// 才用這個功能重新核算、校正回正確的數字
+async function recalculateCumulativePurchaseValue() {
+  const totalsByMaterialId = {};
   const snap = await getDocs(collectionGroup(db, 'history'));
   snap.docs.forEach(d => {
     const data = d.data();
     if (data.type !== 'purchase') return;
     const materialId = d.ref.parent.parent.id;
-    purchaseValueByMaterialId[materialId] = (purchaseValueByMaterialId[materialId] || 0) + (data.twdAmount || 0);
+    totalsByMaterialId[materialId] = (totalsByMaterialId[materialId] || 0) + (data.twdAmount || 0);
   });
 
-  try {
-    localStorage.setItem(PURCHASE_VALUE_CACHE_KEY, JSON.stringify({ cachedAt: Date.now(), data: purchaseValueByMaterialId }));
-  } catch (e) {
-    // 存快取失敗(例如容量爆了)不影響功能,只是下次還是會重新查一次
+  const CHUNK_SIZE = 400;
+  for (let i = 0; i < materials.length; i += CHUNK_SIZE) {
+    const chunk = materials.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+    chunk.forEach(m => {
+      batch.update(doc(db, 'materials', m.id), { cumulativePurchaseValue: totalsByMaterialId[m.id] || 0 });
+    });
+    await batch.commit();
   }
+
+  materials.forEach(m => { m.cumulativePurchaseValue = totalsByMaterialId[m.id] || 0; });
+  saveMaterialsToCache();
+  renderSummary();
 }
+
+document.getElementById('recalcPurchaseValueBtn').addEventListener('click', async () => {
+  closeDrawer();
+  const btn = document.getElementById('recalcPurchaseValueBtn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '核算中...';
+  try {
+    await recalculateCumulativePurchaseValue();
+    alert('重新核算完成，「累計進貨總額」已更新為最新正確的數字。');
+  } catch (err) {
+    alert('核算失敗：' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+});
 
 async function initData() {
   await syncMaterialsFromServer();
   renderFilters();
   renderTable();
   renderSummary();
-  // 累計進貨總額不會拖慢上面幾個統計的顯示速度:先讓材料數量/庫存總值等秒開,
-  // 這個另外查的動作做完後再重新整理一次統計列,把累計進貨總額補上去
-  loadCumulativePurchaseValue().then(renderSummary);
 
   await refreshOptionsLocal();
 
@@ -2176,8 +2184,10 @@ function renderSummary() {
   const active = scoped.filter(m => !m.archived);
   // 庫存總值改用加權平均成本(BOM算配方成本也是用這個),比歷史最高單價更貼近真實花費
   const totalValue = active.reduce((s, m) => s + (m.currentStock || 0) * (m.currentUnitCostWeightedAvg || 0), 0);
-  // 累計進貨總額刻意含下架材料(scoped,不是active):就算材料後來下架了,當初買它的錢還是真的花了
-  const totalPurchasedValue = scoped.reduce((s, m) => s + (purchaseValueByMaterialId[m.id] || 0), 0);
+  // 累計進貨總額刻意含下架材料(scoped,不是active):就算材料後來下架了,當初買它的錢還是真的花了。
+  // 直接讀材料自己身上的 cumulativePurchaseValue 欄位(進貨/編輯進貨紀錄時就順手維護好的),
+  // 不用再另外整批查詢歷史紀錄——這個欄位本身才是「一直都對」的來源,不是每次開頁才算一次的快取
+  const totalPurchasedValue = scoped.reduce((s, m) => s + (m.cumulativePurchaseValue || 0), 0);
   const qtyByUnit = {};
   active.forEach(m => {
     const u = m.unit || '（未設單位）';
@@ -2620,10 +2630,13 @@ function openEditPurchaseModal(materialId, historyId, log, unit) {
   openModal('editPurchaseModal');
 }
 
-// 重新播放這款材料的全部歷史紀錄(進貨+人工盤點調整),依時間先後重算庫存/次品庫存/進價/加權平均成本
+// 重新播放這款材料的全部歷史紀錄(進貨+人工盤點調整),依時間先後重算庫存/次品庫存/進價/加權平均成本。
+// 編輯進貨紀錄(改金額/數量)可能牽動整條加權平均成本的計算鏈,沒辦法只算差額,一定要整個重播;
+// 順便也把「累計進貨總額」用同一次重播算出來的真實加總覆蓋回去,確保編輯進貨紀錄後這個欄位一定是對的,
+// 不用另外再處理「編輯」這個情境的累加/扣除邏輯
 async function recalculateMaterialStock(materialId) {
   const histSnap = await getDocs(query(collection(db, 'materials', materialId, 'history'), orderBy('timestamp', 'asc')));
-  let stock = 0, secondaryStock = 0, unitCost = 0, weightedAvg = 0, lastPurchaseDate = null;
+  let stock = 0, secondaryStock = 0, unitCost = 0, weightedAvg = 0, lastPurchaseDate = null, totalPurchaseValue = 0;
   histSnap.docs.forEach(d => {
     const log = d.data();
     if (log.type === 'purchase') {
@@ -2633,6 +2646,7 @@ async function recalculateMaterialStock(materialId) {
       stock += qty;
       secondaryStock += log.secondaryQuantity || 0;
       unitCost = Math.max(unitCost, log.unitCost || 0);
+      totalPurchaseValue += log.twdAmount || 0;
       const ts = log.timestamp;
       if (ts && (!lastPurchaseDate || ts.toMillis() > lastPurchaseDate.toMillis())) lastPurchaseDate = ts;
     } else if (log.type === 'adjust') {
@@ -2643,6 +2657,7 @@ async function recalculateMaterialStock(materialId) {
   await updateDoc(doc(db, 'materials', materialId), {
     currentStock: stock, currentStockSecondary: secondaryStock, currentUnitCost: unitCost,
     currentUnitCostWeightedAvg: weightedAvg,
+    cumulativePurchaseValue: totalPurchaseValue,
     lastPurchaseDate, updatedAt: serverTimestamp(),
   });
   await refreshMaterialLocal(materialId);
@@ -2926,6 +2941,7 @@ async function submitPurchase() {
       currentStockSecondary: (cur.currentStockSecondary || 0) + secondaryQty,
       currentUnitCost: Math.max(cur.currentUnitCost || 0, unitCost),
       currentUnitCostWeightedAvg: newWeightedAvg,
+      cumulativePurchaseValue: increment(twdAmount),
       lastPurchaseDate,
       updatedAt: serverTimestamp(),
     });
@@ -3072,9 +3088,11 @@ async function openDetail(id) {
     if (log.type !== 'purchase') return sum;
     return sum + (log.quantity || 0) + (log.shortageQuantity || 0) + (log.scrapQuantity || 0) + (log.secondaryQuantity || 0);
   }, 0);
-  const totalPurchasedValue = logs.reduce((sum, log) => sum + (log.type === 'purchase' ? (log.twdAmount || 0) : 0), 0);
+  // 總進貨數量價值:直接讀材料自己身上的 cumulativePurchaseValue 欄位(新增進貨/編輯進貨紀錄時
+  // 就順手維護好),不再現場重新加總歷史紀錄——避免跟材料清單頁「累計進貨總額」各自算一套,
+  // 萬一哪天欄位跟真實歷史對不起來,兩邊至少會顯示同一個(即使是錯的)數字,不會出現互相矛盾的情況
   document.getElementById('totalPurchasedQtyStat').textContent = `${totalPurchasedQty.toLocaleString()} ${unit}`;
-  document.getElementById('totalPurchasedValueStat').textContent = `NT$ ${totalPurchasedValue.toFixed(2)}`;
+  document.getElementById('totalPurchasedValueStat').textContent = `NT$ ${(m.cumulativePurchaseValue || 0).toFixed(2)}`;
 
   const scrapQtyTotal = logs.reduce((sum, log) => sum + (log.scrapQuantity || 0), 0);
   const scrapLossTotal = logs.reduce((sum, log) => sum + (log.scrapQuantity || 0) * (log.unitCost || 0), 0);
@@ -4104,6 +4122,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
     for (const [groupIdx, g] of importParsedGroups.entries()) {
       let materialId = g.existingId;
       let runningStock, runningSecondaryStock, runningCost, runningWeightedAvg, lastPurchaseDate;
+      let runningPurchaseValue = 0; // 這批匯入裡,這款材料所有列的金額加總,最後用 increment() 累加回材料身上
 
       if (!materialId) {
         const newRef = doc(collection(db, 'materials'));
@@ -4162,6 +4181,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
         runningStock += r.quantity;
         runningSecondaryStock += r.secondaryQuantity;
         runningCost = Math.max(runningCost, unitCost);
+        runningPurchaseValue += twdAmount;
       }
 
       const latestRowTs = Timestamp.fromDate(g.rows[g.rows.length - 1].date);
@@ -4173,6 +4193,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
       ops.push({ ref: matRef, opType: 'update', data: {
         currentStock: runningStock, currentStockSecondary: runningSecondaryStock,
         currentUnitCost: runningCost, currentUnitCostWeightedAvg: runningWeightedAvg,
+        cumulativePurchaseValue: increment(runningPurchaseValue),
         lastPurchaseDate, updatedAt: serverTimestamp(),
       }});
       touchedMaterialIds.push(materialId);
