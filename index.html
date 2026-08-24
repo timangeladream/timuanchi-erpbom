@@ -440,19 +440,19 @@
 
   <div class="ta-summary-bar">
     <div class="ta-summary-card">
-      <div class="ta-stat-label">材料款數(不含下架)</div>
+      <div class="ta-stat-label">材料款數（不含下架）</div>
       <div class="ta-stat-value" id="statCount">-</div>
     </div>
     <div class="ta-summary-card">
-      <div class="ta-stat-label">庫存總數量(依單位分列)</div>
+      <div class="ta-stat-label">庫存總數量（依單位分列）</div>
       <div class="ta-stat-value" id="statQty">-</div>
     </div>
     <div class="ta-summary-card">
-      <div class="ta-stat-label">庫存總值(NT$,加權平均成本)</div>
+      <div class="ta-stat-label">庫存總值（NT$，加權平均成本）</div>
       <div class="ta-stat-value" id="statValue">-</div>
     </div>
     <div class="ta-summary-card">
-      <div class="ta-stat-label">累計進貨總額(NT$,含下架)</div>
+      <div class="ta-stat-label">累計進貨總額（NT$，含下架）</div>
       <div class="ta-stat-value" id="statPurchasedValue">-</div>
     </div>
   </div>
@@ -499,7 +499,7 @@
     <tbody id="materialsTbody"></tbody>
   </table>
   </div>
-  <div class="ta-empty-hint ta-is-hidden" id="emptyHint">目前沒有材料資料,點右上角「新增進貨/材料」開始建立</div>
+  <div class="ta-empty-hint ta-is-hidden" id="emptyHint">目前沒有材料資料，點右上角「新增進貨/材料」開始建立</div>
 </div>
 
 <!-- 新增進貨 / 材料 Modal -->
@@ -530,27 +530,27 @@
         <button type="button" class="ta-combo-add-btn" data-target="pBeadType" data-optkey="beadTypes">+新增</button>
       </div>
       <div class="ta-form-row">
-        <label>尺寸(選填，統一半形小寫，如：2mm*6mm)</label>
+        <label>尺寸（選填，統一半形小寫，如：2mm*6mm）</label>
         <input type="text" id="pSize">
       </div>
       <div class="ta-form-row">
-        <label>色系名稱(選填)</label>
+        <label>色系名稱（選填）</label>
         <input type="text" id="pColorSeries">
       </div>
       <div class="ta-form-row">
-        <label>顏色(選填)</label>
+        <label>顏色（選填）</label>
         <input type="text" id="pColorCode">
       </div>
       <div class="ta-form-row">
-        <label>供應商原始顏色名稱/代號(選填,記錄這筆進貨供應商自己怎麼稱呼這個顏色)</label>
+        <label>供應商原始顏色名稱/代號（選填，記錄這筆進貨供應商自己怎麼稱呼這個顏色）</label>
         <input type="text" id="pSupplierColorName">
       </div>
       <div class="ta-form-row ta-form-row--full">
-        <label>同色標籤(選填,填一樣的字,不同品牌/供應商的材料就會在詳情頁互相顯示成「同色替代品」)</label>
+        <label>同色標籤（選填，填一樣的字，不同品牌/供應商的材料就會在詳情頁互相顯示成「同色替代品」）</label>
         <input type="text" id="pColorTag">
       </div>
       <div class="ta-form-row ta-form-row--full">
-        <label>材料備註(選填,只在新增全新材料時生效,之後可從「編輯屬性」修改)</label>
+        <label>材料備註（選填，只在新增全新材料時生效，之後可從「編輯屬性」修改）</label>
         <textarea id="pNote" rows="2"></textarea>
       </div>
     </div>
@@ -575,15 +575,15 @@
       <div class="ta-form-row">
         <label>幣別</label>
         <select id="pCurrency">
-          <option value="TWD">TWD(台幣)</option>
+          <option value="TWD">TWD（台幣）</option>
         </select>
       </div>
       <div class="ta-form-row ta-form-row--full">
         <label>金額輸入方式</label>
         <div class="ta-radio-row ta-radio-row--vertical">
-          <label class="ta-radio-option"><input type="radio" name="pAmountMode" value="unit" id="pAmountModeUnit" checked> 單價(例:供應商論個報價)</label>
-          <label class="ta-radio-option"><input type="radio" name="pAmountMode" value="package" id="pAmountModePackage"> 每個包裝單位(例:供應商論條/論克報價)</label>
-          <label class="ta-radio-option"><input type="radio" name="pAmountMode" value="total" id="pAmountModeTotal"> 整批(例:供應商論批報價)</label>
+          <label class="ta-radio-option"><input type="radio" name="pAmountMode" value="unit" id="pAmountModeUnit" checked> 單價（例：供應商論個報價）</label>
+          <label class="ta-radio-option"><input type="radio" name="pAmountMode" value="package" id="pAmountModePackage"> 每個包裝單位（例：供應商論條/論克報價）</label>
+          <label class="ta-radio-option"><input type="radio" name="pAmountMode" value="total" id="pAmountModeTotal"> 整批（例：供應商論批報價）</label>
         </div>
       </div>
 
@@ -603,7 +603,7 @@
             <button type="button" class="ta-combo-add-btn" data-target="pPkgUnit" data-optkey="packageUnits">+新增</button>
           </div>
           <div class="ta-form-row">
-            <label id="pPkgBaseQtyLabel">報價基準數量(供應商報價是「每幾個包裝單位」,平常留1就好)</label>
+            <label id="pPkgBaseQtyLabel">報價基準數量（供應商報價是「每幾個包裝單位」，平常留1就好）</label>
             <input type="number" step="0.01" id="pPkgBaseQty" value="1">
           </div>
           <div class="ta-form-row">
@@ -615,7 +615,7 @@
             <input type="number" step="0.01" id="pPkgUnitQty">
           </div>
           <div class="ta-form-row">
-            <label id="pPkgCountLabel">進貨數量(幾包)</label>
+            <label id="pPkgCountLabel">進貨數量（幾包）</label>
             <input type="number" step="0.01" id="pPkgCount">
           </div>
         </div>
@@ -627,34 +627,34 @@
         <button type="button" class="ta-combo-add-btn" data-target="pQuantityUnit" data-optkey="stockUnits">+新增</button>
       </div>
       <div class="ta-form-row ta-amount-mode-field ta-mode-unit ta-mode-total" id="pQuantityRow">
-        <label id="pQuantityLabel">本次進貨數量(必填，用於庫存與單價計算)</label>
+        <label id="pQuantityLabel">本次進貨數量（必填，用於庫存與單價計算）</label>
         <input type="number" id="pQuantity" placeholder="數字">
       </div>
 
       <div class="ta-form-row ta-form-row--full ta-amount-mode-field ta-mode-unit" id="pModeUnitOutputRow">
-        <label>本次進貨總金額(自動算出)</label>
+        <label>本次進貨總金額（自動算出）</label>
         <input type="text" id="pUnitModeTotalOutput" disabled>
       </div>
       <div class="ta-form-row ta-form-row--full ta-amount-mode-field ta-mode-total" id="pModeTotalOutputRow">
-        <label>每一顆單價(自動算出)</label>
+        <label>每一顆單價（自動算出）</label>
         <input type="text" id="pTotalModeUnitPriceOutput" disabled>
       </div>
       <div class="ta-form-row ta-form-row--full ta-amount-mode-field ta-mode-package" id="pModePackageOutputRow">
         <div class="ta-form-grid">
           <div class="ta-form-row">
-            <label id="pPkgTotalUnitsLabel">本次進貨總包裝單位數(自動算出)</label>
+            <label id="pPkgTotalUnitsLabel">本次進貨總包裝單位數（自動算出）</label>
             <input type="text" id="pPkgTotalUnitsOutput" disabled>
           </div>
           <div class="ta-form-row">
-            <label id="pPkgTotalQtyLabel">本次進貨總顆數(自動算出)</label>
+            <label id="pPkgTotalQtyLabel">本次進貨總顆數（自動算出）</label>
             <input type="text" id="pPkgTotalQtyOutput" disabled>
           </div>
           <div class="ta-form-row">
-            <label>本次進貨總金額(自動算出)</label>
+            <label>本次進貨總金額（自動算出）</label>
             <input type="text" id="pPkgTotalAmountOutput" disabled>
           </div>
           <div class="ta-form-row">
-            <label>每一顆單價(自動算出)</label>
+            <label>每一顆單價（自動算出）</label>
             <input type="text" id="pPkgUnitPriceOutput" disabled>
           </div>
         </div>
@@ -662,27 +662,27 @@
 
       <hr class="ta-section-divider">
       <div class="ta-form-row">
-        <label>短少數量(選填,廠商完全沒到貨的數量,金額仍照訂購數量計算,預設0)</label>
+        <label>短少數量（選填，廠商完全沒到貨的數量，金額仍照訂購數量計算，預設0）</label>
         <input type="number" id="pShortageQty" placeholder="0">
       </div>
       <div class="ta-form-row">
-        <label>多給數量(選填,廠商額外多給、不另外收費的數量,預設0)</label>
+        <label>多給數量（選填，廠商額外多給、不另外收費的數量，預設0）</label>
         <input type="number" id="pExtraQty" placeholder="0">
       </div>
       <div class="ta-form-row">
-        <label>報廢數量(選填,收到的貨品中不能使用的數量,預設0)</label>
+        <label>報廢數量（選填，收到的貨品中不能使用的數量，預設0）</label>
         <input type="number" id="pScrapQty" placeholder="0">
       </div>
       <div class="ta-form-row">
-        <label>次品數量(選填,可用但品質較差、存進次品庫存的數量,預設0)</label>
+        <label>次品數量（選填，可用但品質較差、存進次品庫存的數量，預設0）</label>
         <input type="number" id="pSecondaryQty" placeholder="0">
       </div>
       <div class="ta-form-row ta-form-row--full">
-        <label>正品入庫數量(自動算出)</label>
+        <label>正品入庫數量（自動算出）</label>
         <input type="text" id="pGoodQtyOutput" disabled>
       </div>
       <div class="ta-form-row ta-form-row--full">
-        <label>進貨備註(選填)</label>
+        <label>進貨備註（選填）</label>
         <textarea id="pPurchaseNote" rows="2"></textarea>
       </div>
     </div>
@@ -714,21 +714,21 @@
         <input type="text" id="eprSeller">
       </div>
       <div class="ta-form-row">
-        <label>供應商原始顏色名稱/代號(選填)</label>
+        <label>供應商原始顏色名稱/代號（選填）</label>
         <input type="text" id="eprSupplierColorName">
       </div>
       <div class="ta-form-row">
         <label>幣別</label>
         <select id="eprCurrency">
-          <option value="TWD">TWD(台幣)</option>
+          <option value="TWD">TWD（台幣）</option>
         </select>
       </div>
       <div class="ta-form-row ta-form-row--full">
         <label>金額輸入方式</label>
         <div class="ta-radio-row ta-radio-row--vertical">
-          <label class="ta-radio-option"><input type="radio" name="eprAmountMode" value="unit" id="eprAmountModeUnit"> 單價(例:供應商論個報價)</label>
-          <label class="ta-radio-option"><input type="radio" name="eprAmountMode" value="package" id="eprAmountModePackage"> 每個包裝單位(例:供應商論條/論克報價)</label>
-          <label class="ta-radio-option"><input type="radio" name="eprAmountMode" value="total" id="eprAmountModeTotal"> 整批(例:供應商論批報價)</label>
+          <label class="ta-radio-option"><input type="radio" name="eprAmountMode" value="unit" id="eprAmountModeUnit"> 單價（例：供應商論個報價）</label>
+          <label class="ta-radio-option"><input type="radio" name="eprAmountMode" value="package" id="eprAmountModePackage"> 每個包裝單位（例：供應商論條/論克報價）</label>
+          <label class="ta-radio-option"><input type="radio" name="eprAmountMode" value="total" id="eprAmountModeTotal"> 整批（例：供應商論批報價）</label>
         </div>
       </div>
 
@@ -748,7 +748,7 @@
             <button type="button" class="ta-combo-add-btn" data-target="eprPkgUnit" data-optkey="packageUnits">+新增</button>
           </div>
           <div class="ta-form-row">
-            <label id="eprPkgBaseQtyLabel">報價基準數量(供應商報價是「每幾個包裝單位」,平常留1就好)</label>
+            <label id="eprPkgBaseQtyLabel">報價基準數量（供應商報價是「每幾個包裝單位」，平常留1就好）</label>
             <input type="number" step="0.01" id="eprPkgBaseQty" value="1">
           </div>
           <div class="ta-form-row">
@@ -760,45 +760,45 @@
             <input type="number" step="0.01" id="eprPkgUnitQty">
           </div>
           <div class="ta-form-row">
-            <label id="eprPkgCountLabel">進貨數量(幾包)</label>
+            <label id="eprPkgCountLabel">進貨數量（幾包）</label>
             <input type="number" step="0.01" id="eprPkgCount">
           </div>
         </div>
       </div>
 
       <div class="ta-form-row">
-        <label>庫存單位(跟隨材料設定,不可修改)</label>
+        <label>庫存單位（跟隨材料設定，不可修改）</label>
         <input type="text" id="eprQuantityUnit" disabled>
       </div>
       <div class="ta-form-row ta-epr-mode-field ta-epr-mode-unit ta-epr-mode-total" id="eprQuantityRow">
-        <label id="eprQuantityLabel">本次進貨數量(必填，用於庫存與單價計算)</label>
+        <label id="eprQuantityLabel">本次進貨數量（必填，用於庫存與單價計算）</label>
         <input type="number" id="eprQuantity" placeholder="數字">
       </div>
 
       <div class="ta-form-row ta-form-row--full ta-epr-mode-field ta-epr-mode-unit" id="eprModeUnitOutputRow">
-        <label>本次進貨總金額(自動算出)</label>
+        <label>本次進貨總金額（自動算出）</label>
         <input type="text" id="eprUnitModeTotalOutput" disabled>
       </div>
       <div class="ta-form-row ta-form-row--full ta-epr-mode-field ta-epr-mode-total" id="eprModeTotalOutputRow">
-        <label>每一顆單價(自動算出)</label>
+        <label>每一顆單價（自動算出）</label>
         <input type="text" id="eprTotalModeUnitPriceOutput" disabled>
       </div>
       <div class="ta-form-row ta-form-row--full ta-epr-mode-field ta-epr-mode-package" id="eprModePackageOutputRow">
         <div class="ta-form-grid">
           <div class="ta-form-row">
-            <label id="eprPkgTotalUnitsLabel">本次進貨總包裝單位數(自動算出)</label>
+            <label id="eprPkgTotalUnitsLabel">本次進貨總包裝單位數（自動算出）</label>
             <input type="text" id="eprPkgTotalUnitsOutput" disabled>
           </div>
           <div class="ta-form-row">
-            <label id="eprPkgTotalQtyLabel">本次進貨總顆數(自動算出)</label>
+            <label id="eprPkgTotalQtyLabel">本次進貨總顆數（自動算出）</label>
             <input type="text" id="eprPkgTotalQtyOutput" disabled>
           </div>
           <div class="ta-form-row">
-            <label>本次進貨總金額(自動算出)</label>
+            <label>本次進貨總金額（自動算出）</label>
             <input type="text" id="eprPkgTotalAmountOutput" disabled>
           </div>
           <div class="ta-form-row">
-            <label>每一顆單價(自動算出)</label>
+            <label>每一顆單價（自動算出）</label>
             <input type="text" id="eprPkgUnitPriceOutput" disabled>
           </div>
         </div>
@@ -806,27 +806,27 @@
 
       <hr class="ta-section-divider">
       <div class="ta-form-row">
-        <label>短少數量(選填,廠商完全沒到貨的數量,金額仍照訂購數量計算,預設0)</label>
+        <label>短少數量（選填，廠商完全沒到貨的數量，金額仍照訂購數量計算，預設0）</label>
         <input type="number" id="eprShortageQty" placeholder="0">
       </div>
       <div class="ta-form-row">
-        <label>多給數量(選填,廠商額外多給、不另外收費的數量,預設0)</label>
+        <label>多給數量（選填，廠商額外多給、不另外收費的數量，預設0）</label>
         <input type="number" id="eprExtraQty" placeholder="0">
       </div>
       <div class="ta-form-row">
-        <label>報廢數量(選填,收到的貨品中不能使用的數量,預設0)</label>
+        <label>報廢數量（選填，收到的貨品中不能使用的數量，預設0）</label>
         <input type="number" id="eprScrapQty" placeholder="0">
       </div>
       <div class="ta-form-row">
-        <label>次品數量(選填,可用但品質較差、存進次品庫存的數量,預設0)</label>
+        <label>次品數量（選填，可用但品質較差、存進次品庫存的數量，預設0）</label>
         <input type="number" id="eprSecondaryQty" placeholder="0">
       </div>
       <div class="ta-form-row ta-form-row--full">
-        <label>正品入庫數量(自動算出)</label>
+        <label>正品入庫數量（自動算出）</label>
         <input type="text" id="eprGoodQtyOutput" disabled>
       </div>
       <div class="ta-form-row ta-form-row--full">
-        <label>進貨備註(選填)</label>
+        <label>進貨備註（選填）</label>
         <textarea id="eprPurchaseNote" rows="2"></textarea>
       </div>
     </div>
@@ -885,11 +885,11 @@
         <input type="text" id="eColorCode">
       </div>
       <div class="ta-form-row ta-form-row--full">
-        <label>同色標籤(選填,填一樣的字,不同品牌/供應商的材料就會在詳情頁互相顯示成「同色替代品」)</label>
+        <label>同色標籤（選填，填一樣的字，不同品牌/供應商的材料就會在詳情頁互相顯示成「同色替代品」）</label>
         <input type="text" id="eColorTag">
       </div>
       <div class="ta-form-row ta-form-row--full">
-        <label>材料備註(選填)</label>
+        <label>材料備註（選填）</label>
         <textarea id="eNote" rows="2"></textarea>
       </div>
     </div>
@@ -923,7 +923,7 @@
       <input type="text" id="categoryFormName">
     </div>
     <div class="ta-form-row">
-      <label>代碼(用於材料編號,僅限大寫英文字母與數字,例如 SS)</label>
+      <label>代碼（用於材料編號，僅限大寫英文字母與數字，例如 SS）</label>
       <input type="text" id="categoryFormCode" class="ta-input-uppercase">
     </div>
     <div class="ta-modal-actions">
@@ -938,10 +938,10 @@
   <div class="ta-modal">
     <span class="ta-modal-close" data-close="columnVisibilityModal">✕</span>
     <h2>欄位顯示管理</h2>
-    <div class="ta-modal-text">勾選要在材料清單顯示的欄位(分類、狀態一律顯示,無法關閉)。這個設定只會存在這台裝置,不會影響你其他裝置的顯示。</div>
+    <div class="ta-modal-text">勾選要在材料清單顯示的欄位（分類、狀態一律顯示，無法關閉）。這個設定只會存在這台裝置，不會影響你其他裝置的顯示。</div>
     <div id="columnVisibilityList"></div>
     <div class="ta-modal-actions">
-      <button class="ta-btn" id="setColumnVisibilityDefaultBtn">設為預設值(同步到所有裝置)</button>
+      <button class="ta-btn" id="setColumnVisibilityDefaultBtn">設為預設值（同步到所有裝置）</button>
       <button class="ta-btn ta-btn-primary" data-close="columnVisibilityModal">關閉</button>
     </div>
   </div>
@@ -1050,7 +1050,7 @@
       <input type="number" id="adjustNewQty">
     </div>
     <div class="ta-form-row">
-      <label>調整原因(選填)</label>
+      <label>調整原因（選填）</label>
       <textarea id="adjustReason" rows="2"></textarea>
     </div>
     <div class="ta-modal-actions">
@@ -1065,13 +1065,13 @@
   <div class="ta-modal">
     <span class="ta-modal-close" data-close="historyMigrationModal">✕</span>
     <h2 id="hmTitle">歷史資料搬遷</h2>
-    <div class="ta-modal-text" id="hmDesc">用來補登系統上線前的歷史消耗量:填入調整後的實際庫存,以及這次要新增多少歷史銷售/非銷售數量(會疊加在原本已經記錄的數字上,不是取代)。之後要再調整,重新開一次這個功能疊加即可;如果是某一筆填錯了,可以直接點異動歷史裡那一筆進來修正。</div>
+    <div class="ta-modal-text" id="hmDesc">用來補登系統上線前的歷史消耗量：填入調整後的實際庫存，以及這次要新增多少歷史銷售/非銷售數量（會疊加在原本已經記錄的數字上，不是取代）。之後要再調整，重新開一次這個功能疊加即可；如果是某一筆填錯了，可以直接點異動歷史裡那一筆進來修正。</div>
     <div class="ta-form-row">
       <label id="hmSystemStockLabel">調整前庫存</label>
       <input type="text" id="hmSystemStock" disabled>
     </div>
     <div class="ta-form-row">
-      <label>調整後庫存(實際盤點到的數字)</label>
+      <label>調整後庫存（實際盤點到的數字）</label>
       <input type="number" id="hmActualStock">
     </div>
     <div class="ta-form-row">
@@ -1095,7 +1095,7 @@
   <div class="ta-modal">
     <span class="ta-modal-close" data-close="exchangeModal">✕</span>
     <h2>匯率設定</h2>
-    <div class="ta-modal-text">台幣(TWD)為基準幣別,固定 = 1,不需設定。以下是其他幣別換算成台幣的匯率(1該幣別 = ? 台幣),改完數字按「儲存」立即生效。</div>
+    <div class="ta-modal-text">台幣（TWD）為基準幣別，固定 = 1，不需設定。以下是其他幣別換算成台幣的匯率（1該幣別 = ? 台幣），改完數字按「儲存」立即生效。</div>
     <div id="exchangeRateList"></div>
     <button class="ta-btn" id="addCurrencyBtn">＋ 新增幣別</button>
     <div class="ta-modal-actions">
@@ -1112,7 +1112,7 @@
     <button class="ta-btn" id="downloadImportTemplateBtn">下載空白範例檔案</button>
     <div class="ta-modal-text">提示：「略過」欄位填入任何文字，該列就不會被匯入，但仍會保留在檔案裡（不用刪除資料列）。</div>
     <div class="ta-form-row">
-      <label>選擇進貨紀錄 Excel 檔案(.xlsx)</label>
+      <label>選擇進貨紀錄 Excel 檔案（.xlsx）</label>
       <input type="file" id="importFileInput" accept=".xlsx,.xls">
     </div>
     <div id="importSummary"></div>
@@ -1160,7 +1160,7 @@
   <div class="ta-modal">
     <span class="ta-modal-close" data-close="wipeModal">✕</span>
     <h2>清除資料</h2>
-    <div class="ta-modal-text">選擇要清除的範圍(選項清單與匯率設定不受影響)。</div>
+    <div class="ta-modal-text">選擇要清除的範圍（選項清單與匯率設定不受影響）。</div>
     <div class="ta-form-row">
       <label>清除範圍</label>
       <select id="wipeScopeSelect">
@@ -1264,7 +1264,7 @@ function doLogin() {
   const errEl = document.getElementById('loginError');
   errEl.textContent = '';
   signInWithEmailAndPassword(auth, email, password).catch(err => {
-    errEl.textContent = '登入失敗:帳號或密碼錯誤';
+    errEl.textContent = '登入失敗：帳號或密碼錯誤';
   });
 }
 
@@ -1527,7 +1527,7 @@ function renderCurrencyColumns() {
     const th = document.createElement('th');
     th.className = 'ta-col-right ta-currency-col-header';
     th.dataset.col = `cost_${code}`;
-    th.textContent = `進價(${code})`;
+    th.textContent = `進價（${code}）`;
     anchor.after(th);
     anchor = th;
   });
@@ -1547,13 +1547,13 @@ const COLUMN_DEFS = [
   { key: 'colorTag', label: '同色標籤', filterId: 'filterColorTag' },
   { key: 'stock', label: '庫存' },
   { key: 'secondaryStock', label: '次品庫存' },
-  { key: 'cost', label: '進價(台幣)' },
+  { key: 'cost', label: '進價（台幣）' },
 ];
 const COLUMN_VISIBILITY_STORAGE_KEY = 'ta_columnVisibility';
 let columnVisibility = {};
 
 function getCurrencyColumnDefs() {
-  return Object.keys(exchangeRates).sort().map(code => ({ key: `cost_${code}`, label: `進價(${code})` }));
+  return Object.keys(exchangeRates).sort().map(code => ({ key: `cost_${code}`, label: `進價（${code}）` }));
 }
 
 function getToggleableColumnDefs() {
@@ -1612,7 +1612,7 @@ function fillCurrencySelect() {
   ['pCurrency', 'eprCurrency'].forEach(selectId => {
     const sel = document.getElementById(selectId);
     const current = sel.value;
-    sel.innerHTML = '<option value="TWD">TWD(台幣)</option>' + codes.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    sel.innerHTML = '<option value="TWD">TWD（台幣）</option>' + codes.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
     if (current && (current === 'TWD' || codes.includes(current))) sel.value = current;
   });
 }
@@ -1620,7 +1620,7 @@ function fillCurrencySelect() {
 function fillComboOptions(selectId, list) {
   const sel = document.getElementById(selectId);
   const current = sel.value;
-  sel.innerHTML = '<option value="">(未選擇)</option>' + list.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  sel.innerHTML = '<option value="">（未選擇）</option>' + list.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
   if (list.includes(current)) sel.value = current;
 }
 
@@ -1668,7 +1668,7 @@ function renderCategoryTabs() {
     const isDisabled = disabledSet.has(c);
     const tab = document.createElement('div');
     tab.className = 'ta-category-tab' + (categoryFilter === c ? ' ta-is-active' : '') + (isDisabled ? ' ta-category-tab--disabled' : '');
-    tab.textContent = c + (isDisabled ? '(已停用)' : '');
+    tab.textContent = c + (isDisabled ? '（已停用）' : '');
     tab.addEventListener('click', () => { categoryFilter = c; switchCategory(); });
     return tab;
   });
@@ -1714,7 +1714,7 @@ function renderCategoryManageList() {
   }
   cats.forEach((name, idx) => {
     const isDisabled = disabledSet.has(name);
-    const code = (options.categoryCodes || {})[name] || '(未設定代碼)';
+    const code = (options.categoryCodes || {})[name] || '（未設定代碼）';
     const row = document.createElement('div');
     row.className = 'ta-category-row' + (isDisabled ? ' ta-category-row--disabled' : '');
     row.innerHTML = `
@@ -1785,7 +1785,7 @@ document.getElementById('categoryFormSaveBtn').addEventListener('click', async (
 
   if (cats.some((c, i) => c === name && i !== categoryFormEditIdx)) { alert('這個分類名稱已經存在了'); return; }
   const codeConflictName = Object.keys(codes).find(n => n !== oldName && codes[n] === codeInput);
-  if (codeConflictName) { alert(`這個代碼已經被分類「${codeConflictName}」使用了,請換一個`); return; }
+  if (codeConflictName) { alert(`這個代碼已經被分類「${codeConflictName}」使用了，請換一個`); return; }
 
   if (isEdit && codes[oldName] && codes[oldName] !== codeInput) {
     const affectedCount = materials.filter(m => m.category === oldName).length;
@@ -1849,7 +1849,7 @@ document.getElementById('categoryFormSaveBtn').addEventListener('click', async (
     renderCategoryManageList();
     renderCategoryTabs();
   } catch (e) {
-    alert('儲存失敗:' + e.message);
+    alert('儲存失敗：' + e.message);
   } finally {
     btn.disabled = false;
   }
@@ -1969,7 +1969,7 @@ async function deleteOptionValue(idx) {
   const group = OPTION_GROUPS.find(g => g.key === optionsModalKey);
   const ok = await showConfirmModal({
     title: `刪除${group.label}`,
-    text: `確定要刪除「${val}」這個選項嗎?刪除後已經使用這個值的材料資料不會被清除或改變,只是之後新增/編輯材料時不能再從清單挑選這個選項。`,
+    text: `確定要刪除「${val}」這個選項嗎？刪除後已經使用這個值的材料資料不會被清除或改變，只是之後新增/編輯材料時不能再從清單挑選這個選項。`,
   });
   if (!ok) return;
   list.splice(idx, 1);
@@ -2021,7 +2021,7 @@ function fillFilterSelect(id, list, includeBlankOption) {
   const current = sel.value;
   const firstLabel = sel.options[0].textContent;
   let html = `<option value="">${firstLabel}</option>`;
-  if (includeBlankOption) html += `<option value="${BLANK_FILTER_VALUE}">(空白)</option>`;
+  if (includeBlankOption) html += `<option value="${BLANK_FILTER_VALUE}">（空白）</option>`;
   html += list.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
   sel.innerHTML = html;
   if (current === BLANK_FILTER_VALUE || list.includes(current)) sel.value = current;
@@ -2180,7 +2180,7 @@ function renderSummary() {
   const totalPurchasedValue = scoped.reduce((s, m) => s + (purchaseValueByMaterialId[m.id] || 0), 0);
   const qtyByUnit = {};
   active.forEach(m => {
-    const u = m.unit || '(未設單位)';
+    const u = m.unit || '（未設單位）';
     qtyByUnit[u] = (qtyByUnit[u] || 0) + (m.currentStock || 0);
   });
   const qtyText = Object.entries(qtyByUnit).map(([u, q]) => `${q.toLocaleString()} ${u}`).join('、') || '-';
@@ -2328,18 +2328,18 @@ function updateAmountModeVisibility() {
   document.querySelectorAll('.ta-amount-mode-field').forEach(el => {
     el.classList.toggle('ta-is-hidden', !el.classList.contains('ta-mode-' + mode));
   });
-  const stockUnit = document.getElementById('pQuantityUnit').value || '(庫存單位)';
-  const pkgUnit = document.getElementById('pPkgUnit').value || '(包裝單位)';
+  const stockUnit = document.getElementById('pQuantityUnit').value || '（庫存單位）';
+  const pkgUnit = document.getElementById('pPkgUnit').value || '（包裝單位）';
   const pkgBaseQty = parseFloat(document.getElementById('pPkgBaseQty').value) || 1;
   const baseLabel = pkgBaseQty === 1 ? pkgUnit : `${pkgBaseQty}${pkgUnit}`;
   document.getElementById('pQuantityLabel').textContent = mode === 'total'
-    ? '本次進貨整批顆數(必填，用於庫存與單價計算)'
-    : '本次進貨數量(必填，用於庫存與單價計算)';
+    ? '本次進貨整批顆數（必填，用於庫存與單價計算）'
+    : '本次進貨數量（必填，用於庫存與單價計算）';
   document.getElementById('pPkgUnitPriceLabel').textContent = `每${baseLabel}金額`;
-  document.getElementById('pPkgUnitQtyLabel').textContent = `每${baseLabel}顆數(${stockUnit})`;
-  document.getElementById('pPkgCountLabel').textContent = `購買份數(每份${baseLabel})`;
-  document.getElementById('pPkgTotalUnitsLabel').textContent = `本次進貨總${pkgUnit}數(自動算出)`;
-  document.getElementById('pPkgTotalQtyLabel').textContent = `本次進貨總顆數(自動算出，${stockUnit})`;
+  document.getElementById('pPkgUnitQtyLabel').textContent = `每${baseLabel}顆數（${stockUnit}）`;
+  document.getElementById('pPkgCountLabel').textContent = `購買份數（每份${baseLabel}）`;
+  document.getElementById('pPkgTotalUnitsLabel').textContent = `本次進貨總${pkgUnit}數（自動算出）`;
+  document.getElementById('pPkgTotalQtyLabel').textContent = `本次進貨總顆數（自動算出，${stockUnit}）`;
 }
 
 document.querySelectorAll('input[name="pAmountMode"]').forEach(radio => {
@@ -2392,12 +2392,12 @@ function checkDuplicate() {
   dupMatchedMaterial = match || null;
   if (match) {
     hint.className = 'ta-dup-hint ta-is-visible ta-dup-hint--found';
-    hint.textContent = `⚠ 偵測到已有相同材料(目前庫存 ${match.currentStock || 0} ${match.unit || ''})。送出後將新增一筆進貨紀錄到這筆材料,庫存會累加,單位鎖定為「${match.unit || '(未設定)'}」。`;
+    hint.textContent = `⚠ 偵測到已有相同材料（目前庫存 ${match.currentStock || 0} ${match.unit || ''}）。送出後將新增一筆進貨紀錄到這筆材料，庫存會累加，單位鎖定為「${match.unit || '（未設定）'}」。`;
     document.getElementById('pQuantityUnit').value = match.unit || '';
     setQuantityUnitLock(true);
   } else {
     hint.className = 'ta-dup-hint ta-is-visible ta-dup-hint--clear';
-    hint.textContent = '沒有找到完全相符的既有材料,送出後將建立一筆全新材料。';
+    hint.textContent = '沒有找到完全相符的既有材料，送出後將建立一筆全新材料。';
     setQuantityUnitLock(false);
   }
   updateAmountCalc();
@@ -2424,7 +2424,7 @@ function formatDualAmount(originalVal, currency, twdVal, decimals, suffixText) {
 function updateAmountCalc() {
   const mode = document.querySelector('input[name="pAmountMode"]:checked').value;
   const currency = document.getElementById('pCurrency').value;
-  const unit = document.getElementById('pQuantityUnit').value || '(單位)';
+  const unit = document.getElementById('pQuantityUnit').value || '（單位）';
   let receivedQuantity = null;
 
   if (mode === 'unit') {
@@ -2454,7 +2454,7 @@ function updateAmountCalc() {
     const pkgUnitPrice = parseFloat(document.getElementById('pPkgUnitPrice').value);
     const pkgUnitQty = parseFloat(document.getElementById('pPkgUnitQty').value);
     const pkgCount = parseFloat(document.getElementById('pPkgCount').value);
-    const pkgUnit = document.getElementById('pPkgUnit').value || '(包裝單位)';
+    const pkgUnit = document.getElementById('pPkgUnit').value || '（包裝單位）';
     const unitsOutEl = document.getElementById('pPkgTotalUnitsOutput');
     const qtyOutEl = document.getElementById('pPkgTotalQtyOutput');
     const amountOutEl = document.getElementById('pPkgTotalAmountOutput');
@@ -2481,7 +2481,7 @@ function updateAmountCalc() {
   const scrapQty = parseFloat(document.getElementById('pScrapQty').value) || 0;
   const secondaryQty = parseFloat(document.getElementById('pSecondaryQty').value) || 0;
   const goodQty = receivedQuantity - shortageQty - scrapQty - secondaryQty + extraQty;
-  goodOutEl.value = `${goodQty.toLocaleString()} ${unit}` + (goodQty < 0 ? '(短少+報廢+次品數量超過收到總數量,請檢查)' : '');
+  goodOutEl.value = `${goodQty.toLocaleString()} ${unit}` + (goodQty < 0 ? '（短少+報廢+次品數量超過收到總數量，請檢查）' : '');
 }
 
 // ---------- 編輯進貨紀錄(跟新增進貨共用同一套三模式計算邏輯,但欄位獨立,不共用 DOM) ----------
@@ -2490,18 +2490,18 @@ function updateEditPurchaseModeVisibility() {
   document.querySelectorAll('.ta-epr-mode-field').forEach(el => {
     el.classList.toggle('ta-is-hidden', !el.classList.contains('ta-epr-mode-' + mode));
   });
-  const stockUnit = document.getElementById('eprQuantityUnit').value || '(庫存單位)';
-  const pkgUnit = document.getElementById('eprPkgUnit').value || '(包裝單位)';
+  const stockUnit = document.getElementById('eprQuantityUnit').value || '（庫存單位）';
+  const pkgUnit = document.getElementById('eprPkgUnit').value || '（包裝單位）';
   const pkgBaseQty = parseFloat(document.getElementById('eprPkgBaseQty').value) || 1;
   const baseLabel = pkgBaseQty === 1 ? pkgUnit : `${pkgBaseQty}${pkgUnit}`;
   document.getElementById('eprQuantityLabel').textContent = mode === 'total'
-    ? '本次進貨整批顆數(必填，用於庫存與單價計算)'
-    : '本次進貨數量(必填，用於庫存與單價計算)';
+    ? '本次進貨整批顆數（必填，用於庫存與單價計算）'
+    : '本次進貨數量（必填，用於庫存與單價計算）';
   document.getElementById('eprPkgUnitPriceLabel').textContent = `每${baseLabel}金額`;
-  document.getElementById('eprPkgUnitQtyLabel').textContent = `每${baseLabel}顆數(${stockUnit})`;
-  document.getElementById('eprPkgCountLabel').textContent = `購買份數(每份${baseLabel})`;
-  document.getElementById('eprPkgTotalUnitsLabel').textContent = `本次進貨總${pkgUnit}數(自動算出)`;
-  document.getElementById('eprPkgTotalQtyLabel').textContent = `本次進貨總顆數(自動算出，${stockUnit})`;
+  document.getElementById('eprPkgUnitQtyLabel').textContent = `每${baseLabel}顆數（${stockUnit}）`;
+  document.getElementById('eprPkgCountLabel').textContent = `購買份數（每份${baseLabel}）`;
+  document.getElementById('eprPkgTotalUnitsLabel').textContent = `本次進貨總${pkgUnit}數（自動算出）`;
+  document.getElementById('eprPkgTotalQtyLabel').textContent = `本次進貨總顆數（自動算出，${stockUnit}）`;
 }
 
 document.querySelectorAll('input[name="eprAmountMode"]').forEach(radio => {
@@ -2518,7 +2518,7 @@ document.getElementById('eprPkgUnit').addEventListener('change', updateEditPurch
 function updateEditPurchaseCalc() {
   const mode = document.querySelector('input[name="eprAmountMode"]:checked').value;
   const currency = document.getElementById('eprCurrency').value;
-  const unit = document.getElementById('eprQuantityUnit').value || '(單位)';
+  const unit = document.getElementById('eprQuantityUnit').value || '（單位）';
   let receivedQuantity = null;
 
   if (mode === 'unit') {
@@ -2548,7 +2548,7 @@ function updateEditPurchaseCalc() {
     const pkgUnitPrice = parseFloat(document.getElementById('eprPkgUnitPrice').value);
     const pkgUnitQty = parseFloat(document.getElementById('eprPkgUnitQty').value);
     const pkgCount = parseFloat(document.getElementById('eprPkgCount').value);
-    const pkgUnit = document.getElementById('eprPkgUnit').value || '(包裝單位)';
+    const pkgUnit = document.getElementById('eprPkgUnit').value || '（包裝單位）';
     const unitsOutEl = document.getElementById('eprPkgTotalUnitsOutput');
     const qtyOutEl = document.getElementById('eprPkgTotalQtyOutput');
     const amountOutEl = document.getElementById('eprPkgTotalAmountOutput');
@@ -2575,7 +2575,7 @@ function updateEditPurchaseCalc() {
   const scrapQty = parseFloat(document.getElementById('eprScrapQty').value) || 0;
   const secondaryQty = parseFloat(document.getElementById('eprSecondaryQty').value) || 0;
   const goodQty = receivedQuantity - shortageQty - scrapQty - secondaryQty + extraQty;
-  goodOutEl.value = `${goodQty.toLocaleString()} ${unit}` + (goodQty < 0 ? '(短少+報廢+次品數量超過收到總數量,請檢查)' : '');
+  goodOutEl.value = `${goodQty.toLocaleString()} ${unit}` + (goodQty < 0 ? '（短少+報廢+次品數量超過收到總數量，請檢查）' : '');
 }
 
 let editPurchaseTarget = null; // { materialId, historyId, original: {...} }
@@ -2681,7 +2681,7 @@ document.getElementById('submitEditPurchaseBtn').addEventListener('click', async
     if (!pkgUnit) { alert('請選擇包裝單位'); return; }
     if (isNaN(pkgUnitPrice) || pkgUnitPrice < 0) { alert(`請輸入正確的每${pkgUnit}單價`); return; }
     if (!pkgUnitQty || pkgUnitQty <= 0) { alert(`請輸入正確的每${pkgUnit}顆數`); return; }
-    if (!pkgCount || pkgCount <= 0) { alert(`請輸入正確的進貨數量(幾${pkgUnit})`); return; }
+    if (!pkgCount || pkgCount <= 0) { alert(`請輸入正確的進貨數量（幾${pkgUnit}）`); return; }
     originalAmount = pkgUnitPrice;
     receivedQuantity = pkgUnitQty * pkgCount;
   }
@@ -2694,7 +2694,7 @@ document.getElementById('submitEditPurchaseBtn').addEventListener('click', async
   if (extraQty < 0) { alert('多給數量不能是負數'); return; }
   if (scrapQty < 0) { alert('報廢數量不能是負數'); return; }
   if (secondaryQty < 0) { alert('次品數量不能是負數'); return; }
-  if (shortageQty + scrapQty + secondaryQty > receivedQuantity) { alert('短少數量+報廢數量+次品數量不能超過本次訂購(收到)的總數量'); return; }
+  if (shortageQty + scrapQty + secondaryQty > receivedQuantity) { alert('短少數量+報廢數量+次品數量不能超過本次訂購（收到）的總數量'); return; }
   const goodQty = receivedQuantity - shortageQty - scrapQty - secondaryQty + extraQty;
 
   const now = new Date();
@@ -2752,7 +2752,7 @@ document.getElementById('submitEditPurchaseBtn').addEventListener('click', async
     closeModal('editPurchaseModal');
     openDetail(materialId);
   } catch (err) {
-    alert('儲存失敗:' + err.message);
+    alert('儲存失敗：' + err.message);
   } finally {
     btn.disabled = false;
   }
@@ -2820,7 +2820,7 @@ async function submitPurchase() {
   if (!quantityUnitInput) { alert('請選擇庫存單位'); return; }
   if (!purchaseDateStr) { alert('請選擇進貨日期'); return; }
   if (!dupMatchedMaterial && !(options.categoryCodes || {})[category]) {
-    alert(`分類「${category}」還沒有設定材料編號用的代碼,請先到選項管理補上代碼,才能新增這個分類的材料`);
+    alert(`分類「${category}」還沒有設定材料編號用的代碼，請先到選項管理補上代碼，才能新增這個分類的材料`);
     return;
   }
 
@@ -2844,7 +2844,7 @@ async function submitPurchase() {
     if (!pkgUnit) { alert('請選擇包裝單位'); return; }
     if (isNaN(pkgUnitPrice) || pkgUnitPrice < 0) { alert(`請輸入正確的每${pkgUnit}單價`); return; }
     if (!pkgUnitQty || pkgUnitQty <= 0) { alert(`請輸入正確的每${pkgUnit}顆數`); return; }
-    if (!pkgCount || pkgCount <= 0) { alert(`請輸入正確的進貨數量(幾${pkgUnit})`); return; }
+    if (!pkgCount || pkgCount <= 0) { alert(`請輸入正確的進貨數量（幾${pkgUnit}）`); return; }
     originalAmount = pkgUnitPrice;
     receivedQuantity = pkgUnitQty * pkgCount;
   }
@@ -2858,7 +2858,7 @@ async function submitPurchase() {
   if (extraQty < 0) { alert('多給數量不能是負數'); return; }
   if (scrapQty < 0) { alert('報廢數量不能是負數'); return; }
   if (secondaryQty < 0) { alert('次品數量不能是負數'); return; }
-  if (shortageQty + scrapQty + secondaryQty > receivedQuantity) { alert('短少數量+報廢數量+次品數量不能超過本次訂購(收到)的總數量'); return; }
+  if (shortageQty + scrapQty + secondaryQty > receivedQuantity) { alert('短少數量+報廢數量+次品數量不能超過本次訂購（收到）的總數量'); return; }
   const goodQty = receivedQuantity - shortageQty - scrapQty - secondaryQty + extraQty;
 
   // 進貨日期用使用者選的日期,時分秒沿用當下時間,確保同一天補登多筆時仍能依輸入順序排列
@@ -2933,7 +2933,7 @@ async function submitPurchase() {
 
     closeModal('purchaseModal');
   } catch (e) {
-    alert('送出失敗:' + e.message);
+    alert('送出失敗：' + e.message);
   } finally {
     btn.disabled = false;
   }
@@ -2971,7 +2971,7 @@ async function openDetail(id) {
   if (alternatives.length) {
     const sameUnit = alternatives.every(a => (a.unit || '') === unit);
     const totalLine = sameUnit
-      ? `<div class="ta-modal-text">「${escapeHtml(m.colorTag)}」同色標籤合計庫存(含本款):${(stock + alternatives.reduce((sum, a) => sum + (a.currentStock || 0), 0)).toLocaleString()} ${escapeHtml(unit)}</div>`
+      ? `<div class="ta-modal-text">「${escapeHtml(m.colorTag)}」同色標籤合計庫存（含本款）：${(stock + alternatives.reduce((sum, a) => sum + (a.currentStock || 0), 0)).toLocaleString()} ${escapeHtml(unit)}</div>`
       : '';
     const items = alternatives.map(a => {
       const aStock = a.currentStock || 0;
@@ -3003,15 +3003,15 @@ async function openDetail(id) {
           <button class="ta-btn ta-btn-sm ta-btn-danger" id="deleteBtn">刪除</button>
         </div>
       </div>
-      <div class="ta-detail-category"><span class="ta-tag">${escapeHtml(m.category || '未分類')}</span>${m.materialCode ? ` <span class="ta-tag">${escapeHtml(m.materialCode)}</span>` : ''}${m.colorSeries ? ` <span class="ta-tag">色系:${escapeHtml(m.colorSeries)}</span>` : ''}${m.colorTag ? ` <span class="ta-tag">同色標籤:${escapeHtml(m.colorTag)}</span>` : ''}</div>
-      ${m.note ? `<div class="ta-modal-text">備註:${escapeHtml(m.note)}</div>` : ''}
+      <div class="ta-detail-category"><span class="ta-tag">${escapeHtml(m.category || '未分類')}</span>${m.materialCode ? ` <span class="ta-tag">${escapeHtml(m.materialCode)}</span>` : ''}${m.colorSeries ? ` <span class="ta-tag">色系：${escapeHtml(m.colorSeries)}</span>` : ''}${m.colorTag ? ` <span class="ta-tag">同色標籤：${escapeHtml(m.colorTag)}</span>` : ''}</div>
+      ${m.note ? `<div class="ta-modal-text">備註：${escapeHtml(m.note)}</div>` : ''}
       <div class="ta-detail-stats">
         <div><div class="ta-stat-label">總進貨數量</div><div class="ta-stat-value" id="totalPurchasedQtyStat">-</div></div>
         <div><div class="ta-stat-label">總進貨數量價值</div><div class="ta-stat-value" id="totalPurchasedValueStat">-</div></div>
       </div>
       <div class="ta-detail-stats">
-        <div><div class="ta-stat-label">進價(歷史最高單價)</div><div class="ta-stat-value">NT$ ${cost.toFixed(2)} / ${escapeHtml(unit)}</div></div>
-        <div><div class="ta-stat-label">加權平均成本(BOM成本用這個)</div><div class="ta-stat-value">NT$ ${weightedAvgCost.toFixed(4)} / ${escapeHtml(unit)}</div></div>
+        <div><div class="ta-stat-label">進價（歷史最高單價）</div><div class="ta-stat-value">NT$ ${cost.toFixed(2)} / ${escapeHtml(unit)}</div></div>
+        <div><div class="ta-stat-label">加權平均成本（BOM成本用這個）</div><div class="ta-stat-value">NT$ ${weightedAvgCost.toFixed(4)} / ${escapeHtml(unit)}</div></div>
         <div><div class="ta-stat-label">目前庫存價值</div><div class="ta-stat-value">NT$ ${value.toFixed(2)}</div></div>
       </div>
       <div class="ta-detail-stats">
@@ -3112,7 +3112,7 @@ async function deleteMaterial(m) {
   // 庫存記錄會永久消失、沒辦法補救(之後那些成品要出貨時,也會因為材料找不到而卡住),
   // 所以直接硬性擋下,不像一般刪除只是跳警告讓你確認就能刪
   if ((m.reservedStock || 0) > 0) {
-    alert(`「${displayName(m)}」目前已預留數量是 ${m.reservedStock},代表有已製作未售出的成品卡在這款材料身上,無法刪除。請先確認這些成品的生產登記/出貨狀況,把已預留數量歸零後再刪除。`);
+    alert(`「${displayName(m)}」目前已預留數量是 ${m.reservedStock}，代表有已製作未售出的成品卡在這款材料身上，無法刪除。請先確認這些成品的生產登記/出貨狀況，把已預留數量歸零後再刪除。`);
     return;
   }
 
@@ -3154,7 +3154,7 @@ async function deleteMaterial(m) {
 
   const messages = [];
   if (histSnap.size) {
-    messages.push(`已經有 ${histSnap.size} 筆歷史紀錄(進貨/調整/修改),刪除後這些紀錄會一併永久消失。`);
+    messages.push(`已經有 ${histSnap.size} 筆歷史紀錄（進貨/調整/修改），刪除後這些紀錄會一併永久消失。`);
   }
   if (referencingProducts.length) {
     const names = referencingProducts.map(p => p.name).join('\n');
@@ -3166,7 +3166,7 @@ async function deleteMaterial(m) {
   }
 
   deleteTargetRequiresConfirmName = messages.length > 0;
-  warnEl.textContent = [`確定要刪除「${name}」嗎?此操作無法復原。`, ...messages].join('\n\n');
+  warnEl.textContent = [`確定要刪除「${name}」嗎？此操作無法復原。`, ...messages].join('\n\n');
   confirmRow.classList.toggle('ta-is-hidden', !messages.length);
   openModal('deleteModal');
 }
@@ -3193,7 +3193,7 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async () =
     closeModal('deleteModal');
     closeModal('detailModal');
   } catch (e) {
-    alert('刪除失敗:' + e.message);
+    alert('刪除失敗：' + e.message);
   } finally {
     btn.disabled = false;
   }
@@ -3235,7 +3235,7 @@ function buildLogSummary(log, unit) {
 }
 
 function buildLogView(log, unit) {
-  const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('zh-TW') : '(時間處理中)';
+  const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('zh-TW') : '（時間處理中）';
   let typeLabel = '', cls = '', detail = '';
     if (log.type === 'purchase') {
       typeLabel = '進貨'; cls = 'purchase';
@@ -3273,13 +3273,13 @@ function buildLogView(log, unit) {
       const targetLabel = log.target === 'secondary' ? '次品庫存' : log.target === 'reserved' ? '已預留數量' : '正品庫存';
       if (log.scrapQuantity) {
         typeLabel = '報廢登記'; cls = 'adjust';
-        detail = `${targetLabel} 數量:${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff})<br>
+        detail = `${targetLabel} 數量：${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}（${log.diff}）<br>
           報廢：${log.scrapQuantity} ${escapeHtml(unit)}（損失約 NT$${(log.scrapQuantity * (log.unitCost||0)).toFixed(2)}）
-          ${log.reason ? '<br>原因:' + escapeHtml(log.reason) : ''}`;
+          ${log.reason ? '<br>原因：' + escapeHtml(log.reason) : ''}`;
       } else {
         typeLabel = '人工盤點調整'; cls = 'adjust';
-        detail = `${targetLabel} 數量:${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff >= 0 ? '+' : ''}${log.diff})
-          ${log.reason ? '<br>原因:' + escapeHtml(log.reason) : ''}`;
+        detail = `${targetLabel} 數量：${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}（${log.diff >= 0 ? '+' : ''}${log.diff}）
+          ${log.reason ? '<br>原因：' + escapeHtml(log.reason) : ''}`;
       }
     } else if (log.type === 'edit') {
       typeLabel = '欄位修改'; cls = 'edit';
@@ -3292,39 +3292,39 @@ function buildLogView(log, unit) {
       detail = '';
     } else if (log.type === 'production') {
       typeLabel = '生產登記'; cls = 'production';
-      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''} × ${log.quantityProduced} 件<br>
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '（' + escapeHtml(log.variantLabel) + '）' : ''} × ${log.quantityProduced} 件<br>
         配方消耗：${log.consumedQuantity} ${escapeHtml(unit)} → 已預留
         ${log.extraLossQuantity ? `<br>額外損耗：${log.extraLossQuantity} ${escapeHtml(unit)}（損失約 NT$${(log.extraLossQuantity * (log.unitCost || 0)).toFixed(2)}）` : ''}`;
     } else if (log.type === 'productionAdjust') {
       typeLabel = '生產登記修正'; cls = 'production';
-      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
-        配方消耗調整：${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${escapeHtml(unit)}(已預留量同步調整)
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '（' + escapeHtml(log.variantLabel) + '）' : ''}<br>
+        配方消耗調整：${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${escapeHtml(unit)}（已預留量同步調整）
         ${log.extraLossDiff ? `<br>額外損耗調整：${log.extraLossDiff >= 0 ? '+' : ''}${log.extraLossDiff} ${escapeHtml(unit)}` : ''}`;
     } else if (log.type === 'shipment') {
       typeLabel = '非銷售出貨'; cls = 'shipment';
-      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''} × ${log.quantityShipped} 件<br>
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '（' + escapeHtml(log.variantLabel) + '）' : ''} × ${log.quantityShipped} 件<br>
         原因：${escapeHtml(log.reason || '')}<br>
-        消耗：${log.consumedQuantity} ${escapeHtml(unit)}(已預留 → 真正扣除)`;
+        消耗：${log.consumedQuantity} ${escapeHtml(unit)}（已預留 → 真正扣除）`;
     } else if (log.type === 'shipmentAdjust') {
       typeLabel = '非銷售出貨修正'; cls = 'shipment';
-      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '（' + escapeHtml(log.variantLabel) + '）' : ''}<br>
         原因：${escapeHtml(log.reason || '')}<br>
         消耗調整：${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${escapeHtml(unit)}`;
     } else if (log.type === 'productionLogDeleted') {
-      typeLabel = '生產登記紀錄已刪除(還原)'; cls = 'production';
-      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
+      typeLabel = '生產登記紀錄已刪除（還原）'; cls = 'production';
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '（' + escapeHtml(log.variantLabel) + '）' : ''}<br>
         釋放已預留：${log.consumedQuantity} ${escapeHtml(unit)}
         ${log.extraLossReturned ? `<br>加回額外損耗：${log.extraLossReturned} ${escapeHtml(unit)}` : ''}`;
     } else if (log.type === 'shipmentLogDeleted') {
-      typeLabel = '出貨紀錄已刪除(還原)'; cls = 'shipment';
-      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
+      typeLabel = '出貨紀錄已刪除（還原）'; cls = 'shipment';
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '（' + escapeHtml(log.variantLabel) + '）' : ''}<br>
         原因：${escapeHtml(log.reason || '')}<br>
         補回已預留+庫存：${log.consumedQuantity} ${escapeHtml(unit)}`;
     } else if (log.type === 'posSaleConfirm') {
       typeLabel = 'POS銷售確認'; cls = 'production';
-      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '(' + escapeHtml(log.variantLabel) + ')' : ''}<br>
+      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '（' + escapeHtml(log.variantLabel) + '）' : ''}<br>
         訂單：${escapeHtml(log.orderId || '')}<br>
-        消耗：${log.consumedQuantity} ${escapeHtml(unit)}(已預留 → 真正扣除,累計銷售數量 +${log.salesConfirmedQuantity || 0})`;
+        消耗：${log.consumedQuantity} ${escapeHtml(unit)}（已預留 → 真正扣除，累計銷售數量 +${log.salesConfirmedQuantity || 0}）`;
     } else if (log.type === 'historyMigration') {
       typeLabel = '歷史資料搬遷'; cls = 'migration';
       detail = `庫存：${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff >= 0 ? '+' : ''}${log.diff})<br>
@@ -3361,9 +3361,9 @@ function renderTimelineTabs() {
   const purchaseCount = timelineAllLogs.filter(l => l.type === 'purchase').length;
   const otherCount = allCount - purchaseCount;
   const tabs = [
-    { key: 'all', label: `全部(${allCount})` },
-    { key: 'purchase', label: `進貨(${purchaseCount})` },
-    { key: 'other', label: `其他(${otherCount})` },
+    { key: 'all', label: `全部（${allCount}）` },
+    { key: 'purchase', label: `進貨（${purchaseCount}）` },
+    { key: 'other', label: `其他（${otherCount}）` },
   ];
   wrap.innerHTML = tabs.map(t => `<span class="ta-timeline-tab${timelineActiveTab === t.key ? ' ta-timeline-tab--active' : ''}" data-tab="${t.key}">${escapeHtml(t.label)}</span>`).join('');
   wrap.querySelectorAll('.ta-timeline-tab').forEach(el => {
@@ -3488,7 +3488,7 @@ document.getElementById('submitEditBtn').addEventListener('click', async () => {
     closeModal('editModal');
     openDetail(m.id);
   } catch (e) {
-    alert('儲存失敗:' + e.message);
+    alert('儲存失敗：' + e.message);
   } finally {
     btn.disabled = false;
   }
@@ -3516,11 +3516,11 @@ function updateAdjustCurrentDisplay() {
   document.getElementById('adjustCurrent').value = `${current} ${unit}(${label})`;
   document.getElementById('adjustScrapTotalRow').classList.toggle('ta-is-hidden', !isScrap);
   if (isScrap) {
-    document.getElementById('adjustQtyLabel').textContent = `報廢數量(${unit},本次從正品庫存報廢幾個)`;
+    document.getElementById('adjustQtyLabel').textContent = `報廢數量（${unit}，本次從正品庫存報廢幾個）`;
     document.getElementById('adjustNewQty').value = '';
     document.getElementById('adjustScrapTotal').value = `${currentDetailScrapQtyTotal.toLocaleString()} ${unit}`;
   } else {
-    document.getElementById('adjustQtyLabel').textContent = `調整後數量(${unit},${label})`;
+    document.getElementById('adjustQtyLabel').textContent = `調整後數量（${unit}，${label}）`;
     document.getElementById('adjustNewQty').value = current;
   }
 }
@@ -3601,7 +3601,7 @@ function openHistoryMigrationModal(m) {
   historyMigrationContext = { mode: 'new', material: m };
   const unit = m.unit || '';
   document.getElementById('hmTitle').textContent = '歷史資料搬遷';
-  document.getElementById('hmSystemStockLabel').textContent = '調整前庫存(目前即時庫存)';
+  document.getElementById('hmSystemStockLabel').textContent = '調整前庫存（目前即時庫存）';
   document.getElementById('hmSystemStock').value = `${(m.currentStock || 0).toLocaleString()} ${unit}`;
   document.getElementById('hmActualStock').value = m.currentStock || 0;
   document.getElementById('hmSalesQty').value = 0;
@@ -3617,7 +3617,7 @@ function openHistoryMigrationEditModal(materialId, historyId, log) {
   historyMigrationContext = { mode: 'edit', material: m, historyId, original: log };
   const unit = m.unit || '';
   document.getElementById('hmTitle').textContent = '修正歷史資料搬遷';
-  document.getElementById('hmSystemStockLabel').textContent = '調整前庫存(這筆紀錄當初的基準,不會變動)';
+  document.getElementById('hmSystemStockLabel').textContent = '調整前庫存（這筆紀錄當初的基準，不會變動）';
   document.getElementById('hmSystemStock').value = `${(log.beforeQty || 0).toLocaleString()} ${unit}`;
   document.getElementById('hmActualStock').value = log.afterQty || 0;
   document.getElementById('hmSalesQty').value = log.salesQuantityAdded || 0;
@@ -3637,10 +3637,10 @@ function updateHistoryMigrationCheck() {
   const diff = anchor - sum;
   const resultEl = document.getElementById('hmCheckResult');
   if (Math.abs(diff) < 0.001) {
-    resultEl.innerHTML = `✓ 數字吻合(調整後庫存 + 這次新增歷史銷售 + 這次新增歷史非銷售 = 調整前庫存)`;
+    resultEl.innerHTML = `✓ 數字吻合（調整後庫存 + 這次新增歷史銷售 + 這次新增歷史非銷售 = 調整前庫存）`;
     resultEl.style.color = 'var(--success)';
   } else {
-    resultEl.innerHTML = `⚠️ 三格加總是 ${sum.toLocaleString()}，跟調整前庫存 ${anchor.toLocaleString()} 差了 ${diff.toLocaleString()}(不會擋你送出，只是提醒)`;
+    resultEl.innerHTML = `⚠️ 三格加總是 ${sum.toLocaleString()}，跟調整前庫存 ${anchor.toLocaleString()} 差了 ${diff.toLocaleString()}（不會擋你送出，只是提醒）`;
     resultEl.style.color = 'var(--warn)';
   }
 }
@@ -3697,7 +3697,7 @@ document.getElementById('submitHistoryMigrationBtn').addEventListener('click', a
     closeModal('historyMigrationModal');
     openDetail(m.id);
   } catch (e) {
-    alert('搬遷失敗:' + e.message);
+    alert('搬遷失敗：' + e.message);
   } finally {
     btn.disabled = false;
   }
@@ -3742,10 +3742,10 @@ async function saveExchangeRate(code, valueStr) {
 }
 
 document.getElementById('addCurrencyBtn').addEventListener('click', async () => {
-  const codeInput = await showInputModal({ title: '新增幣別', label: '輸入幣別代碼(如 USD)' });
+  const codeInput = await showInputModal({ title: '新增幣別', label: '輸入幣別代碼（如 USD）' });
   if (!codeInput) return;
   const code = codeInput.trim().toUpperCase();
-  if (code === 'TWD') { alert('台幣已經是基準幣別,不需要新增'); return; }
+  if (code === 'TWD') { alert('台幣已經是基準幣別，不需要新增'); return; }
   if (exchangeRates[code] !== undefined) { alert('這個幣別已經存在了'); return; }
   const rateInput = await showInputModal({ title: '設定匯率', label: `1 ${code} = ? 台幣` });
   if (!rateInput) return;
@@ -3800,7 +3800,7 @@ document.getElementById('importFileInput').addEventListener('change', async (e) 
     await processImportRows(rows);
   } catch (err) {
     document.getElementById('importSummary').innerHTML = '';
-    document.getElementById('importErrorList').innerHTML = `<div class="ta-import-errors">讀取檔案失敗:${escapeHtml(err.message)}</div>`;
+    document.getElementById('importErrorList').innerHTML = `<div class="ta-import-errors">讀取檔案失敗：${escapeHtml(err.message)}</div>`;
   }
 });
 
@@ -3873,9 +3873,9 @@ async function processImportRows(rows) {
     const dateVal = parseImportDate(row['進貨日期']);
 
     const rowErrors = [];
-    if (!dateVal) rowErrors.push('進貨日期格式錯誤或空白(請用 YYYY-MM-DD)');
+    if (!dateVal) rowErrors.push('進貨日期格式錯誤或空白（請用 YYYY-MM-DD）');
     const validCurrencies = ['TWD', ...Object.keys(exchangeRates)];
-    if (!validCurrencies.includes(currency)) rowErrors.push(`幣別必須是系統已設定的幣別之一(${validCurrencies.join('、')}),如需新幣別請先到「匯率設定」新增`);
+    if (!validCurrencies.includes(currency)) rowErrors.push(`幣別必須是系統已設定的幣別之一（${validCurrencies.join('、')}），如需新幣別請先到「匯率設定」新增`);
     if (!['total','unit','package'].includes(amountMode)) rowErrors.push('金額類型必須是 total、unit 或 package');
     if (amount === '' || amount == null || isNaN(Number(amount)) || Number(amount) < 0) rowErrors.push('金額必須是不小於0的數字');
     if (!quantityUnit) rowErrors.push('數量單位不能空白');
@@ -3885,8 +3885,8 @@ async function processImportRows(rows) {
       pkgBaseQty = (pkgBaseQtyRaw === '' || pkgBaseQtyRaw == null) ? 1 : Number(pkgBaseQtyRaw);
       pkgUnitQty = Number(pkgUnitQtyRaw);
       pkgCount = Number(pkgCountRaw);
-      if (!pkgUnit) rowErrors.push('金額類型為 package 時,包裝單位不能空白');
-      if (isNaN(pkgBaseQty) || pkgBaseQty <= 0) rowErrors.push('報價基準數量必須是大於0的數字(留空預設為1)');
+      if (!pkgUnit) rowErrors.push('金額類型為 package 時，包裝單位不能空白');
+      if (isNaN(pkgBaseQty) || pkgBaseQty <= 0) rowErrors.push('報價基準數量必須是大於0的數字（留空預設為1）');
       if (pkgUnitQtyRaw === '' || pkgUnitQtyRaw == null || isNaN(pkgUnitQty) || pkgUnitQty <= 0) rowErrors.push('每包顆數必須是大於0的數字');
       if (pkgCountRaw === '' || pkgCountRaw == null || isNaN(pkgCount) || pkgCount <= 0) rowErrors.push('購買份數必須是大於0的數字');
       if (!rowErrors.length) receivedQuantity = pkgUnitQty * pkgCount;
@@ -3903,7 +3903,7 @@ async function processImportRows(rows) {
     if (isNaN(extraQuantity) || extraQuantity < 0) rowErrors.push('多給數量不能是負數');
     if (isNaN(scrapQuantity) || scrapQuantity < 0) rowErrors.push('報廢數量不能是負數');
     if (isNaN(secondaryQuantity) || secondaryQuantity < 0) rowErrors.push('次品數量不能是負數');
-    if (!rowErrors.length && (shortageQuantity + scrapQuantity + secondaryQuantity > receivedQuantity)) rowErrors.push('短少數量+報廢數量+次品數量不能超過本次進貨(訂購)數量');
+    if (!rowErrors.length && (shortageQuantity + scrapQuantity + secondaryQuantity > receivedQuantity)) rowErrors.push('短少數量+報廢數量+次品數量不能超過本次進貨（訂購）數量');
 
     if (rowErrors.length) {
       errors.push({ row: rowNum, messages: rowErrors });
@@ -3943,7 +3943,7 @@ async function processImportRows(rows) {
     });
     if (!existing && !(options.categoryCodes || {})[category]) {
       groupRows.forEach(r => {
-        errors.push({ row: r.rowNum, messages: [`分類「${category}」還沒有設定材料編號用的代碼,請先到選項管理補上代碼`] });
+        errors.push({ row: r.rowNum, messages: [`分類「${category}」還沒有設定材料編號用的代碼，請先到選項管理補上代碼`] });
       });
     }
   }
@@ -3952,8 +3952,8 @@ async function processImportRows(rows) {
     errors.sort((a, b) => a.row - b.row);
     summaryEl.innerHTML = '';
     errorListEl.innerHTML = `<div class="ta-import-errors">
-      共 ${rows.length} 列資料${skippedCount ? `(略過 ${skippedCount} 列)` : ''},發現 ${errors.length} 列有問題,請修正後重新上傳(本次不會匯入任何資料):
-      <ul>${errors.map(e => `<li>第 ${e.row} 列:${e.messages.map(escapeHtml).join(';')}</li>`).join('')}</ul>
+      共 ${rows.length} 列資料${skippedCount ? `（略過 ${skippedCount} 列）` : ''}，發現 ${errors.length} 列有問題，請修正後重新上傳（本次不會匯入任何資料）：
+      <ul>${errors.map(e => `<li>第 ${e.row} 列：${e.messages.map(escapeHtml).join('；')}</li>`).join('')}</ul>
     </div>`;
     document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
     importParsedGroups = null;
@@ -3962,7 +3962,7 @@ async function processImportRows(rows) {
 
   if (!parsedRows.length) {
     summaryEl.innerHTML = '';
-    errorListEl.innerHTML = `<div class="ta-import-errors">共 ${rows.length} 列資料,全部被標記略過,沒有資料可以匯入。</div>`;
+    errorListEl.innerHTML = `<div class="ta-import-errors">共 ${rows.length} 列資料，全部被標記略過，沒有資料可以匯入。</div>`;
     document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
     importParsedGroups = null;
     return;
@@ -4013,7 +4013,7 @@ async function processImportRows(rows) {
             Number(p.originalAmount) === Number(r.amount) && Number(p.receivedQuantity) === Number(r.receivedQuantity);
         });
         if (isDup) {
-          duplicateInfos.push(`第 ${r.rowNum} 列:${rDateStr}／${r.seller || '(無供應商)'}／金額${r.amount}／數量${r.receivedQuantity}`);
+          duplicateInfos.push(`第 ${r.rowNum} 列：${rDateStr}／${r.seller || '（無供應商）'}／金額${r.amount}／數量${r.receivedQuantity}`);
         }
         return !isDup;
       });
@@ -4033,7 +4033,7 @@ async function processImportRows(rows) {
   errorListEl.innerHTML = '';
 
   if (!groupInfos.length) {
-    summaryEl.innerHTML = `<div class="ta-import-summary">共讀取 ${rows.length} 列,經過重複比對後全部都是已匯入過的資料,沒有新的紀錄可以匯入。</div>`;
+    summaryEl.innerHTML = `<div class="ta-import-summary">共讀取 ${rows.length} 列，經過重複比對後全部都是已匯入過的資料，沒有新的紀錄可以匯入。</div>`;
     document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
     importParsedGroups = null;
     return;
@@ -4041,11 +4041,11 @@ async function processImportRows(rows) {
 
   importParsedGroups = groupInfos;
   summaryEl.innerHTML = `<div class="ta-import-summary">
-    共讀取 ${rows.length} 列,全部通過驗證${skippedCount ? `(另外略過 ${skippedCount} 列,不會匯入)` : ''}。<br>
-    將新增 ${newMaterialCount} 款新材料(共 ${newRowCount} 筆進貨紀錄)。<br>
-    將累加到 ${mergeMaterialCount} 款既有材料(共 ${mergeRowCount} 筆進貨紀錄)。
+    共讀取 ${rows.length} 列，全部通過驗證${skippedCount ? `（另外略過 ${skippedCount} 列，不會匯入）` : ''}。<br>
+    將新增 ${newMaterialCount} 款新材料（共 ${newRowCount} 筆進貨紀錄）。<br>
+    將累加到 ${mergeMaterialCount} 款既有材料（共 ${mergeRowCount} 筆進貨紀錄）。
   </div>${duplicateInfos.length ? `<div class="ta-import-info">
-    ℹ️ 另外偵測到 ${duplicateInfos.length} 列跟現有進貨紀錄的日期/供應商/金額/數量完全相同,判斷為重複資料,將自動略過不匯入:
+    ℹ️ 另外偵測到 ${duplicateInfos.length} 列跟現有進貨紀錄的日期/供應商/金額/數量完全相同，判斷為重複資料，將自動略過不匯入：
     <ul>${duplicateInfos.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul>
   </div>` : ''}`;
   document.getElementById('confirmImportBtn').classList.remove('ta-is-hidden');
@@ -4057,7 +4057,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
   btn.disabled = true;
   const progressEl = document.getElementById('importProgress');
   progressEl.classList.remove('ta-is-hidden');
-  progressEl.textContent = '匯入中,請稍候...';
+  progressEl.textContent = '匯入中，請稍候...';
 
   try {
     // 先把匯入資料裡出現的新選項值(分類/品牌/材質/類型/單位)補進選項清單
@@ -4195,21 +4195,21 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
 
     await refreshMaterialsLocal(touchedMaterialIds);
 
-    progressEl.textContent = `匯入完成!共處理 ${totalRows} 筆進貨紀錄。`;
+    progressEl.textContent = `匯入完成！共處理 ${totalRows} 筆進貨紀錄。`;
     document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
     document.getElementById('importSummary').innerHTML = '';
     importParsedGroups = null;
   } catch (err) {
     progressEl.textContent = '';
-    document.getElementById('importErrorList').innerHTML = `<div class="ta-import-errors">匯入失敗:${escapeHtml(err.message)}</div>`;
+    document.getElementById('importErrorList').innerHTML = `<div class="ta-import-errors">匯入失敗：${escapeHtml(err.message)}</div>`;
   } finally {
     btn.disabled = false;
   }
 });
 
 // ---------- 匯出資料 ----------
-const EXPORT_HISTORY_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','供應商原始顏色名稱/代號','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註','換算台幣總額','換算單價(台幣)','換算人民幣總額','換算單價(人民幣)'];
-const EXPORT_MASTER_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','顏色','單位','目前庫存','次品庫存','已預留數量','進價(歷史最高單價)','加權平均成本','狀態'];
+const EXPORT_HISTORY_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','供應商原始顏色名稱/代號','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註','換算台幣總額','換算單價（台幣）','換算人民幣總額','換算單價（人民幣）'];
+const EXPORT_MASTER_HEADERS = ['編號','分類','品牌','材質','類型/款式','尺寸','顏色','單位','目前庫存','次品庫存','已預留數量','進價（歷史最高單價）','加權平均成本','狀態'];
 const EXPORT_OTHER_LOGS_HEADERS = ['材料編號','材料名稱','分類','紀錄類型','時間','摘要','說明'];
 
 // 材料詳情頁時間軸的 buildLogView() 是為了畫面顯示設計的,detail 欄位是帶 <br>/HTML實體escape的字串;
@@ -4229,13 +4229,13 @@ function checkExportReminder() {
   const banner = document.getElementById('exportReminder');
   const lastExportAt = options.lastExportAt;
   if (!lastExportAt || !lastExportAt.toDate) {
-    document.getElementById('exportReminderText').textContent = '您還沒有匯出過資料備份,建議定期匯出一份存在雲端(如 Google Drive)。';
+    document.getElementById('exportReminderText').textContent = '您還沒有匯出過資料備份，建議定期匯出一份存在雲端（如 Google Drive）。';
     banner.classList.remove('ta-is-hidden');
     return;
   }
   const daysSince = Math.floor((Date.now() - lastExportAt.toDate().getTime()) / (1000 * 60 * 60 * 24));
   if (daysSince >= EXPORT_REMINDER_DAYS) {
-    document.getElementById('exportReminderText').textContent = `距離上次匯出已經 ${daysSince} 天,建議定期匯出一份資料備份存在雲端(如 Google Drive)。`;
+    document.getElementById('exportReminderText').textContent = `距離上次匯出已經 ${daysSince} 天，建議定期匯出一份資料備份存在雲端（如 Google Drive）。`;
     banner.classList.remove('ta-is-hidden');
   } else {
     banner.classList.add('ta-is-hidden');
@@ -4388,7 +4388,7 @@ document.getElementById('confirmExportBtn').addEventListener('click', async () =
     checkExportReminder();
     closeModal('exportScopeModal');
   } catch (err) {
-    alert('匯出失敗:' + err.message);
+    alert('匯出失敗：' + err.message);
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
@@ -4406,7 +4406,7 @@ document.getElementById('openHistoryCountBtn').addEventListener('click', async (
     const countSnap = await getCountFromServer(collectionGroup(db, 'history'));
     alert(`目前全部材料累計共有 ${countSnap.data().count} 筆進貨紀錄。`);
   } catch (err) {
-    alert('查詢失敗:' + err.message);
+    alert('查詢失敗：' + err.message);
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
@@ -4458,7 +4458,7 @@ document.getElementById('wipeScopeSelect').addEventListener('change', async () =
   const reservedMaterials = targetMaterials.filter(m => (m.reservedStock || 0) > 0);
   if (reservedMaterials.length) {
     const names = reservedMaterials.map(m => displayName(m)).join('\n');
-    previewEl.textContent = `⚠️ 這個範圍裡有 ${reservedMaterials.length} 款材料目前「已預留數量」大於0,代表有已製作未售出的成品卡在它們身上,無法清除。\n\n${names}\n\n請先確認這些成品的生產登記/出貨狀況,把已預留數量歸零後再重新清除。`;
+    previewEl.textContent = `⚠️ 這個範圍裡有 ${reservedMaterials.length} 款材料目前「已預留數量」大於0，代表有已製作未售出的成品卡在它們身上，無法清除。\n\n${names}\n\n請先確認這些成品的生產登記/出貨狀況，把已預留數量歸零後再重新清除。`;
     return;
   }
 
@@ -4500,7 +4500,7 @@ document.getElementById('wipeScopeSelect').addEventListener('change', async () =
     });
     if (productsByMaterialId.size) {
       const lines = [...productsByMaterialId.entries()].map(([materialId, names]) => `${materialLabel(materialId)}\n → ${names.join('、')}`);
-      referenceWarning += `\n\n⚠️ 以下 ${productsByMaterialId.size} 款材料被成品配方使用中:\n\n${lines.join('\n\n')}\n\n清除後這些配方會找不到對應的材料。`;
+      referenceWarning += `\n\n⚠️ 以下 ${productsByMaterialId.size} 款材料被成品配方使用中：\n\n${lines.join('\n\n')}\n\n清除後這些配方會找不到對應的材料。`;
     }
 
     // 同時檢查 BOM 的「必備材料組合」(settings/productOptions.requiredMaterials),
@@ -4519,14 +4519,14 @@ document.getElementById('wipeScopeSelect').addEventListener('change', async () =
     });
     if (combosByMaterialId.size) {
       const lines = [...combosByMaterialId.entries()].map(([materialId, names]) => `${materialLabel(materialId)}\n → ${names.join('、')}`);
-      referenceWarning += `\n\n⚠️ 以下 ${combosByMaterialId.size} 款材料被成品分類的必備材料組合使用中:\n\n${lines.join('\n\n')}\n\n清除後這些組合會找不到對應的材料。`;
+      referenceWarning += `\n\n⚠️ 以下 ${combosByMaterialId.size} 款材料被成品分類的必備材料組合使用中：\n\n${lines.join('\n\n')}\n\n清除後這些組合會找不到對應的材料。`;
     }
   } catch (e) {
     // 讀取失敗不擋清除流程,只是少了這項提醒
   }
 
   const scopeLabel = scope === '__ALL__' ? '全部分類' : `「${scope}」`;
-  previewEl.textContent = `${scopeLabel}目前有 ${targetMaterials.length} 筆材料、${historyCount} 筆進貨紀錄,清除後無法復原。${referenceWarning}`;
+  previewEl.textContent = `${scopeLabel}目前有 ${targetMaterials.length} 筆材料、${historyCount} 筆進貨紀錄，清除後無法復原。${referenceWarning}`;
   passwordRow.classList.remove('ta-is-hidden');
   confirmBtn.classList.remove('ta-is-hidden');
 });
@@ -4562,7 +4562,7 @@ document.getElementById('confirmWipeBtn').addEventListener('click', async () => 
   } catch (err) {
     progressEl.classList.add('ta-is-hidden');
     progressEl.textContent = '';
-    errEl.textContent = '密碼錯誤,未執行清除';
+    errEl.textContent = '密碼錯誤，未執行清除';
     errEl.classList.remove('ta-is-hidden');
     btn.disabled = false;
     return;
@@ -4617,11 +4617,11 @@ document.getElementById('confirmWipeBtn').addEventListener('click', async () => 
     removeMaterialsLocal(targetMaterials.map(m => m.id));
 
     const scopeLabel = scope === '__ALL__' ? '全部分類' : `「${scope}」`;
-    progressEl.textContent = `清除完成！已清除${scopeLabel}共 ${targetMaterials.length} 筆材料、${historyCount} 筆歷史紀錄,對應的材料編號也已重新歸零。`;
+    progressEl.textContent = `清除完成！已清除${scopeLabel}共 ${targetMaterials.length} 筆材料、${historyCount} 筆歷史紀錄，對應的材料編號也已重新歸零。`;
     btn.classList.add('ta-is-hidden');
   } catch (err) {
     progressEl.textContent = '';
-    errEl.textContent = '清除失敗:' + err.message;
+    errEl.textContent = '清除失敗：' + err.message;
     errEl.classList.remove('ta-is-hidden');
     btn.disabled = false;
   }
