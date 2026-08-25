@@ -1773,7 +1773,7 @@ function createImagePicker(containerId) {
         <span class="ta-image-picker-remove" data-idx="${idx}">✕</span>
       </div>
     `).join('') + (items.length < MATERIAL_IMAGE_MAX_COUNT
-      ? `<label class="ta-image-picker-add">＋<input type="file" accept="image/*" capture="environment" style="display:none;"></label>`
+      ? `<label class="ta-image-picker-add">＋<input type="file" accept="image/*" style="display:none;"></label>`
       : '');
 
     container.querySelectorAll('.ta-image-picker-remove').forEach(el => {
@@ -4424,7 +4424,7 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
       });
       await batch.commit();
       committed += chunk.length;
-      progressEl.textContent = `匯入中... 已寫入 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作`;
+      progressEl.textContent = `匯入中... 已寫入 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作（含新增材料與進貨紀錄，不是列數）`;
     }
 
     await refreshMaterialsLocal(touchedMaterialIds);
@@ -4830,7 +4830,7 @@ document.getElementById('confirmWipeBtn').addEventListener('click', async () => 
       chunk.forEach(ref => batch.delete(ref));
       await batch.commit();
       committed += chunk.length;
-      progressEl.textContent = `清除中... 已處理 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作`;
+      progressEl.textContent = `清除中... 已處理 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作（材料 ${targetMaterials.length} 筆 + 歷史紀錄 ${historyCount} 筆）`;
     }
 
     // 記錄這些材料被刪除了,讓其他分頁/下次開頁的「本機快取只抓變動」機制知道要把這些從本機清單移除
