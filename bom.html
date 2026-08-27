@@ -585,7 +585,7 @@
   </div>
 </div>
 
-<!-- 生產登記 / 修正生產登記 Modal(共用同一套介面) -->
+<!-- 生產登記 Modal -->
 <div class="ta-modal-overlay" id="productionFormModal">
   <div class="ta-modal ta-modal--wide">
     <span class="ta-modal-close" data-close="productionFormModal">✕</span>
@@ -619,7 +619,7 @@
   </div>
 </div>
 
-<!-- 登記出貨(非銷售) / 修正 Modal -->
+<!-- 登記出貨(非銷售) Modal -->
 <div class="ta-modal-overlay" id="shipmentFormModal">
   <div class="ta-modal ta-modal--wide">
     <span class="ta-modal-close" data-close="shipmentFormModal">✕</span>
@@ -2686,7 +2686,7 @@ async function deleteProductionLog(productId, log) {
 // ---------- 登記出貨(非銷售):贈送/自用/拍照樣品/損壞銷毀等,不透過 POS 的成品出貨 ----------
 // 效果等同於手動觸發一次「確認出貨」:材料 reservedStock 釋放、currentStock 真正扣除,
 // 成品「已製作未售出」對應減少,材料異動歷史會累加「累計非銷售數量」。
-// 消耗量是用「目前的配方」即時算(不像生產登記修正會回頭用登記當時的配方),
+// 消耗量是用「目前的配方」即時算(不像生產登記本身會把登記當時的配方明細存下來),
 // 因為已製作未售出是不分批次的總量,沒有另外做批次追蹤;如果常常事後改配方,數字可能會有些微落差。
 let shipmentFormContext = null;
 

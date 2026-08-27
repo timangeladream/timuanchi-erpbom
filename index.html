@@ -3443,9 +3443,7 @@ function buildLogSummary(log, unit) {
     return `${log.diff >= 0 ? '+' : ''}${log.diff} ${unit}`;
   }
   if (log.type === 'production') return `${log.quantityProduced} 件`;
-  if (log.type === 'productionAdjust') return `${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${unit}`;
   if (log.type === 'shipment') return `${log.quantityShipped} 件`;
-  if (log.type === 'shipmentAdjust') return `${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${unit}`;
   if (log.type === 'productionLogDeleted' || log.type === 'shipmentLogDeleted' || log.type === 'posSaleConfirm') {
     return `${log.consumedQuantity} ${unit}`;
   }
@@ -3514,21 +3512,11 @@ function buildLogView(log, unit) {
       detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '（' + escapeHtml(log.variantLabel) + '）' : ''} × ${log.quantityProduced} 件<br>
         配方消耗：${log.consumedQuantity} ${escapeHtml(unit)} → 已預留
         ${log.extraLossQuantity ? `<br>額外損耗：${log.extraLossQuantity} ${escapeHtml(unit)}（損失約 NT$${(log.extraLossQuantity * (log.unitCost || 0)).toFixed(2)}）` : ''}`;
-    } else if (log.type === 'productionAdjust') {
-      typeLabel = '生產登記修正'; cls = 'production';
-      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '（' + escapeHtml(log.variantLabel) + '）' : ''}<br>
-        配方消耗調整：${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${escapeHtml(unit)}（已預留量同步調整）
-        ${log.extraLossDiff ? `<br>額外損耗調整：${log.extraLossDiff >= 0 ? '+' : ''}${log.extraLossDiff} ${escapeHtml(unit)}` : ''}`;
     } else if (log.type === 'shipment') {
       typeLabel = '非銷售出貨'; cls = 'shipment';
       detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '（' + escapeHtml(log.variantLabel) + '）' : ''} × ${log.quantityShipped} 件<br>
         原因：${escapeHtml(log.reason || '')}<br>
         消耗：${log.consumedQuantity} ${escapeHtml(unit)}（已預留 → 真正扣除）`;
-    } else if (log.type === 'shipmentAdjust') {
-      typeLabel = '非銷售出貨修正'; cls = 'shipment';
-      detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '（' + escapeHtml(log.variantLabel) + '）' : ''}<br>
-        原因：${escapeHtml(log.reason || '')}<br>
-        消耗調整：${log.consumedDiff >= 0 ? '+' : ''}${log.consumedDiff} ${escapeHtml(unit)}`;
     } else if (log.type === 'productionLogDeleted') {
       typeLabel = '生產登記紀錄已刪除（還原）'; cls = 'production';
       detail = `成品：${escapeHtml(log.productName || '')}${log.variantLabel ? '（' + escapeHtml(log.variantLabel) + '）' : ''}<br>
