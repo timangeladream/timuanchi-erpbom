@@ -3991,12 +3991,16 @@ const HISTORY_MIGRATION_IMPORT_HEADERS = ['材料編號', '調整後庫存(實�
 
 const IMPORT_TYPE_CONFIG = {
   purchase: { headers: IMPORT_TEMPLATE_HEADERS, sheetName: '匯入範本', fileName: '材料進貨匯入範本.xlsx',
+    buttonLabel: '下載新增進貨空白範例檔案',
     hint: '提示：「略過」欄位填入任何文字，該列就不會被匯入，但仍會保留在檔案裡（不用刪除資料列）。' },
   adjust: { headers: ADJUST_IMPORT_HEADERS, sheetName: '人工盤點調整範本', fileName: '材料人工盤點調整匯入範本.xlsx',
+    buttonLabel: '下載人工盤點調整空白範例檔案',
     hint: '提示：材料編號必須對應到已存在的材料；正品庫存/次品庫存填的是「盤點後的實際數字」，不是差異值，留空代表這款材料不調整該欄位；不支援批次調整已預留數量。' },
   archive: { headers: ARCHIVE_IMPORT_HEADERS, sheetName: '上架下架範本', fileName: '材料上架下架匯入範本.xlsx',
+    buttonLabel: '下載上架/下架空白範例檔案',
     hint: '提示：材料編號必須對應到已存在的材料；是否上架請填 Y（上架）或 N（下架）。' },
   historyMigration: { headers: HISTORY_MIGRATION_IMPORT_HEADERS, sheetName: '歷史資料搬遷範本', fileName: '材料歷史資料搬遷匯入範本.xlsx',
+    buttonLabel: '下載歷史資料搬遷空白範例檔案',
     hint: '提示：材料編號必須對應到已存在的材料；調整後庫存填絕對值（盤點到多少填多少），但歷史銷售/非銷售數量是疊加上去、不是取代，同一款材料在檔案裡出現兩次會疊加兩次。' },
 };
 
@@ -4008,7 +4012,9 @@ document.getElementById('downloadImportTemplateBtn').addEventListener('click', (
 });
 
 document.getElementById('importTypeSelect').addEventListener('change', () => {
-  document.getElementById('importTypeHint').textContent = IMPORT_TYPE_CONFIG[document.getElementById('importTypeSelect').value].hint;
+  const config = IMPORT_TYPE_CONFIG[document.getElementById('importTypeSelect').value];
+  document.getElementById('importTypeHint').textContent = config.hint;
+  document.getElementById('downloadImportTemplateBtn').textContent = config.buttonLabel;
   resetImportModal();
 });
 
@@ -4016,6 +4022,7 @@ document.getElementById('openImportBtn').addEventListener('click', () => {
   closeDrawer();
   document.getElementById('importTypeSelect').value = 'purchase';
   document.getElementById('importTypeHint').textContent = IMPORT_TYPE_CONFIG.purchase.hint;
+  document.getElementById('downloadImportTemplateBtn').textContent = IMPORT_TYPE_CONFIG.purchase.buttonLabel;
   resetImportModal();
   openModal('importModal');
 });
