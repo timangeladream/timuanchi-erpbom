@@ -1157,10 +1157,19 @@
   <div class="ta-modal ta-modal--wide">
     <span class="ta-modal-close" data-close="importModal">✕</span>
     <h2>匯入資料</h2>
-    <button class="ta-btn" id="downloadImportTemplateBtn">下載空白範例檔案</button>
-    <div class="ta-modal-text">提示：「略過」欄位填入任何文字，該列就不會被匯入，但仍會保留在檔案裡（不用刪除資料列）。</div>
     <div class="ta-form-row">
-      <label>選擇進貨紀錄 Excel 檔案（.xlsx）</label>
+      <label>匯入類型</label>
+      <select id="importTypeSelect">
+        <option value="purchase">新增進貨</option>
+        <option value="adjust">人工盤點調整</option>
+        <option value="archive">上架/下架</option>
+        <option value="historyMigration">歷史資料搬遷</option>
+      </select>
+    </div>
+    <button class="ta-btn" id="downloadImportTemplateBtn">下載空白範例檔案</button>
+    <div class="ta-modal-text" id="importTypeHint">提示：「略過」欄位填入任何文字，該列就不會被匯入，但仍會保留在檔案裡（不用刪除資料列）。</div>
+    <div class="ta-form-row">
+      <label>選擇 Excel 檔案（.xlsx）</label>
       <input type="file" id="importFileInput" accept=".xlsx,.xls">
     </div>
     <div id="importSummary"></div>
@@ -3970,18 +3979,43 @@ document.getElementById('addCurrencyBtn').addEventListener('click', async () => 
 
 // ---------- 匯入資料 ----------
 let importParsedGroups = null; // 驗證通過後暫存,供確認匯入時使用
+let importParsedAdjustRows = null; // 人工盤點調整匯入:驗證通過後暫存
+let importParsedArchiveRows = null; // 上架/下架匯入:驗證通過後暫存
+let importParsedHistoryMigrationRows = null; // 歷史資料搬遷匯入:驗證通過後暫存
 
 // 跟 processImportRows() 實際讀取的欄位名稱保持一致,兩邊有新增/異動欄位時務必同步修改
 const IMPORT_TEMPLATE_HEADERS = ['分類','品牌','材質','類型/款式','尺寸','色系名稱','顏色','供應商原始顏色名稱/代號','同色標籤','材料備註','進貨日期','進貨國家/平台','供應商名稱','幣別','金額類型','金額','包裝單位','報價基準數量','每包顆數','購買份數','本次進貨數量','數量單位','短少數量','多給數量','報廢數量','次品數量','進貨備註','圖片網址1','圖片網址2','圖片網址3','略過'];
+const ADJUST_IMPORT_HEADERS = ['材料編號', '正品庫存(盤點後數量,留空=不調整)', '次品庫存(盤點後數量,留空=不調整)', '調整原因', '略過'];
+const ARCHIVE_IMPORT_HEADERS = ['材料編號', '是否上架(Y/N)', '略過'];
+const HISTORY_MIGRATION_IMPORT_HEADERS = ['材料編號', '調整後庫存(實際盤點到的數字)', '這次新增的歷史銷售數量', '這次新增的歷史非銷售數量', '略過'];
+
+const IMPORT_TYPE_CONFIG = {
+  purchase: { headers: IMPORT_TEMPLATE_HEADERS, sheetName: '匯入範本', fileName: '材料進貨匯入範本.xlsx',
+    hint: '提示：「略過」欄位填入任何文字，該列就不會被匯入，但仍會保留在檔案裡（不用刪除資料列）。' },
+  adjust: { headers: ADJUST_IMPORT_HEADERS, sheetName: '人工盤點調整範本', fileName: '材料人工盤點調整匯入範本.xlsx',
+    hint: '提示：材料編號必須對應到已存在的材料；正品庫存/次品庫存填的是「盤點後的實際數字」，不是差異值，留空代表這款材料不調整該欄位；不支援批次調整已預留數量。' },
+  archive: { headers: ARCHIVE_IMPORT_HEADERS, sheetName: '上架下架範本', fileName: '材料上架下架匯入範本.xlsx',
+    hint: '提示：材料編號必須對應到已存在的材料；是否上架請填 Y（上架）或 N（下架）。' },
+  historyMigration: { headers: HISTORY_MIGRATION_IMPORT_HEADERS, sheetName: '歷史資料搬遷範本', fileName: '材料歷史資料搬遷匯入範本.xlsx',
+    hint: '提示：材料編號必須對應到已存在的材料；調整後庫存填絕對值（盤點到多少填多少），但歷史銷售/非銷售數量是疊加上去、不是取代，同一款材料在檔案裡出現兩次會疊加兩次。' },
+};
 
 document.getElementById('downloadImportTemplateBtn').addEventListener('click', () => {
+  const config = IMPORT_TYPE_CONFIG[document.getElementById('importTypeSelect').value];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([IMPORT_TEMPLATE_HEADERS]), '匯入範本');
-  XLSX.writeFile(wb, '材料進貨匯入範本.xlsx');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([config.headers]), config.sheetName);
+  XLSX.writeFile(wb, config.fileName);
+});
+
+document.getElementById('importTypeSelect').addEventListener('change', () => {
+  document.getElementById('importTypeHint').textContent = IMPORT_TYPE_CONFIG[document.getElementById('importTypeSelect').value].hint;
+  resetImportModal();
 });
 
 document.getElementById('openImportBtn').addEventListener('click', () => {
   closeDrawer();
+  document.getElementById('importTypeSelect').value = 'purchase';
+  document.getElementById('importTypeHint').textContent = IMPORT_TYPE_CONFIG.purchase.hint;
   resetImportModal();
   openModal('importModal');
 });
@@ -3995,6 +4029,9 @@ function resetImportModal() {
   progressEl.textContent = '';
   document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
   importParsedGroups = null;
+  importParsedAdjustRows = null;
+  importParsedArchiveRows = null;
+  importParsedHistoryMigrationRows = null;
 }
 
 document.getElementById('importFileInput').addEventListener('change', async (e) => {
@@ -4004,13 +4041,20 @@ document.getElementById('importFileInput').addEventListener('change', async (e) 
   document.getElementById('importErrorList').innerHTML = '';
   document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
   importParsedGroups = null;
+  importParsedAdjustRows = null;
+  importParsedArchiveRows = null;
+  importParsedHistoryMigrationRows = null;
 
   try {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array', cellDates: true });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', blankrows: true });
-    await processImportRows(rows);
+    const importType = document.getElementById('importTypeSelect').value;
+    if (importType === 'purchase') await processImportRows(rows);
+    else if (importType === 'adjust') processAdjustImportRows(rows);
+    else if (importType === 'archive') processArchiveImportRows(rows);
+    else if (importType === 'historyMigration') processHistoryMigrationImportRows(rows);
   } catch (err) {
     document.getElementById('importSummary').innerHTML = '';
     document.getElementById('importErrorList').innerHTML = `<div class="ta-import-errors">讀取檔案失敗：${escapeHtml(err.message)}</div>`;
@@ -4269,7 +4313,241 @@ async function processImportRows(rows) {
   document.getElementById('confirmImportBtn').classList.remove('ta-is-hidden');
 }
 
-document.getElementById('confirmImportBtn').addEventListener('click', async () => {
+// 人工盤點調整/上架下架/歷史資料搬遷這三種匯入,都是針對「已存在的材料」做異動,
+// 用材料編號比對(唯一、使用者看得懂),不像新增進貨那樣需要7個欄位一起比對身分
+function processAdjustImportRows(rows) {
+  const summaryEl = document.getElementById('importSummary');
+  const errorListEl = document.getElementById('importErrorList');
+
+  if (!rows.length) {
+    summaryEl.innerHTML = '';
+    errorListEl.innerHTML = '<div class="ta-import-errors">檔案裡沒有讀到任何資料列。</div>';
+    return;
+  }
+
+  const errors = [];
+  const parsedRows = [];
+  const seenCodes = new Set();
+  let skippedCount = 0;
+
+  rows.forEach((row, idx) => {
+    const rowNum = idx + 2;
+    if (Object.values(row).every(v => v === '' || v == null)) return;
+    if (String(row['略過'] ?? '').trim()) { skippedCount++; return; }
+    const materialCode = String(row['材料編號'] ?? '').trim();
+    const primaryRaw = row['正品庫存(盤點後數量,留空=不調整)'];
+    const secondaryRaw = row['次品庫存(盤點後數量,留空=不調整)'];
+    const reason = String(row['調整原因'] ?? '').trim();
+
+    const rowErrors = [];
+    if (!materialCode) rowErrors.push('材料編號不能空白');
+    const material = materialCode ? materials.find(m => m.materialCode === materialCode) : null;
+    if (materialCode && !material) rowErrors.push(`找不到材料編號「${materialCode}」`);
+
+    const hasPrimary = primaryRaw !== '' && primaryRaw != null;
+    const hasSecondary = secondaryRaw !== '' && secondaryRaw != null;
+    let primaryQty = null, secondaryQty = null;
+    if (hasPrimary) {
+      primaryQty = Number(primaryRaw);
+      if (isNaN(primaryQty) || primaryQty < 0) rowErrors.push('正品庫存必須是不小於0的數字');
+    }
+    if (hasSecondary) {
+      secondaryQty = Number(secondaryRaw);
+      if (isNaN(secondaryQty) || secondaryQty < 0) rowErrors.push('次品庫存必須是不小於0的數字');
+    }
+    if (!hasPrimary && !hasSecondary) rowErrors.push('正品庫存、次品庫存至少要填一個');
+
+    if (materialCode) {
+      if (seenCodes.has(materialCode)) rowErrors.push(`材料編號「${materialCode}」在檔案裡重複出現，同一款材料請只填一列`);
+      seenCodes.add(materialCode);
+    }
+
+    if (rowErrors.length) {
+      errors.push({ row: rowNum, messages: rowErrors });
+      return;
+    }
+
+    parsedRows.push({ rowNum, materialId: material.id, materialCode, primaryQty, secondaryQty, reason });
+  });
+
+  if (errors.length) {
+    errors.sort((a, b) => a.row - b.row);
+    summaryEl.innerHTML = '';
+    errorListEl.innerHTML = `<div class="ta-import-errors">
+      共 ${rows.length} 列資料${skippedCount ? `（略過 ${skippedCount} 列）` : ''}，發現 ${errors.length} 列有問題，請修正後重新上傳（本次不會匯入任何資料）：
+      <ul>${errors.map(e => `<li>第 ${e.row} 列：${e.messages.map(escapeHtml).join('；')}</li>`).join('')}</ul>
+    </div>`;
+    document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+    importParsedAdjustRows = null;
+    return;
+  }
+
+  if (!parsedRows.length) {
+    summaryEl.innerHTML = '';
+    errorListEl.innerHTML = `<div class="ta-import-errors">共 ${rows.length} 列資料，全部被標記略過，沒有資料可以匯入。</div>`;
+    document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+    importParsedAdjustRows = null;
+    return;
+  }
+
+  importParsedAdjustRows = parsedRows;
+  errorListEl.innerHTML = '';
+  summaryEl.innerHTML = `<div class="ta-import-summary">
+    共讀取 ${rows.length} 列，全部通過驗證${skippedCount ? `（另外略過 ${skippedCount} 列，不會匯入）` : ''}。<br>
+    將調整 ${parsedRows.length} 款材料的庫存。
+  </div>`;
+  document.getElementById('confirmImportBtn').classList.remove('ta-is-hidden');
+}
+
+function processArchiveImportRows(rows) {
+  const summaryEl = document.getElementById('importSummary');
+  const errorListEl = document.getElementById('importErrorList');
+
+  if (!rows.length) {
+    summaryEl.innerHTML = '';
+    errorListEl.innerHTML = '<div class="ta-import-errors">檔案裡沒有讀到任何資料列。</div>';
+    return;
+  }
+
+  const errors = [];
+  const parsedRows = [];
+  const seenCodes = new Set();
+  let skippedCount = 0;
+
+  rows.forEach((row, idx) => {
+    const rowNum = idx + 2;
+    if (Object.values(row).every(v => v === '' || v == null)) return;
+    if (String(row['略過'] ?? '').trim()) { skippedCount++; return; }
+    const materialCode = String(row['材料編號'] ?? '').trim();
+    const archivedRaw = String(row['是否上架(Y/N)'] ?? '').trim().toUpperCase();
+
+    const rowErrors = [];
+    if (!materialCode) rowErrors.push('材料編號不能空白');
+    const material = materialCode ? materials.find(m => m.materialCode === materialCode) : null;
+    if (materialCode && !material) rowErrors.push(`找不到材料編號「${materialCode}」`);
+    if (!['Y', 'N'].includes(archivedRaw)) rowErrors.push('是否上架欄位只能填 Y 或 N');
+
+    if (materialCode) {
+      if (seenCodes.has(materialCode)) rowErrors.push(`材料編號「${materialCode}」在檔案裡重複出現，同一款材料請只填一列`);
+      seenCodes.add(materialCode);
+    }
+
+    if (rowErrors.length) {
+      errors.push({ row: rowNum, messages: rowErrors });
+      return;
+    }
+
+    const newArchived = archivedRaw === 'N';
+    if (material.archived === newArchived) return; // 狀態沒變,不用處理,也不算錯誤
+
+    parsedRows.push({ rowNum, materialId: material.id, materialCode, archived: newArchived });
+  });
+
+  if (errors.length) {
+    errors.sort((a, b) => a.row - b.row);
+    summaryEl.innerHTML = '';
+    errorListEl.innerHTML = `<div class="ta-import-errors">
+      共 ${rows.length} 列資料${skippedCount ? `（略過 ${skippedCount} 列）` : ''}，發現 ${errors.length} 列有問題，請修正後重新上傳（本次不會匯入任何資料）：
+      <ul>${errors.map(e => `<li>第 ${e.row} 列：${e.messages.map(escapeHtml).join('；')}</li>`).join('')}</ul>
+    </div>`;
+    document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+    importParsedArchiveRows = null;
+    return;
+  }
+
+  if (!parsedRows.length) {
+    summaryEl.innerHTML = '';
+    errorListEl.innerHTML = `<div class="ta-import-errors">共 ${rows.length} 列資料，驗證通過，但沒有任何材料的上架狀態需要變更。</div>`;
+    document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+    importParsedArchiveRows = null;
+    return;
+  }
+
+  importParsedArchiveRows = parsedRows;
+  errorListEl.innerHTML = '';
+  const toArchive = parsedRows.filter(r => r.archived).length;
+  const toUnarchive = parsedRows.length - toArchive;
+  summaryEl.innerHTML = `<div class="ta-import-summary">
+    共讀取 ${rows.length} 列，全部通過驗證${skippedCount ? `（另外略過 ${skippedCount} 列，不會匯入）` : ''}。<br>
+    將下架 ${toArchive} 款材料、上架 ${toUnarchive} 款材料（狀態沒變的材料不列入，不會有動作）。
+  </div>`;
+  document.getElementById('confirmImportBtn').classList.remove('ta-is-hidden');
+}
+
+function processHistoryMigrationImportRows(rows) {
+  const summaryEl = document.getElementById('importSummary');
+  const errorListEl = document.getElementById('importErrorList');
+
+  if (!rows.length) {
+    summaryEl.innerHTML = '';
+    errorListEl.innerHTML = '<div class="ta-import-errors">檔案裡沒有讀到任何資料列。</div>';
+    return;
+  }
+
+  const errors = [];
+  const parsedRows = [];
+  let skippedCount = 0;
+
+  rows.forEach((row, idx) => {
+    const rowNum = idx + 2;
+    if (Object.values(row).every(v => v === '' || v == null)) return;
+    if (String(row['略過'] ?? '').trim()) { skippedCount++; return; }
+    const materialCode = String(row['材料編號'] ?? '').trim();
+    const actualRaw = row['調整後庫存(實際盤點到的數字)'];
+    const salesRaw = row['這次新增的歷史銷售數量'];
+    const nonSalesRaw = row['這次新增的歷史非銷售數量'];
+
+    const rowErrors = [];
+    if (!materialCode) rowErrors.push('材料編號不能空白');
+    const material = materialCode ? materials.find(m => m.materialCode === materialCode) : null;
+    if (materialCode && !material) rowErrors.push(`找不到材料編號「${materialCode}」`);
+
+    const actual = Number(actualRaw);
+    if (actualRaw === '' || actualRaw == null || isNaN(actual) || actual < 0) rowErrors.push('調整後庫存必須是不小於0的數字');
+    const sales = (salesRaw === '' || salesRaw == null) ? 0 : Number(salesRaw);
+    if (isNaN(sales)) rowErrors.push('這次新增的歷史銷售數量必須是數字');
+    const nonSales = (nonSalesRaw === '' || nonSalesRaw == null) ? 0 : Number(nonSalesRaw);
+    if (isNaN(nonSales)) rowErrors.push('這次新增的歷史非銷售數量必須是數字');
+
+    if (rowErrors.length) {
+      errors.push({ row: rowNum, messages: rowErrors });
+      return;
+    }
+
+    parsedRows.push({ rowNum, materialId: material.id, materialCode, actual, sales, nonSales });
+  });
+
+  if (errors.length) {
+    errors.sort((a, b) => a.row - b.row);
+    summaryEl.innerHTML = '';
+    errorListEl.innerHTML = `<div class="ta-import-errors">
+      共 ${rows.length} 列資料${skippedCount ? `（略過 ${skippedCount} 列）` : ''}，發現 ${errors.length} 列有問題，請修正後重新上傳（本次不會匯入任何資料）：
+      <ul>${errors.map(e => `<li>第 ${e.row} 列：${e.messages.map(escapeHtml).join('；')}</li>`).join('')}</ul>
+    </div>`;
+    document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+    importParsedHistoryMigrationRows = null;
+    return;
+  }
+
+  if (!parsedRows.length) {
+    summaryEl.innerHTML = '';
+    errorListEl.innerHTML = `<div class="ta-import-errors">共 ${rows.length} 列資料，全部被標記略過，沒有資料可以匯入。</div>`;
+    document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+    importParsedHistoryMigrationRows = null;
+    return;
+  }
+
+  importParsedHistoryMigrationRows = parsedRows;
+  errorListEl.innerHTML = '';
+  const materialCount = new Set(parsedRows.map(r => r.materialId)).size;
+  summaryEl.innerHTML = `<div class="ta-import-summary">
+    共讀取 ${rows.length} 列，全部通過驗證${skippedCount ? `（另外略過 ${skippedCount} 列，不會匯入）` : ''}。<br>
+    將為 ${materialCount} 款材料新增共 ${parsedRows.length} 筆歷史資料搬遷紀錄。
+  </div>`;
+  document.getElementById('confirmImportBtn').classList.remove('ta-is-hidden');
+}
+
+async function runPurchaseImport() {
   if (!importParsedGroups) return;
   const btn = document.getElementById('confirmImportBtn');
   btn.disabled = true;
@@ -4427,6 +4705,147 @@ document.getElementById('confirmImportBtn').addEventListener('click', async () =
   } finally {
     btn.disabled = false;
   }
+}
+
+// 人工盤點調整/上架下架/歷史資料搬遷這三種匯入,共用同一套分批寫入+進度顯示邏輯
+async function commitImportOps(ops, progressLabel) {
+  const progressEl = document.getElementById('importProgress');
+  progressEl.classList.remove('ta-is-hidden');
+  const CHUNK_SIZE = 400;
+  let committed = 0;
+  for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+    const chunk = ops.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+    chunk.forEach(op => {
+      if (op.opType === 'update') batch.update(op.ref, op.data);
+      else batch.set(op.ref, op.data);
+    });
+    await batch.commit();
+    committed += chunk.length;
+    progressEl.textContent = `${progressLabel} 已寫入 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作`;
+  }
+}
+
+async function runAdjustImport() {
+  if (!importParsedAdjustRows) return;
+  const btn = document.getElementById('confirmImportBtn');
+  btn.disabled = true;
+  const progressEl = document.getElementById('importProgress');
+  progressEl.classList.remove('ta-is-hidden');
+  progressEl.textContent = '匯入中，請稍候...';
+  try {
+    const ops = [];
+    const touchedIds = [];
+    for (const r of importParsedAdjustRows) {
+      const material = materials.find(m => m.id === r.materialId);
+      const updateData = { updatedAt: serverTimestamp() };
+      if (r.primaryQty !== null) {
+        const before = material.currentStock || 0;
+        ops.push({ ref: doc(collection(db, 'materials', r.materialId, 'history')), opType: 'set', data: {
+          type: 'adjust', target: 'primary', beforeQty: before, afterQty: r.primaryQty, diff: r.primaryQty - before, reason: r.reason, timestamp: serverTimestamp(),
+        }});
+        updateData.currentStock = r.primaryQty;
+      }
+      if (r.secondaryQty !== null) {
+        const before = material.currentStockSecondary || 0;
+        ops.push({ ref: doc(collection(db, 'materials', r.materialId, 'history')), opType: 'set', data: {
+          type: 'adjust', target: 'secondary', beforeQty: before, afterQty: r.secondaryQty, diff: r.secondaryQty - before, reason: r.reason, timestamp: serverTimestamp(),
+        }});
+        updateData.currentStockSecondary = r.secondaryQty;
+      }
+      ops.push({ ref: doc(db, 'materials', r.materialId), opType: 'update', data: updateData });
+      touchedIds.push(r.materialId);
+    }
+    await commitImportOps(ops, '匯入中...');
+    await refreshMaterialsLocal(touchedIds);
+    progressEl.textContent = `匯入完成！共調整 ${importParsedAdjustRows.length} 款材料的庫存。`;
+    document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+    document.getElementById('importSummary').innerHTML = '';
+    importParsedAdjustRows = null;
+  } catch (err) {
+    progressEl.textContent = '';
+    document.getElementById('importErrorList').innerHTML = `<div class="ta-import-errors">匯入失敗：${escapeHtml(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function runArchiveImport() {
+  if (!importParsedArchiveRows) return;
+  const btn = document.getElementById('confirmImportBtn');
+  btn.disabled = true;
+  const progressEl = document.getElementById('importProgress');
+  progressEl.classList.remove('ta-is-hidden');
+  progressEl.textContent = '匯入中，請稍候...';
+  try {
+    const ops = [];
+    const touchedIds = [];
+    for (const r of importParsedArchiveRows) {
+      ops.push({ ref: doc(db, 'materials', r.materialId), opType: 'update', data: { archived: r.archived, updatedAt: serverTimestamp() } });
+      ops.push({ ref: doc(collection(db, 'materials', r.materialId, 'history')), opType: 'set', data: {
+        type: 'archive', archived: r.archived, timestamp: serverTimestamp(),
+      }});
+      touchedIds.push(r.materialId);
+    }
+    await commitImportOps(ops, '匯入中...');
+    await refreshMaterialsLocal(touchedIds);
+    progressEl.textContent = `匯入完成！共變更 ${importParsedArchiveRows.length} 款材料的上架狀態。`;
+    document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+    document.getElementById('importSummary').innerHTML = '';
+    importParsedArchiveRows = null;
+  } catch (err) {
+    progressEl.textContent = '';
+    document.getElementById('importErrorList').innerHTML = `<div class="ta-import-errors">匯入失敗：${escapeHtml(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function runHistoryMigrationImport() {
+  if (!importParsedHistoryMigrationRows) return;
+  const btn = document.getElementById('confirmImportBtn');
+  btn.disabled = true;
+  const progressEl = document.getElementById('importProgress');
+  progressEl.classList.remove('ta-is-hidden');
+  progressEl.textContent = '匯入中，請稍候...';
+  try {
+    const ops = [];
+    const touchedIds = [];
+    for (const r of importParsedHistoryMigrationRows) {
+      const material = materials.find(m => m.id === r.materialId);
+      const before = material.currentStock || 0;
+      ops.push({ ref: doc(collection(db, 'materials', r.materialId, 'history')), opType: 'set', data: {
+        type: 'historyMigration', beforeQty: before, afterQty: r.actual, diff: r.actual - before,
+        salesQuantityAdded: r.sales, nonSalesQuantityAdded: r.nonSales, timestamp: serverTimestamp(),
+      }});
+      ops.push({ ref: doc(db, 'materials', r.materialId), opType: 'update', data: {
+        currentStock: r.actual,
+        historicalSalesQuantity: increment(r.sales),
+        historicalNonSalesQuantity: increment(r.nonSales),
+        updatedAt: serverTimestamp(),
+      }});
+      touchedIds.push(r.materialId);
+    }
+    await commitImportOps(ops, '匯入中...');
+    await refreshMaterialsLocal(touchedIds);
+    progressEl.textContent = `匯入完成！共新增 ${importParsedHistoryMigrationRows.length} 筆歷史資料搬遷紀錄。`;
+    document.getElementById('confirmImportBtn').classList.add('ta-is-hidden');
+    document.getElementById('importSummary').innerHTML = '';
+    importParsedHistoryMigrationRows = null;
+  } catch (err) {
+    progressEl.textContent = '';
+    document.getElementById('importErrorList').innerHTML = `<div class="ta-import-errors">匯入失敗：${escapeHtml(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('confirmImportBtn').addEventListener('click', async () => {
+  const importType = document.getElementById('importTypeSelect').value;
+  if (importType === 'purchase') await runPurchaseImport();
+  else if (importType === 'adjust') await runAdjustImport();
+  else if (importType === 'archive') await runArchiveImport();
+  else if (importType === 'historyMigration') await runHistoryMigrationImport();
 });
 
 // ---------- 匯出資料 ----------
