@@ -2833,10 +2833,10 @@ function openEditPurchaseModal(materialId, historyId, log, unit) {
     document.getElementById('eprPkgCount').value = log.pkgCount ?? '';
   } else if (mode === 'total') {
     document.getElementById('eprTotalAmount').value = log.originalAmount ?? '';
-    document.getElementById('eprQuantity').value = log.receivedQuantity ?? (log.quantity + (log.shortageQuantity || 0) + (log.scrapQuantity || 0) + (log.secondaryQuantity || 0) - (log.extraQuantity || 0));
+    document.getElementById('eprQuantity').value = log.receivedQuantity ?? (log.quantity + (log.shortageQuantity || 0) + (log.scrapQuantity || 0) + (log.secondaryQuantity || 0) + (log.sampleQuantity || 0) - (log.extraQuantity || 0));
   } else {
     document.getElementById('eprUnitPrice').value = log.originalAmount ?? '';
-    document.getElementById('eprQuantity').value = log.receivedQuantity ?? (log.quantity + (log.shortageQuantity || 0) + (log.scrapQuantity || 0) + (log.secondaryQuantity || 0) - (log.extraQuantity || 0));
+    document.getElementById('eprQuantity').value = log.receivedQuantity ?? (log.quantity + (log.shortageQuantity || 0) + (log.scrapQuantity || 0) + (log.secondaryQuantity || 0) + (log.sampleQuantity || 0) - (log.extraQuantity || 0));
   }
 
   updateEditPurchaseModeVisibility();
@@ -3318,11 +3318,11 @@ async function openDetail(id) {
   renderTimeline(logs, unit, id);
   document.getElementById('historyHeading').textContent = '完整異動歷史';
 
-  // 總進貨數量 = 正品 + 短少 + 報廢 + 次品(這批貨物理上總共收到/處理過的量,不管後來分類到哪裡);
+  // 總進貨數量 = 正品 + 短少 + 報廢 + 次品 + 留樣(這批貨物理上總共收到/處理過的量,不管後來分類到哪裡);
   // 不含「損耗」,因為損耗是生產登記時做東西才會發生的事,跟進貨是不相干的兩個階段
   const totalPurchasedQty = logs.reduce((sum, log) => {
     if (log.type !== 'purchase') return sum;
-    return sum + (log.quantity || 0) + (log.shortageQuantity || 0) + (log.scrapQuantity || 0) + (log.secondaryQuantity || 0);
+    return sum + (log.quantity || 0) + (log.shortageQuantity || 0) + (log.scrapQuantity || 0) + (log.secondaryQuantity || 0) + (log.sampleQuantity || 0);
   }, 0);
   // 總進貨數量價值:直接讀材料自己身上的 cumulativePurchaseValue 欄位(新增進貨/編輯進貨紀錄時
   // 就順手維護好),不再現場重新加總歷史紀錄——避免跟材料清單頁「累計進貨總額」各自算一套,
