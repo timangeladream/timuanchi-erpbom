@@ -114,6 +114,15 @@
   /* 勾選清單(checkbox巢狀在label裡,例如批次套用組合/複製規格配方的目標清單)不能被上面那條
      width:100%規則影響,不然checkbox會撐滿整行,把後面的文字擠到下一行去 */
   .ta-form-row input[type="checkbox"] { width: auto; }
+  /* 批次工具的成品勾選清單:有規格的成品可以展開,底下列出各規格自己的勾選框 */
+  .ta-batch-target-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+  .ta-batch-target-row label { display: inline; margin: 0; font-size: 13px; color: var(--text); }
+  .ta-batch-target-row input[type="checkbox"] { width: auto; margin-right: 4px; }
+  .ta-batch-target-toggle { cursor: pointer; width: 16px; flex-shrink: 0; color: var(--text-muted); text-align: center; user-select: none; }
+  .ta-batch-target-toggle-spacer { width: 16px; flex-shrink: 0; }
+  .ta-batch-target-variants { margin: 0 0 6px 22px; padding-left: 10px; border-left: 2px solid var(--border); }
+  .ta-batch-target-variant-item { display: block; padding: 3px 0; font-size: 12.5px; color: var(--text); }
+  .ta-batch-target-variant-item input[type="checkbox"] { width: auto; margin-right: 4px; }
   .ta-radio-row { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
   .ta-radio-row input[type="radio"] { width: auto; flex: none; }
   .ta-radio-row label { display: inline; margin: 0; font-size: 14px; color: var(--text); }
@@ -888,7 +897,7 @@
   <div class="ta-modal">
     <span class="ta-modal-close" data-close="batchApplyComboModal">✕</span>
     <h2 id="batchApplyComboTitle">批次套用組合</h2>
-    <div class="ta-modal-text">勾選要套用的成品，會把組合裡的材料加進這些成品的基礎配方（已經有的材料不會重複加入，也不會動到規格各自的配方）。</div>
+    <div class="ta-modal-text">勾選要套用的成品，會把組合裡的材料加進這些成品的基礎配方（已經有的材料不會重複加入）。有規格的成品可以點旁邊的箭頭展開，另外勾選要套用到哪些規格自己的配方——勾成品本身跟勾規格是分開的，只勾規格、不勾成品本身也可以。</div>
     <div class="ta-form-row">
       <label><input type="checkbox" id="batchApplyComboSelectAll"> 全選</label>
     </div>
@@ -936,7 +945,7 @@
           <select id="bamProductCategoryFilter"><option value="">全部分類</option></select>
         </div>
         <div class="ta-form-row">
-          <label>4. 勾選要加入的成品</label>
+          <label>4. 勾選要加入的成品（有規格的成品可以點箭頭展開，另外勾選要套用到哪些規格自己的配方）</label>
         </div>
         <div class="ta-form-row">
           <label><input type="checkbox" id="bamProductSelectAll"> 全選</label>
@@ -3950,7 +3959,47 @@ function applyRequiredCombo(comboId) {
   if (!addedCount) alert(`「${combo.name}」裡的材料都已經在配方裡了`);
 }
 
-// ---------- 批次套用必備材料組合(一次套用到這個分類底下勾選的多個成品的基礎配方) ----------
+// ---------- 批次工具共用:成品勾選清單(有規格的成品可以展開,底下列出各規格自己的勾選框) ----------
+// 規格組合鍵(例如"白金色,白色")轉成人看得懂的標籤(例如"配件顏色: 白金色 + 貓咪顏色: 白色"),
+// 跟生產登記/出貨紀錄摘要用的格式一致
+function variantKeyLabel(p, key) {
+  const dimNames = p.variantKeyOrder || Object.keys(p.variants || {});
+  const values = key.split(',');
+  return dimNames.map((d, i) => values[i] ? `${d}: ${values[i]}` : null).filter(Boolean).join(' + ');
+}
+
+// productCbClass 勾選框代表「套用到這個成品的基礎配方」,variantCbClass 勾選框代表「套用到某個規格自己的配方」,
+// 兩者是分開、不互相牽動的選擇,全選只會勾成品本身,規格要套用到哪個要自己展開手動勾
+function renderBatchTargetProductList(containerEl, targetProducts, productCbClass, variantCbClass) {
+  if (!targetProducts.length) { containerEl.innerHTML = '<div class="ta-empty-hint">這個範圍內沒有成品</div>'; return; }
+  containerEl.innerHTML = targetProducts.map(p => {
+    const variantKeys = Object.keys(p.variantSkus || {});
+    const hasVariants = variantKeys.length > 0;
+    const productRow = `
+      <div class="ta-batch-target-row">
+        ${hasVariants ? `<span class="ta-batch-target-toggle" data-toggle-product="${escapeHtml(p.id)}">▸</span>` : '<span class="ta-batch-target-toggle-spacer"></span>'}
+        <label><input type="checkbox" class="${productCbClass}" value="${escapeHtml(p.id)}"> ${escapeHtml(p.name)}${p.productCode ? `（${escapeHtml(p.productCode)}）` : ''}${hasVariants ? ' <span class="ta-tag">有規格</span>' : ''}</label>
+      </div>`;
+    const variantRows = hasVariants ? `
+      <div class="ta-batch-target-variants ta-is-hidden" data-variants-for="${escapeHtml(p.id)}">
+        ${variantKeys.map(key => `
+          <label class="ta-batch-target-variant-item"><input type="checkbox" class="${variantCbClass}" data-product-id="${escapeHtml(p.id)}" value="${escapeHtml(key)}"> ${escapeHtml(variantKeyLabel(p, key))}</label>
+        `).join('')}
+      </div>` : '';
+    return productRow + variantRows;
+  }).join('');
+  containerEl.querySelectorAll('[data-toggle-product]').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.toggleProduct;
+      const sub = containerEl.querySelector(`[data-variants-for="${CSS.escape(id)}"]`);
+      const isHidden = sub.classList.contains('ta-is-hidden');
+      sub.classList.toggle('ta-is-hidden');
+      el.textContent = isHidden ? '▾' : '▸';
+    });
+  });
+}
+
+// ---------- 批次套用必備材料組合(一次套用到這個分類底下勾選的多個成品的基礎配方,也可以展開套用到規格配方) ----------
 let batchApplyComboContext = null; // { category, comboId }
 
 function openBatchApplyComboModal(category, comboId) {
@@ -3962,9 +4011,7 @@ function openBatchApplyComboModal(category, comboId) {
   batchApplyComboContext = { category, comboId };
   document.getElementById('batchApplyComboTitle').textContent = `批次套用組合：${combo.name}`;
   document.getElementById('batchApplyComboSelectAll').checked = false;
-  document.getElementById('batchApplyComboTargetList').innerHTML = targetProducts.map(p => `
-    <div class="ta-form-row ta-form-row--full"><label><input type="checkbox" class="batch-apply-combo-target-cb" value="${escapeHtml(p.id)}"> ${escapeHtml(p.name)}${p.productCode ? `（${escapeHtml(p.productCode)}）` : ''}</label></div>
-  `).join('');
+  renderBatchTargetProductList(document.getElementById('batchApplyComboTargetList'), targetProducts, 'batch-apply-combo-target-cb', 'batch-apply-combo-variant-cb');
   openModal('batchApplyComboModal');
 }
 
@@ -3976,48 +4023,78 @@ document.getElementById('batchApplyComboConfirmBtn').addEventListener('click', a
   const ctx = batchApplyComboContext;
   if (!ctx) return;
   const targetIds = [...document.querySelectorAll('.batch-apply-combo-target-cb:checked')].map(cb => cb.value);
-  if (!targetIds.length) { alert('請至少勾選一個成品'); return; }
+  const variantChecks = [...document.querySelectorAll('.batch-apply-combo-variant-cb:checked')].map(cb => ({ productId: cb.dataset.productId, variantKey: cb.value }));
+  if (!targetIds.length && !variantChecks.length) { alert('請至少勾選一個成品或規格'); return; }
   const combos = (productOptions.requiredMaterials || {})[ctx.category] || [];
   const combo = combos.find(c => c.id === ctx.comboId);
   if (!combo) return;
+  const allTouchedIds = [...new Set([...targetIds, ...variantChecks.map(v => v.productId)])];
   const ok = await showConfirmModal({
     title: '確定要批次套用嗎？',
-    text: `這會把「${combo.name}」裡的材料，加進你勾選的 ${targetIds.length} 個成品的基礎配方（已經有的材料不會重複加入）。確定要繼續嗎？`,
+    text: `這會把「${combo.name}」裡的材料，加進你勾選的 ${targetIds.length} 個成品的基礎配方、${variantChecks.length} 個規格的配方（已經有的材料不會重複加入）。確定要繼續嗎？`,
   });
   if (!ok) return;
   const btn = document.getElementById('batchApplyComboConfirmBtn');
   btn.disabled = true;
   try {
+    const targetIdSet = new Set(targetIds);
+    const variantKeysByProduct = {};
+    variantChecks.forEach(v => {
+      if (!variantKeysByProduct[v.productId]) variantKeysByProduct[v.productId] = [];
+      variantKeysByProduct[v.productId].push(v.variantKey);
+    });
+
     let changedCount = 0, unchangedCount = 0;
     const CHUNK_SIZE = 400;
-    for (let i = 0; i < targetIds.length; i += CHUNK_SIZE) {
-      const chunk = targetIds.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < allTouchedIds.length; i += CHUNK_SIZE) {
+      const chunk = allTouchedIds.slice(i, i + CHUNK_SIZE);
       const batch = writeBatch(db);
       let chunkHasWrites = false;
       chunk.forEach(id => {
         const p = products.find(x => x.id === id);
         if (!p) return;
-        const recipe = (p.recipe || []).map(r => ({ ...r }));
-        let added = false;
-        combo.items.forEach(r => {
-          if (!recipe.some(existing => existing.materialId === r.materialId)) {
-            recipe.push({ ...r });
-            added = true;
-          }
-        });
-        if (added) {
-          batch.update(doc(db, 'products', id), { recipe, updatedAt: serverTimestamp() });
+        const updateData = {};
+
+        if (targetIdSet.has(id)) {
+          const recipe = (p.recipe || []).map(r => ({ ...r }));
+          let added = false;
+          combo.items.forEach(r => {
+            if (!recipe.some(existing => existing.materialId === r.materialId)) {
+              recipe.push({ ...r });
+              added = true;
+            }
+          });
+          if (added) { updateData.recipe = recipe; changedCount++; } else { unchangedCount++; }
+        }
+
+        const keys = variantKeysByProduct[id];
+        if (keys && keys.length) {
+          const variantRecipes = { ...(p.variantRecipes || {}) };
+          keys.forEach(key => {
+            const recipe = (variantRecipes[key] || []).map(r => ({ ...r }));
+            let added = false;
+            combo.items.forEach(r => {
+              if (!recipe.some(existing => existing.materialId === r.materialId)) {
+                recipe.push({ ...r });
+                added = true;
+              }
+            });
+            if (added) { variantRecipes[key] = recipe; changedCount++; } else { unchangedCount++; }
+          });
+          updateData.variantRecipes = variantRecipes;
+        }
+
+        if (Object.keys(updateData).length) {
+          updateData.updatedAt = serverTimestamp();
+          batch.update(doc(db, 'products', id), updateData);
           chunkHasWrites = true;
-          changedCount++;
-        } else {
-          unchangedCount++;
         }
       });
       if (chunkHasWrites) await batch.commit();
     }
-    await refreshProductsLocal(targetIds);
+    await refreshProductsLocal(allTouchedIds);
     closeModal('batchApplyComboModal');
-    alert(`批次套用完成！成功套用到 ${changedCount} 個成品${unchangedCount ? `，${unchangedCount} 個成品的材料本來就都有了，沒有變動` : ''}。`);
+    alert(`批次套用完成！成功套用到 ${changedCount} 個地方${unchangedCount ? `，${unchangedCount} 個地方的材料本來就都有了，沒有變動` : ''}。`);
   } catch (e) {
     alert('批次套用失敗：' + e.message);
   } finally {
@@ -4025,7 +4102,7 @@ document.getElementById('batchApplyComboConfirmBtn').addEventListener('click', a
   }
 });
 
-// ---------- 批次加入材料到成品(不用先建組合,直接搜尋單一材料、批次加進勾選的成品基礎配方) ----------
+// ---------- 批次加入材料到成品(不用先建組合,直接搜尋單一材料、批次加進勾選的成品基礎配方,也可以展開套用到規格配方) ----------
 let bamSelectedMaterial = null;
 
 function openBatchAddMaterialModal() {
@@ -4104,11 +4181,7 @@ function renderBamProductTargetList() {
   const categoryFilter = document.getElementById('bamProductCategoryFilter').value;
   const targetProducts = products.filter(p => !categoryFilter || p.category === categoryFilter);
   document.getElementById('bamProductSelectAll').checked = false;
-  const listEl = document.getElementById('bamProductTargetList');
-  if (!targetProducts.length) { listEl.innerHTML = '<div class="ta-empty-hint">這個範圍內沒有成品</div>'; return; }
-  listEl.innerHTML = targetProducts.map(p => `
-    <div class="ta-form-row ta-form-row--full"><label><input type="checkbox" class="bam-product-target-cb" value="${escapeHtml(p.id)}"> ${escapeHtml(p.name)}${p.productCode ? `（${escapeHtml(p.productCode)}）` : ''}</label></div>
-  `).join('');
+  renderBatchTargetProductList(document.getElementById('bamProductTargetList'), targetProducts, 'bam-product-target-cb', 'bam-variant-target-cb');
 }
 
 document.getElementById('bamProductCategoryFilter').addEventListener('change', renderBamProductTargetList);
@@ -4122,37 +4195,74 @@ document.getElementById('bamConfirmBtn').addEventListener('click', async () => {
   const qty = parseFloat(document.getElementById('bamQuantity').value);
   if (isNaN(qty) || qty <= 0) { alert('請輸入正確的用量'); return; }
   const targetIds = [...document.querySelectorAll('.bam-product-target-cb:checked')].map(cb => cb.value);
-  if (!targetIds.length) { alert('請至少勾選一個成品'); return; }
+  const variantChecks = [...document.querySelectorAll('.bam-variant-target-cb:checked')].map(cb => ({ productId: cb.dataset.productId, variantKey: cb.value }));
+  if (!targetIds.length && !variantChecks.length) { alert('請至少勾選一個成品或規格'); return; }
   const materialId = bamSelectedMaterial.id;
+  const allTouchedIds = [...new Set([...targetIds, ...variantChecks.map(v => v.productId)])];
   const ok = await showConfirmModal({
     title: '確定要批次加入嗎？',
-    text: `這會把「${materialDisplayName(bamSelectedMaterial)}」（用量 ${qty}）加進你勾選的 ${targetIds.length} 個成品的基礎配方（已經有的材料不會重複加入）。確定要繼續嗎？`,
+    text: `這會把「${materialDisplayName(bamSelectedMaterial)}」（用量 ${qty}）加進你勾選的 ${targetIds.length} 個成品的基礎配方、${variantChecks.length} 個規格的配方（已經有的材料不會重複加入）。確定要繼續嗎？`,
   });
   if (!ok) return;
   const btn = document.getElementById('bamConfirmBtn');
   btn.disabled = true;
   try {
+    const targetIdSet = new Set(targetIds);
+    const variantKeysByProduct = {};
+    variantChecks.forEach(v => {
+      if (!variantKeysByProduct[v.productId]) variantKeysByProduct[v.productId] = [];
+      variantKeysByProduct[v.productId].push(v.variantKey);
+    });
+
     let changedCount = 0, unchangedCount = 0;
     const CHUNK_SIZE = 400;
-    for (let i = 0; i < targetIds.length; i += CHUNK_SIZE) {
-      const chunk = targetIds.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < allTouchedIds.length; i += CHUNK_SIZE) {
+      const chunk = allTouchedIds.slice(i, i + CHUNK_SIZE);
       const batch = writeBatch(db);
       let chunkHasWrites = false;
       chunk.forEach(id => {
         const p = products.find(x => x.id === id);
         if (!p) return;
-        const recipe = (p.recipe || []).map(r => ({ ...r }));
-        if (recipe.some(existing => existing.materialId === materialId)) { unchangedCount++; return; }
-        recipe.push({ materialId, quantity: qty });
-        batch.update(doc(db, 'products', id), { recipe, updatedAt: serverTimestamp() });
-        chunkHasWrites = true;
-        changedCount++;
+        const updateData = {};
+
+        if (targetIdSet.has(id)) {
+          const recipe = (p.recipe || []).map(r => ({ ...r }));
+          if (recipe.some(existing => existing.materialId === materialId)) {
+            unchangedCount++;
+          } else {
+            recipe.push({ materialId, quantity: qty });
+            updateData.recipe = recipe;
+            changedCount++;
+          }
+        }
+
+        const keys = variantKeysByProduct[id];
+        if (keys && keys.length) {
+          const variantRecipes = { ...(p.variantRecipes || {}) };
+          keys.forEach(key => {
+            const recipe = (variantRecipes[key] || []).map(r => ({ ...r }));
+            if (recipe.some(existing => existing.materialId === materialId)) {
+              unchangedCount++;
+            } else {
+              recipe.push({ materialId, quantity: qty });
+              variantRecipes[key] = recipe;
+              changedCount++;
+            }
+          });
+          updateData.variantRecipes = variantRecipes;
+        }
+
+        if (Object.keys(updateData).length) {
+          updateData.updatedAt = serverTimestamp();
+          batch.update(doc(db, 'products', id), updateData);
+          chunkHasWrites = true;
+        }
       });
       if (chunkHasWrites) await batch.commit();
     }
-    await refreshProductsLocal(targetIds);
+    await refreshProductsLocal(allTouchedIds);
     closeModal('batchAddMaterialModal');
-    alert(`批次加入完成！成功加入到 ${changedCount} 個成品${unchangedCount ? `，${unchangedCount} 個成品的配方裡本來就有這款材料了，沒有變動` : ''}。`);
+    alert(`批次加入完成！成功加入到 ${changedCount} 個地方${unchangedCount ? `，${unchangedCount} 個地方本來就有這款材料了，沒有變動` : ''}。`);
   } catch (e) {
     alert('批次加入失敗：' + e.message);
   } finally {
