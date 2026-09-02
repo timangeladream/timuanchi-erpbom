@@ -879,6 +879,23 @@
   </div>
 </div>
 
+<!-- 批次套用必備材料組合 Modal -->
+<div class="ta-modal-overlay" id="batchApplyComboModal">
+  <div class="ta-modal">
+    <span class="ta-modal-close" data-close="batchApplyComboModal">✕</span>
+    <h2 id="batchApplyComboTitle">批次套用組合</h2>
+    <div class="ta-modal-text">勾選要套用的成品，會把組合裡的材料加進這些成品的基礎配方（已經有的材料不會重複加入，也不會動到規格各自的配方）。</div>
+    <div class="ta-form-row">
+      <label><input type="checkbox" id="batchApplyComboSelectAll"> 全選</label>
+    </div>
+    <div id="batchApplyComboTargetList"></div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="batchApplyComboModal">取消</button>
+      <button class="ta-btn ta-btn-primary" id="batchApplyComboConfirmBtn">確認套用</button>
+    </div>
+  </div>
+</div>
+
 <!-- 定價試算 / 定價公式範本設定 Modal(共用同一套介面) -->
 <div class="ta-modal-overlay" id="pricingModal">
   <div class="ta-modal ta-modal--wide">
@@ -3878,6 +3895,81 @@ function applyRequiredCombo(comboId) {
   if (!addedCount) alert(`「${combo.name}」裡的材料都已經在配方裡了`);
 }
 
+// ---------- 批次套用必備材料組合(一次套用到這個分類底下勾選的多個成品的基礎配方) ----------
+let batchApplyComboContext = null; // { category, comboId }
+
+function openBatchApplyComboModal(category, comboId) {
+  const combos = (productOptions.requiredMaterials || {})[category] || [];
+  const combo = combos.find(c => c.id === comboId);
+  if (!combo) return;
+  const targetProducts = products.filter(p => p.category === category);
+  if (!targetProducts.length) { alert(`「${category}」目前沒有任何成品`); return; }
+  batchApplyComboContext = { category, comboId };
+  document.getElementById('batchApplyComboTitle').textContent = `批次套用組合：${combo.name}`;
+  document.getElementById('batchApplyComboSelectAll').checked = false;
+  document.getElementById('batchApplyComboTargetList').innerHTML = targetProducts.map(p => `
+    <div class="ta-form-row ta-form-row--full"><label><input type="checkbox" class="batch-apply-combo-target-cb" value="${escapeHtml(p.id)}"> ${escapeHtml(p.name)}${p.productCode ? `（${escapeHtml(p.productCode)}）` : ''}</label></div>
+  `).join('');
+  openModal('batchApplyComboModal');
+}
+
+document.getElementById('batchApplyComboSelectAll').addEventListener('change', (e) => {
+  document.querySelectorAll('.batch-apply-combo-target-cb').forEach(cb => { cb.checked = e.target.checked; });
+});
+
+document.getElementById('batchApplyComboConfirmBtn').addEventListener('click', async () => {
+  const ctx = batchApplyComboContext;
+  if (!ctx) return;
+  const targetIds = [...document.querySelectorAll('.batch-apply-combo-target-cb:checked')].map(cb => cb.value);
+  if (!targetIds.length) { alert('請至少勾選一個成品'); return; }
+  const combos = (productOptions.requiredMaterials || {})[ctx.category] || [];
+  const combo = combos.find(c => c.id === ctx.comboId);
+  if (!combo) return;
+  const ok = await showConfirmModal({
+    title: '確定要批次套用嗎？',
+    text: `這會把「${combo.name}」裡的材料，加進你勾選的 ${targetIds.length} 個成品的基礎配方（已經有的材料不會重複加入）。確定要繼續嗎？`,
+  });
+  if (!ok) return;
+  const btn = document.getElementById('batchApplyComboConfirmBtn');
+  btn.disabled = true;
+  try {
+    let changedCount = 0, unchangedCount = 0;
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < targetIds.length; i += CHUNK_SIZE) {
+      const chunk = targetIds.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      let chunkHasWrites = false;
+      chunk.forEach(id => {
+        const p = products.find(x => x.id === id);
+        if (!p) return;
+        const recipe = (p.recipe || []).map(r => ({ ...r }));
+        let added = false;
+        combo.items.forEach(r => {
+          if (!recipe.some(existing => existing.materialId === r.materialId)) {
+            recipe.push({ ...r });
+            added = true;
+          }
+        });
+        if (added) {
+          batch.update(doc(db, 'products', id), { recipe, updatedAt: serverTimestamp() });
+          chunkHasWrites = true;
+          changedCount++;
+        } else {
+          unchangedCount++;
+        }
+      });
+      if (chunkHasWrites) await batch.commit();
+    }
+    await refreshProductsLocal(targetIds);
+    closeModal('batchApplyComboModal');
+    alert(`批次套用完成！成功套用到 ${changedCount} 個成品${unchangedCount ? `，${unchangedCount} 個成品的材料本來就都有了，沒有變動` : ''}。`);
+  } catch (e) {
+    alert('批次套用失敗：' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // ---------- 必備材料組合管理 ----------
 let requiredComboManageCategory = null;
 
@@ -3900,6 +3992,7 @@ function renderRequiredMaterialsManageList() {
       <div class="ta-category-row-info"><span class="ta-category-row-name">${escapeHtml(combo.name)}</span><span class="ta-tag">${combo.items.length}項材料</span>${recipeHasMissingMaterial(combo.items) ? ' <span class="ta-status-tag ta-status-tag--danger">⚠️有異動</span>' : ''}</div>
       <button type="button" class="ta-btn ta-btn-sm" data-combo-edit="${escapeHtml(combo.id)}">編輯</button>
       <button type="button" class="ta-btn ta-btn-sm" data-combo-copy="${escapeHtml(combo.id)}">複製</button>
+      <button type="button" class="ta-btn ta-btn-sm" data-combo-batch="${escapeHtml(combo.id)}">批次套用</button>
       <button type="button" class="ta-btn ta-btn-sm ta-btn-danger" data-combo-del="${escapeHtml(combo.id)}">刪除</button>
     </div>
   `).join('');
@@ -3908,6 +4001,9 @@ function renderRequiredMaterialsManageList() {
   });
   wrap.querySelectorAll('[data-combo-copy]').forEach(btn => {
     btn.addEventListener('click', () => openComboCopyEditor(requiredComboManageCategory, btn.dataset.comboCopy));
+  });
+  wrap.querySelectorAll('[data-combo-batch]').forEach(btn => {
+    btn.addEventListener('click', () => openBatchApplyComboModal(requiredComboManageCategory, btn.dataset.comboBatch));
   });
   wrap.querySelectorAll('[data-combo-del]').forEach(btn => {
     btn.addEventListener('click', () => deleteRequiredCombo(requiredComboManageCategory, btn.dataset.comboDel));
