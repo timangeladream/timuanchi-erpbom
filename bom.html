@@ -111,6 +111,9 @@
   .ta-form-row input, .ta-form-row select, .ta-form-row textarea {
     width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
   }
+  /* 勾選清單(checkbox巢狀在label裡,例如批次套用組合/複製規格配方的目標清單)不能被上面那條
+     width:100%規則影響,不然checkbox會撐滿整行,把後面的文字擠到下一行去 */
+  .ta-form-row input[type="checkbox"] { width: auto; }
   .ta-radio-row { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
   .ta-radio-row input[type="radio"] { width: auto; flex: none; }
   .ta-radio-row label { display: inline; margin: 0; font-size: 14px; color: var(--text); }
