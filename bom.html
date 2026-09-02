@@ -867,6 +867,7 @@
         <div class="ta-recipe-search-results ta-is-hidden" id="recipeSearchResults"></div>
       </div>
       <hr class="ta-section-divider">
+      <div class="ta-recipe-total" id="recipeMaterialCountStat">使用：0種材料</div>
     </div>
     <div class="ta-modal-scroll">
       <div id="recipeList"></div>
@@ -4553,6 +4554,27 @@ function renderRecipeList() {
 
 function renderRecipeTotal() {
   document.getElementById('recipeTotalCost').textContent = `材料總成本：NT$${calcRecipeCost(currentRecipe).toFixed(2)}`;
+  document.getElementById('recipeMaterialCountStat').textContent = summarizeRecipeMaterialCount(currentRecipe);
+}
+
+// 算配方裡用了幾種不重複的材料,並依分類拆開列出來,例如「使用：6種材料(不鏽鋼材料：3種／銅胚材料：3種)」;
+// 材料已刪除(找不到對應資料)的不列入計算
+function summarizeRecipeMaterialCount(recipe) {
+  const countByCategory = {};
+  let total = 0;
+  recipe.forEach(r => {
+    const m = materials.find(x => x.id === r.materialId);
+    if (!m) return;
+    const cat = m.category || '未分類';
+    countByCategory[cat] = (countByCategory[cat] || 0) + 1;
+    total++;
+  });
+  if (!total) return '使用：0種材料';
+  const breakdown = Object.entries(countByCategory)
+    .sort((a, b) => a[0].localeCompare(b[0], 'zh-Hant'))
+    .map(([cat, count]) => `${cat}：${count}種`)
+    .join('／');
+  return `使用：${total}種材料（${breakdown}）`;
 }
 
 document.getElementById('recipeSaveBtn').addEventListener('click', async () => {
