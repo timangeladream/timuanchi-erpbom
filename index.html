@@ -3438,11 +3438,20 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async () =
   btn.disabled = true;
   try {
     const histSnap = await getDocs(collection(db, 'materials', m.id, 'history'));
-    for (const d of histSnap.docs) {
-      await deleteDoc(doc(db, 'materials', m.id, 'history', d.id));
+    // 用單一 writeBatch 把「刪歷史紀錄+刪材料本身+標記deletedMaterials」包成一次性送出的單一請求,
+    // Firestore 保證同一批次要嘛全部成功、要嘛全部不動,不會再像過去那樣分開一筆一筆刪,中途被打斷
+    // (網路瞬斷、分頁被關掉等)就留下「歷史被刪光、材料本身卻還在」的殭屍材料。
+    // 一個批次最多500個操作,材料本身+deletedMaterials標記固定佔2個,歷史紀錄數量太誇張的話直接擋下,
+    // 不要冒險用不安全的方式硬刪(以目前資料量來看,materials 歷史紀錄多在個位數,實務上不會踩到這個上限)
+    if (histSnap.size + 2 > 500) {
+      alert(`這款材料的歷史紀錄有 ${histSnap.size} 筆，數量太多，沒辦法用目前的方式安全刪除，請另外處理。`);
+      return;
     }
-    await deleteDoc(doc(db, 'materials', m.id));
-    await setDoc(doc(db, 'deletedMaterials', m.id), { deletedAt: serverTimestamp() });
+    const batch = writeBatch(db);
+    histSnap.docs.forEach(d => batch.delete(d.ref));
+    batch.delete(doc(db, 'materials', m.id));
+    batch.set(doc(db, 'deletedMaterials', m.id), { deletedAt: serverTimestamp() });
+    await batch.commit();
     removeMaterialsLocal([m.id]);
     closeModal('deleteModal');
     closeModal('detailModal');
@@ -5257,52 +5266,86 @@ document.getElementById('confirmWipeBtn').addEventListener('click', async () => 
     progressEl.textContent = '讀取資料中...';
     // 先複製快照,避免清除完成後更新本機陣列時,範圍判斷用到的清單中途被改掉
     const targetMaterials = (scope === '__ALL__' ? materials : materials.filter(m => m.category === scope)).slice();
-    const ops = [];
     let historyCount = 0;
+    // materialGroups:每一項是「一款材料自己的歷史紀錄+材料本身」這一整組 ref,分批時一定整組
+    // 一起分進同一批、不會被攔腰切開,避免清到一半中斷時,留下「歷史被刪光、材料本身卻還在」的殭屍材料
+    const materialGroups = [];
     if (scope === '__ALL__') {
       // 全部分類本來就需要讀完所有材料的歷史紀錄,用集合群組查詢1次抓完,不用逐款材料分開問
       const histSnap = await getDocs(collectionGroup(db, 'history'));
-      histSnap.docs.forEach(d => { ops.push(d.ref); historyCount++; });
-      targetMaterials.forEach(m => ops.push(doc(db, 'materials', m.id)));
+      const historyRefsByMaterialId = {};
+      histSnap.docs.forEach(d => {
+        const materialId = d.ref.parent.parent.id;
+        if (!historyRefsByMaterialId[materialId]) historyRefsByMaterialId[materialId] = [];
+        historyRefsByMaterialId[materialId].push(d.ref);
+        historyCount++;
+      });
+      targetMaterials.forEach(m => {
+        materialGroups.push({ material: m, refs: [...(historyRefsByMaterialId[m.id] || []), doc(db, 'materials', m.id)] });
+      });
     } else {
       for (const m of targetMaterials) {
         const histSnap = await getDocs(collection(db, 'materials', m.id, 'history'));
-        histSnap.docs.forEach(d => { ops.push(d.ref); historyCount++; });
-        ops.push(doc(db, 'materials', m.id));
+        const refs = histSnap.docs.map(d => d.ref);
+        historyCount += refs.length;
+        materialGroups.push({ material: m, refs: [...refs, doc(db, 'materials', m.id)] });
       }
     }
 
+    // 單一材料的歷史紀錄多到連一個批次(500筆上限)都裝不下的話,直接跳過不清除,
+    // 避免硬塞超過上限出錯;這種材料極端少見,先跳過、其餘材料照常清除
+    const oversizedMaterials = materialGroups.filter(g => g.refs.length > 500).map(g => g.material);
+    const clearableGroups = materialGroups.filter(g => g.refs.length <= 500);
+    const clearedMaterials = clearableGroups.map(g => g.material);
+
     const CHUNK_SIZE = 400;
+    const totalOps = clearableGroups.reduce((sum, g) => sum + g.refs.length, 0);
     let committed = 0;
-    for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
-      const chunk = ops.slice(i, i + CHUNK_SIZE);
-      const batch = writeBatch(db);
-      chunk.forEach(ref => batch.delete(ref));
-      await batch.commit();
-      committed += chunk.length;
-      progressEl.textContent = `清除中... 已處理 ${Math.min(committed, ops.length)} / ${ops.length} 筆操作（材料 ${targetMaterials.length} 筆 + 歷史紀錄 ${historyCount} 筆）`;
+    let currentBatch = writeBatch(db);
+    let currentBatchSize = 0;
+    const commitProgress = async () => {
+      await currentBatch.commit();
+      committed += currentBatchSize;
+      progressEl.textContent = `清除中... 已處理 ${Math.min(committed, totalOps)} / ${totalOps} 筆操作（材料 ${clearedMaterials.length} 筆 + 歷史紀錄 ${historyCount} 筆）`;
+      currentBatch = writeBatch(db);
+      currentBatchSize = 0;
+    };
+    for (const group of clearableGroups) {
+      if (currentBatchSize > 0 && currentBatchSize + group.refs.length > CHUNK_SIZE) {
+        await commitProgress();
+      }
+      group.refs.forEach(ref => currentBatch.delete(ref));
+      currentBatchSize += group.refs.length;
     }
+    if (currentBatchSize > 0) await commitProgress();
 
     // 記錄這些材料被刪除了,讓其他分頁/下次開頁的「本機快取只抓變動」機制知道要把這些從本機清單移除
-    for (let i = 0; i < targetMaterials.length; i += CHUNK_SIZE) {
-      const chunk = targetMaterials.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < clearedMaterials.length; i += CHUNK_SIZE) {
+      const chunk = clearedMaterials.slice(i, i + CHUNK_SIZE);
       const batch = writeBatch(db);
       chunk.forEach(m => batch.set(doc(db, 'deletedMaterials', m.id), { deletedAt: serverTimestamp() }));
       await batch.commit();
     }
 
-    // 清除範圍對應的材料編號流水號一起歸零,避免下次編號從一個跟現況對不上的號碼繼續跳
-    if (scope === '__ALL__') {
-      await deleteDoc(doc(db, 'settings', 'materialCounters'));
-    } else {
-      const code = (options.categoryCodes || {})[scope];
-      if (code) await setDoc(doc(db, 'settings', 'materialCounters'), { [code]: 0 }, { merge: true });
+    // 清除範圍對應的材料編號流水號一起歸零,避免下次編號從一個跟現況對不上的號碼繼續跳;
+    // 如果有材料因為太肥被跳過沒清除,代表這個範圍沒有真的清乾淨,流水號不能歸零,
+    // 不然之後新建的材料編號會跟還留著的那款材料撞號
+    if (!oversizedMaterials.length) {
+      if (scope === '__ALL__') {
+        await deleteDoc(doc(db, 'settings', 'materialCounters'));
+      } else {
+        const code = (options.categoryCodes || {})[scope];
+        if (code) await setDoc(doc(db, 'settings', 'materialCounters'), { [code]: 0 }, { merge: true });
+      }
     }
 
-    removeMaterialsLocal(targetMaterials.map(m => m.id));
+    removeMaterialsLocal(clearedMaterials.map(m => m.id));
 
     const scopeLabel = scope === '__ALL__' ? '全部分類' : `「${scope}」`;
-    progressEl.textContent = `清除完成！已清除${scopeLabel}共 ${targetMaterials.length} 筆材料、${historyCount} 筆歷史紀錄，對應的材料編號也已重新歸零。`;
+    const skippedNote = oversizedMaterials.length
+      ? `\n⚠️ 有 ${oversizedMaterials.length} 款材料因為歷史紀錄太多（超過單一批次上限），已略過未清除，材料編號流水號也因此沒有歸零：${oversizedMaterials.map(m => displayName(m)).join('、')}`
+      : '';
+    progressEl.textContent = `清除完成！已清除${scopeLabel}共 ${clearedMaterials.length} 筆材料、${historyCount} 筆歷史紀錄${oversizedMaterials.length ? '' : '，對應的材料編號也已重新歸零'}。${skippedNote}`;
     btn.classList.add('ta-is-hidden');
   } catch (err) {
     progressEl.textContent = '';
