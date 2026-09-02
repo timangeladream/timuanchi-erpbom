@@ -902,45 +902,51 @@
 
 <!-- 批次加入材料到成品 Modal -->
 <div class="ta-modal-overlay" id="batchAddMaterialModal">
-  <div class="ta-modal ta-modal--wide">
+  <div class="ta-modal ta-modal--wide ta-modal--split-sm">
     <span class="ta-modal-close" data-close="batchAddMaterialModal">✕</span>
-    <h2>批次加入材料到成品</h2>
-    <div class="ta-form-row">
-      <label>先選材料分類（選填，縮小搜尋範圍）</label>
-      <select id="bamMaterialCategoryFilter"><option value="">全部分類</option></select>
-    </div>
-    <div class="ta-form-row ta-recipe-search-wrap">
-      <label>1. 搜尋要加入的材料（名稱/編號/分類/品牌/材質/尺寸/色系/顏色/同色標籤）</label>
-      <input type="text" id="bamMaterialSearchInput" placeholder="輸入關鍵字搜尋..." autocomplete="off">
-      <div class="ta-recipe-search-results ta-is-hidden" id="bamMaterialSearchResults"></div>
-    </div>
-    <div id="bamSelectedMaterialSection" class="ta-is-hidden">
+    <div class="ta-modal-fixed">
+      <h2>批次加入材料到成品</h2>
       <div class="ta-form-row">
-        <label>已選材料</label>
-        <div class="ta-category-row"><div class="ta-category-row-info" id="bamSelectedMaterialInfo"></div>
-          <button type="button" class="ta-btn ta-btn-sm" id="bamClearMaterialBtn">重新選擇</button>
+        <label>先選材料分類（選填，縮小搜尋範圍）</label>
+        <select id="bamMaterialCategoryFilter"><option value="">全部分類</option></select>
+      </div>
+      <div class="ta-form-row ta-recipe-search-wrap">
+        <label>1. 搜尋要加入的材料（名稱/編號/分類/品牌/材質/尺寸/色系/顏色/同色標籤）</label>
+        <input type="text" id="bamMaterialSearchInput" placeholder="輸入關鍵字搜尋..." autocomplete="off">
+        <div class="ta-recipe-search-results ta-is-hidden" id="bamMaterialSearchResults"></div>
+      </div>
+      <div id="bamSelectedMaterialSection" class="ta-is-hidden">
+        <div class="ta-form-row">
+          <label>已選材料</label>
+          <div class="ta-category-row"><div class="ta-category-row-info" id="bamSelectedMaterialInfo"></div>
+            <button type="button" class="ta-btn ta-btn-sm" id="bamClearMaterialBtn">重新選擇</button>
+          </div>
+        </div>
+        <div class="ta-form-row">
+          <label>2. 用量（每個成品的配方都會用這個數量）</label>
+          <input type="number" id="bamQuantity" min="0" step="1" value="1">
         </div>
       </div>
-      <div class="ta-form-row">
-        <label>2. 用量（每個成品的配方都會用這個數量）</label>
-        <input type="number" id="bamQuantity" min="0" step="1" value="1">
-      </div>
       <hr class="ta-section-divider">
-      <div class="ta-form-row">
-        <label>3. 篩選成品分類（選填）</label>
-        <select id="bamProductCategoryFilter"><option value="">全部分類</option></select>
-      </div>
-      <div class="ta-form-row">
-        <label>4. 勾選要加入的成品</label>
-      </div>
-      <div class="ta-form-row">
-        <label><input type="checkbox" id="bamProductSelectAll"> 全選</label>
-      </div>
-      <div id="bamProductTargetList"></div>
     </div>
-    <div class="ta-modal-actions">
-      <button class="ta-btn" data-close="batchAddMaterialModal">取消</button>
-      <button class="ta-btn ta-btn-primary ta-is-hidden" id="bamConfirmBtn">確認加入</button>
+    <div class="ta-modal-scroll">
+      <div id="bamProductPickerSection" class="ta-is-hidden">
+        <div class="ta-form-row">
+          <label>3. 篩選成品分類（選填）</label>
+          <select id="bamProductCategoryFilter"><option value="">全部分類</option></select>
+        </div>
+        <div class="ta-form-row">
+          <label>4. 勾選要加入的成品</label>
+        </div>
+        <div class="ta-form-row">
+          <label><input type="checkbox" id="bamProductSelectAll"> 全選</label>
+        </div>
+        <div id="bamProductTargetList"></div>
+      </div>
+      <div class="ta-modal-actions">
+        <button class="ta-btn" data-close="batchAddMaterialModal">取消</button>
+        <button class="ta-btn ta-btn-primary ta-is-hidden" id="bamConfirmBtn">確認加入</button>
+      </div>
     </div>
   </div>
 </div>
@@ -4028,6 +4034,7 @@ function openBatchAddMaterialModal() {
   document.getElementById('bamMaterialSearchResults').classList.add('ta-is-hidden');
   document.getElementById('bamQuantity').value = 1;
   document.getElementById('bamSelectedMaterialSection').classList.add('ta-is-hidden');
+  document.getElementById('bamProductPickerSection').classList.add('ta-is-hidden');
   document.getElementById('bamConfirmBtn').classList.add('ta-is-hidden');
   document.getElementById('bamProductSelectAll').checked = false;
 
@@ -4080,6 +4087,7 @@ function selectBamMaterial(materialId) {
   document.getElementById('bamSelectedMaterialInfo').innerHTML =
     `<span class="ta-category-row-name">${escapeHtml(materialDisplayName(m))}</span><span class="ta-tag">${escapeHtml(m.materialCode || '')}</span>`;
   document.getElementById('bamSelectedMaterialSection').classList.remove('ta-is-hidden');
+  document.getElementById('bamProductPickerSection').classList.remove('ta-is-hidden');
   document.getElementById('bamConfirmBtn').classList.remove('ta-is-hidden');
   document.getElementById('bamProductCategoryFilter').value = '';
   renderBamProductTargetList();
@@ -4088,6 +4096,7 @@ function selectBamMaterial(materialId) {
 document.getElementById('bamClearMaterialBtn').addEventListener('click', () => {
   bamSelectedMaterial = null;
   document.getElementById('bamSelectedMaterialSection').classList.add('ta-is-hidden');
+  document.getElementById('bamProductPickerSection').classList.add('ta-is-hidden');
   document.getElementById('bamConfirmBtn').classList.add('ta-is-hidden');
 });
 
