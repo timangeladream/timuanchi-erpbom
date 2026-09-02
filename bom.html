@@ -445,6 +445,7 @@
   </nav>
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item" id="openProductCategoryManageBtn">分類管理</button>
+  <button class="ta-drawer-item" id="openBatchAddMaterialBtn">批次加入材料到成品</button>
   <button class="ta-drawer-item" id="openExportRecipeBtn">匯出配方</button>
   <button class="ta-drawer-item" id="openImportProductBtn">匯入成品</button>
   <button class="ta-drawer-item" id="openPricingTemplateBtn">定價公式範本設定</button>
@@ -895,6 +896,51 @@
     <div class="ta-modal-actions">
       <button class="ta-btn" data-close="batchApplyComboModal">取消</button>
       <button class="ta-btn ta-btn-primary" id="batchApplyComboConfirmBtn">確認套用</button>
+    </div>
+  </div>
+</div>
+
+<!-- 批次加入材料到成品 Modal -->
+<div class="ta-modal-overlay" id="batchAddMaterialModal">
+  <div class="ta-modal ta-modal--wide">
+    <span class="ta-modal-close" data-close="batchAddMaterialModal">✕</span>
+    <h2>批次加入材料到成品</h2>
+    <div class="ta-form-row">
+      <label>先選材料分類（選填，縮小搜尋範圍）</label>
+      <select id="bamMaterialCategoryFilter"><option value="">全部分類</option></select>
+    </div>
+    <div class="ta-form-row ta-recipe-search-wrap">
+      <label>1. 搜尋要加入的材料（名稱/編號/分類/品牌/材質/尺寸/色系/顏色/同色標籤）</label>
+      <input type="text" id="bamMaterialSearchInput" placeholder="輸入關鍵字搜尋..." autocomplete="off">
+      <div class="ta-recipe-search-results ta-is-hidden" id="bamMaterialSearchResults"></div>
+    </div>
+    <div id="bamSelectedMaterialSection" class="ta-is-hidden">
+      <div class="ta-form-row">
+        <label>已選材料</label>
+        <div class="ta-category-row"><div class="ta-category-row-info" id="bamSelectedMaterialInfo"></div>
+          <button type="button" class="ta-btn ta-btn-sm" id="bamClearMaterialBtn">重新選擇</button>
+        </div>
+      </div>
+      <div class="ta-form-row">
+        <label>2. 用量（每個成品的配方都會用這個數量）</label>
+        <input type="number" id="bamQuantity" min="0" step="1" value="1">
+      </div>
+      <hr class="ta-section-divider">
+      <div class="ta-form-row">
+        <label>3. 篩選成品分類（選填）</label>
+        <select id="bamProductCategoryFilter"><option value="">全部分類</option></select>
+      </div>
+      <div class="ta-form-row">
+        <label>4. 勾選要加入的成品</label>
+      </div>
+      <div class="ta-form-row">
+        <label><input type="checkbox" id="bamProductSelectAll"> 全選</label>
+      </div>
+      <div id="bamProductTargetList"></div>
+    </div>
+    <div class="ta-modal-actions">
+      <button class="ta-btn" data-close="batchAddMaterialModal">取消</button>
+      <button class="ta-btn ta-btn-primary ta-is-hidden" id="bamConfirmBtn">確認加入</button>
     </div>
   </div>
 </div>
@@ -3971,6 +4017,143 @@ document.getElementById('batchApplyComboConfirmBtn').addEventListener('click', a
   } finally {
     btn.disabled = false;
   }
+});
+
+// ---------- 批次加入材料到成品(不用先建組合,直接搜尋單一材料、批次加進勾選的成品基礎配方) ----------
+let bamSelectedMaterial = null;
+
+function openBatchAddMaterialModal() {
+  bamSelectedMaterial = null;
+  document.getElementById('bamMaterialSearchInput').value = '';
+  document.getElementById('bamMaterialSearchResults').classList.add('ta-is-hidden');
+  document.getElementById('bamQuantity').value = 1;
+  document.getElementById('bamSelectedMaterialSection').classList.add('ta-is-hidden');
+  document.getElementById('bamConfirmBtn').classList.add('ta-is-hidden');
+  document.getElementById('bamProductSelectAll').checked = false;
+
+  const matCats = [...new Set(materials.map(m => m.category).filter(Boolean))].sort();
+  document.getElementById('bamMaterialCategoryFilter').innerHTML = '<option value="">全部分類</option>' + matCats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+
+  const prodCats = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
+  document.getElementById('bamProductCategoryFilter').innerHTML = '<option value="">全部分類</option>' + prodCats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+
+  openModal('batchAddMaterialModal');
+}
+
+function runBamMaterialSearch() {
+  const kw = document.getElementById('bamMaterialSearchInput').value;
+  const categoryFilter = document.getElementById('bamMaterialCategoryFilter').value;
+  const wrap = document.getElementById('bamMaterialSearchResults');
+  const list = searchMaterials(kw, categoryFilter);
+  if (!list.length) { wrap.classList.add('ta-is-hidden'); wrap.innerHTML = ''; return; }
+  wrap.innerHTML = list.map(m => {
+    const firstImage = (m.images || [])[0];
+    const thumb = firstImage
+      ? `<img src="${escapeHtml(materialThumbUrl(firstImage))}" loading="lazy" alt="">`
+      : `<div class="ta-recipe-search-item-thumb-empty">無照片</div>`;
+    return `
+    <div class="ta-recipe-search-item" data-material-id="${escapeHtml(m.id)}">
+      <div class="ta-recipe-search-item-thumb">${thumb}</div>
+      <div class="ta-recipe-search-item-body">
+        <div class="ta-recipe-search-item-main">${escapeHtml(materialDisplayName(m))}</div>
+        <div class="ta-recipe-search-item-sub">${escapeHtml(m.materialCode || '')} · ${escapeHtml(m.category || '')} · 庫存${(m.currentStock || 0).toLocaleString()}${escapeHtml(m.unit || '')}</div>
+      </div>
+    </div>
+  `;
+  }).join('');
+  wrap.classList.remove('ta-is-hidden');
+  wrap.querySelectorAll('.ta-recipe-search-item').forEach(el => {
+    el.addEventListener('click', () => selectBamMaterial(el.dataset.materialId));
+  });
+}
+
+document.getElementById('bamMaterialSearchInput').addEventListener('input', runBamMaterialSearch);
+document.getElementById('bamMaterialSearchInput').addEventListener('focus', runBamMaterialSearch);
+document.getElementById('bamMaterialCategoryFilter').addEventListener('change', runBamMaterialSearch);
+
+function selectBamMaterial(materialId) {
+  const m = materials.find(x => x.id === materialId);
+  if (!m) return;
+  bamSelectedMaterial = m;
+  document.getElementById('bamMaterialSearchInput').value = '';
+  document.getElementById('bamMaterialSearchResults').classList.add('ta-is-hidden');
+  document.getElementById('bamSelectedMaterialInfo').innerHTML =
+    `<span class="ta-category-row-name">${escapeHtml(materialDisplayName(m))}</span><span class="ta-tag">${escapeHtml(m.materialCode || '')}</span>`;
+  document.getElementById('bamSelectedMaterialSection').classList.remove('ta-is-hidden');
+  document.getElementById('bamConfirmBtn').classList.remove('ta-is-hidden');
+  document.getElementById('bamProductCategoryFilter').value = '';
+  renderBamProductTargetList();
+}
+
+document.getElementById('bamClearMaterialBtn').addEventListener('click', () => {
+  bamSelectedMaterial = null;
+  document.getElementById('bamSelectedMaterialSection').classList.add('ta-is-hidden');
+  document.getElementById('bamConfirmBtn').classList.add('ta-is-hidden');
+});
+
+function renderBamProductTargetList() {
+  const categoryFilter = document.getElementById('bamProductCategoryFilter').value;
+  const targetProducts = products.filter(p => !categoryFilter || p.category === categoryFilter);
+  document.getElementById('bamProductSelectAll').checked = false;
+  const listEl = document.getElementById('bamProductTargetList');
+  if (!targetProducts.length) { listEl.innerHTML = '<div class="ta-empty-hint">這個範圍內沒有成品</div>'; return; }
+  listEl.innerHTML = targetProducts.map(p => `
+    <div class="ta-form-row ta-form-row--full"><label><input type="checkbox" class="bam-product-target-cb" value="${escapeHtml(p.id)}"> ${escapeHtml(p.name)}${p.productCode ? `（${escapeHtml(p.productCode)}）` : ''}</label></div>
+  `).join('');
+}
+
+document.getElementById('bamProductCategoryFilter').addEventListener('change', renderBamProductTargetList);
+
+document.getElementById('bamProductSelectAll').addEventListener('change', (e) => {
+  document.querySelectorAll('.bam-product-target-cb').forEach(cb => { cb.checked = e.target.checked; });
+});
+
+document.getElementById('bamConfirmBtn').addEventListener('click', async () => {
+  if (!bamSelectedMaterial) return;
+  const qty = parseFloat(document.getElementById('bamQuantity').value);
+  if (isNaN(qty) || qty <= 0) { alert('請輸入正確的用量'); return; }
+  const targetIds = [...document.querySelectorAll('.bam-product-target-cb:checked')].map(cb => cb.value);
+  if (!targetIds.length) { alert('請至少勾選一個成品'); return; }
+  const materialId = bamSelectedMaterial.id;
+  const ok = await showConfirmModal({
+    title: '確定要批次加入嗎？',
+    text: `這會把「${materialDisplayName(bamSelectedMaterial)}」（用量 ${qty}）加進你勾選的 ${targetIds.length} 個成品的基礎配方（已經有的材料不會重複加入）。確定要繼續嗎？`,
+  });
+  if (!ok) return;
+  const btn = document.getElementById('bamConfirmBtn');
+  btn.disabled = true;
+  try {
+    let changedCount = 0, unchangedCount = 0;
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < targetIds.length; i += CHUNK_SIZE) {
+      const chunk = targetIds.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      let chunkHasWrites = false;
+      chunk.forEach(id => {
+        const p = products.find(x => x.id === id);
+        if (!p) return;
+        const recipe = (p.recipe || []).map(r => ({ ...r }));
+        if (recipe.some(existing => existing.materialId === materialId)) { unchangedCount++; return; }
+        recipe.push({ materialId, quantity: qty });
+        batch.update(doc(db, 'products', id), { recipe, updatedAt: serverTimestamp() });
+        chunkHasWrites = true;
+        changedCount++;
+      });
+      if (chunkHasWrites) await batch.commit();
+    }
+    await refreshProductsLocal(targetIds);
+    closeModal('batchAddMaterialModal');
+    alert(`批次加入完成！成功加入到 ${changedCount} 個成品${unchangedCount ? `，${unchangedCount} 個成品的配方裡本來就有這款材料了，沒有變動` : ''}。`);
+  } catch (e) {
+    alert('批次加入失敗：' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('openBatchAddMaterialBtn').addEventListener('click', () => {
+  closeDrawer();
+  openBatchAddMaterialModal();
 });
 
 // ---------- 必備材料組合管理 ----------
