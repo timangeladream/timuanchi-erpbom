@@ -268,6 +268,7 @@
   .ta-recipe-row-note { padding: 0 0 8px; }
   .ta-recipe-row-note input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
   .ta-recipe-total { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 0 0; font-size: 15px; font-weight: 600; color: var(--primary-dark); }
+  #recipeMaterialCountStat { font-size: 12px; text-align: right; line-height: 1.5; }
 
   .ta-production-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
   .ta-production-row-name { flex: 1; font-size: 13px; }
@@ -4554,11 +4555,11 @@ function renderRecipeList() {
 
 function renderRecipeTotal() {
   document.getElementById('recipeTotalCost').textContent = `材料總成本：NT$${calcRecipeCost(currentRecipe).toFixed(2)}`;
-  document.getElementById('recipeMaterialCountStat').textContent = summarizeRecipeMaterialCount(currentRecipe);
+  document.getElementById('recipeMaterialCountStat').innerHTML = summarizeRecipeMaterialCount(currentRecipe);
 }
 
-// 算配方裡用了幾種不重複的材料,並依分類拆開列出來,例如「使用：6種材料(不鏽鋼材料：3種／銅胚材料：3種)」;
-// 材料已刪除(找不到對應資料)的不列入計算
+// 算配方裡用了幾種不重複的材料,並依分類拆開列出來,例如「使用：6種材料」換行「(不鏽鋼材料：3種／銅胚材料：3種)」;
+// 材料已刪除(找不到對應資料)的不列入計算。分類名稱是使用者自己可以編輯的文字,組成HTML前要escape。
 function summarizeRecipeMaterialCount(recipe) {
   const countByCategory = {};
   let total = 0;
@@ -4572,9 +4573,9 @@ function summarizeRecipeMaterialCount(recipe) {
   if (!total) return '使用：0種材料';
   const breakdown = Object.entries(countByCategory)
     .sort((a, b) => a[0].localeCompare(b[0], 'zh-Hant'))
-    .map(([cat, count]) => `${cat}：${count}種`)
+    .map(([cat, count]) => `${escapeHtml(cat)}：${count}種`)
     .join('／');
-  return `使用：${total}種材料（${breakdown}）`;
+  return `使用：${total}種材料<br>（${breakdown}）`;
 }
 
 document.getElementById('recipeSaveBtn').addEventListener('click', async () => {
