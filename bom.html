@@ -798,6 +798,31 @@
   </div>
 </div>
 
+<!-- 複製配方到其他成品 Modal -->
+<div class="ta-modal-overlay" id="copyRecipeToProductModal">
+  <div class="ta-modal ta-modal--wide ta-modal--split-sm">
+    <span class="ta-modal-close" data-close="copyRecipeToProductModal">✕</span>
+    <div class="ta-modal-fixed">
+      <h2 id="copyRecipeToProductTitle">複製配方到其他成品</h2>
+      <div class="ta-modal-text">會把來源配方整份覆蓋到你勾選的目標（包括已經客製化過的內容），此動作無法復原。有規格的成品可以展開勾選要套用到哪些規格；勾成品本身代表套用到該成品的基礎配方。</div>
+      <div class="ta-form-row">
+        <label>篩選成品分類（選填）</label>
+        <select id="copyRecipeToProductCategoryFilter"><option value="">全部分類</option></select>
+      </div>
+      <div class="ta-form-row">
+        <label><input type="checkbox" id="copyRecipeToProductSelectAll"> 全選</label>
+      </div>
+    </div>
+    <div class="ta-modal-scroll">
+      <div id="copyRecipeToProductTargetList"></div>
+      <div class="ta-modal-actions">
+        <button class="ta-btn" data-close="copyRecipeToProductModal">取消</button>
+        <button class="ta-btn ta-btn-primary" id="copyRecipeToProductConfirmBtn">確認套用</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 清除成品資料 Modal -->
 <div class="ta-modal-overlay" id="wipeProductModal">
   <div class="ta-modal">
@@ -1998,6 +2023,7 @@ function renderVariantSection(p) {
             <button type="button" class="ta-btn ta-btn-sm" data-register-production>生產登記</button>
             <button type="button" class="ta-btn ta-btn-sm" data-register-shipment>登記出貨</button>
             <button type="button" class="ta-btn ta-btn-sm" data-copy-recipe>複製配方到其他規格</button>
+            <button type="button" class="ta-btn ta-btn-sm" data-copy-recipe-to-product>複製配方到其他成品</button>
           </div>
         </div>
       `;
@@ -2078,6 +2104,21 @@ function wireVariantComboEditButtons(productId) {
         const saved = await saveVariantSettings(productId);
         if (!saved) return;
         openCopyVariantRecipeModal(productId, row.dataset.comboKey, row.dataset.comboLabel);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+  document.querySelectorAll('#variantCombosList [data-copy-recipe-to-product]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('.ta-variant-combo-row');
+      btn.disabled = true;
+      try {
+        const saved = await saveVariantSettings(productId);
+        if (!saved) return;
+        const updated = products.find(x => x.id === productId);
+        const sourceRecipe = (updated.variantRecipes || {})[row.dataset.comboKey] || [];
+        openCopyRecipeToProductModal(sourceRecipe, `${updated.name}（${row.dataset.comboLabel}）`);
       } finally {
         btn.disabled = false;
       }
@@ -2251,6 +2292,7 @@ function openProductDetail(id) {
         <div class="ta-detail-title">${escapeHtml(p.name)}</div>
         <div>
           <button class="ta-btn ta-btn-sm" id="editRecipeBtn">編輯基礎配方</button>
+          <button class="ta-btn ta-btn-sm" id="copyBaseRecipeToProductBtn">複製配方到其他成品</button>
           ${hasVariants ? '' : '<button class="ta-btn ta-btn-sm" id="productionRegisterBtn">生產登記</button>'}
           <button class="ta-btn ta-btn-sm" id="productionLogsBtn">生產登記紀錄</button>
           ${hasVariants ? '' : '<button class="ta-btn ta-btn-sm" id="shipmentRegisterBtn">登記出貨</button>'}
@@ -2300,6 +2342,7 @@ function openProductDetail(id) {
   `;
 
   document.getElementById('editRecipeBtn').addEventListener('click', () => openRecipeModal(p));
+  document.getElementById('copyBaseRecipeToProductBtn').addEventListener('click', () => openCopyRecipeToProductModal(p.recipe || [], `${p.name}（基礎配方）`));
   if (hasVariants) document.getElementById('applyBaseRecipeToAllBtn').addEventListener('click', () => applyBaseRecipeToAllVariants(p.id));
   if (!hasVariants) document.getElementById('productionRegisterBtn').addEventListener('click', () => openProductionRegisterModal(p));
   document.getElementById('productionLogsBtn').addEventListener('click', () => openProductionLogsModal(p));
@@ -4000,6 +4043,94 @@ function renderBatchTargetProductList(containerEl, targetProducts, productCbClas
     });
   });
 }
+
+// ---------- 複製配方到其他成品(整份覆蓋目標配方,不是像批次工具那樣只新增不覆蓋,
+// 用途是設計相同、材料大同小異的成品之間先複製當起點,例如手鏈複製給項鍊,再各自微調差異) ----------
+let copyRecipeToProductSource = null; // { recipe, label }
+
+function openCopyRecipeToProductModal(sourceRecipe, sourceLabel) {
+  copyRecipeToProductSource = { recipe: sourceRecipe, label: sourceLabel };
+  document.getElementById('copyRecipeToProductTitle').textContent = `複製配方到其他成品（來源：${sourceLabel}）`;
+  document.getElementById('copyRecipeToProductSelectAll').checked = false;
+
+  const prodCats = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
+  document.getElementById('copyRecipeToProductCategoryFilter').innerHTML = '<option value="">全部分類</option>' + prodCats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  document.getElementById('copyRecipeToProductCategoryFilter').value = '';
+
+  renderCopyRecipeToProductTargetList();
+  openModal('copyRecipeToProductModal');
+}
+
+function renderCopyRecipeToProductTargetList() {
+  const categoryFilter = document.getElementById('copyRecipeToProductCategoryFilter').value;
+  const targetProducts = products.filter(p => !categoryFilter || p.category === categoryFilter);
+  document.getElementById('copyRecipeToProductSelectAll').checked = false;
+  renderBatchTargetProductList(document.getElementById('copyRecipeToProductTargetList'), targetProducts, 'copy-recipe-to-product-target-cb', 'copy-recipe-to-product-variant-cb');
+}
+
+document.getElementById('copyRecipeToProductCategoryFilter').addEventListener('change', renderCopyRecipeToProductTargetList);
+
+document.getElementById('copyRecipeToProductSelectAll').addEventListener('change', (e) => {
+  document.querySelectorAll('.copy-recipe-to-product-target-cb').forEach(cb => { cb.checked = e.target.checked; });
+});
+
+document.getElementById('copyRecipeToProductConfirmBtn').addEventListener('click', async () => {
+  if (!copyRecipeToProductSource) return;
+  const targetIds = [...document.querySelectorAll('.copy-recipe-to-product-target-cb:checked')].map(cb => cb.value);
+  const variantChecks = [...document.querySelectorAll('.copy-recipe-to-product-variant-cb:checked')].map(cb => ({ productId: cb.dataset.productId, variantKey: cb.value }));
+  if (!targetIds.length && !variantChecks.length) { alert('請至少勾選一個成品或規格'); return; }
+  const allTouchedIds = [...new Set([...targetIds, ...variantChecks.map(v => v.productId)])];
+  const ok = await showConfirmModal({
+    title: '確定要複製配方嗎？',
+    text: `這會把「${copyRecipeToProductSource.label}」的配方，整份覆蓋到你勾選的 ${targetIds.length} 個成品的基礎配方、${variantChecks.length} 個規格的配方，包括已經客製化過的內容也會被取代。此動作無法復原，確定要繼續嗎？`,
+  });
+  if (!ok) return;
+  const btn = document.getElementById('copyRecipeToProductConfirmBtn');
+  btn.disabled = true;
+  try {
+    const targetIdSet = new Set(targetIds);
+    const variantKeysByProduct = {};
+    variantChecks.forEach(v => {
+      if (!variantKeysByProduct[v.productId]) variantKeysByProduct[v.productId] = [];
+      variantKeysByProduct[v.productId].push(v.variantKey);
+    });
+    const sourceRecipe = copyRecipeToProductSource.recipe;
+
+    const CHUNK_SIZE = 400;
+    let changedCount = 0;
+    for (let i = 0; i < allTouchedIds.length; i += CHUNK_SIZE) {
+      const chunk = allTouchedIds.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach(id => {
+        const p = products.find(x => x.id === id);
+        if (!p) return;
+        const updateData = { updatedAt: serverTimestamp() };
+        if (targetIdSet.has(id)) {
+          updateData.recipe = sourceRecipe.map(r => ({ ...r }));
+          changedCount++;
+        }
+        const keys = variantKeysByProduct[id];
+        if (keys && keys.length) {
+          const variantRecipes = { ...(p.variantRecipes || {}) };
+          keys.forEach(key => {
+            variantRecipes[key] = sourceRecipe.map(r => ({ ...r }));
+            changedCount++;
+          });
+          updateData.variantRecipes = variantRecipes;
+        }
+        batch.update(doc(db, 'products', id), updateData);
+      });
+      await batch.commit();
+    }
+    await refreshProductsLocal(allTouchedIds);
+    closeModal('copyRecipeToProductModal');
+    alert(`複製完成！已覆蓋 ${changedCount} 個地方的配方。`);
+  } catch (e) {
+    alert('複製失敗：' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // ---------- 批次套用必備材料組合(一次套用到這個分類底下勾選的多個成品的基礎配方,也可以展開套用到規格配方) ----------
 let batchApplyComboContext = null; // { category, comboId }
