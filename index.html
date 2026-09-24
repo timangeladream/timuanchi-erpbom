@@ -2870,6 +2870,10 @@ async function recalculateMaterialStock(materialId) {
       if (log.target === 'secondary') secondaryStock = log.afterQty;
       else if (log.target === 'sample') sampleStock = log.afterQty;
       else if (log.target === 'primary') stock = log.afterQty;
+    } else if (log.type === 'historyMigration') {
+      // 歷史資料搬遷是把庫存直接設定成某個絕對數字(afterQty),不是累加;過去這裡完全沒處理這個類型,
+      // 導致只要編輯這款材料的任何一筆進貨紀錄觸發重新核算,搬遷的修正效果就會被整個跳過、洗掉
+      stock = log.afterQty;
     }
   });
   await updateDoc(doc(db, 'materials', materialId), {
