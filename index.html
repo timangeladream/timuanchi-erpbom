@@ -3557,12 +3557,12 @@ function buildLogView(log, unit) {
       detail = `${escapeHtml(log.platform || '')} ${log.seller ? ' / ' + escapeHtml(log.seller) : ''}<br>
         ${log.supplierColorName ? '供應商原始顏色名稱：' + escapeHtml(log.supplierColorName) + '<br>' : ''}
         ${amountLine}<br>
-        進貨數量：+${log.quantity} ${escapeHtml(logUnit)}<br>
-        ${log.shortageQuantity ? `短少：${log.shortageQuantity} ${escapeHtml(logUnit)}（損失約 NT$${(log.shortageQuantity * (log.unitCost||0)).toFixed(2)}）<br>` : ''}
-        ${log.extraQuantity ? `多給：+${log.extraQuantity} ${escapeHtml(logUnit)}<br>` : ''}
-        ${log.scrapQuantity ? `報廢：${log.scrapQuantity} ${escapeHtml(logUnit)}（損失約 NT$${(log.scrapQuantity * (log.unitCost||0)).toFixed(2)}）<br>` : ''}
-        ${log.secondaryQuantity ? `次品：+${log.secondaryQuantity} ${escapeHtml(logUnit)}<br>` : ''}
-        ${log.sampleQuantity ? `留樣：${log.sampleQuantity} ${escapeHtml(logUnit)}<br>` : ''}
+        正品入庫數量：+${log.quantity} ${escapeHtml(logUnit)}<br>
+        ${log.shortageQuantity ? `含短少：${log.shortageQuantity} ${escapeHtml(logUnit)}（損失約 NT$${(log.shortageQuantity * (log.unitCost||0)).toFixed(2)}）<br>` : ''}
+        ${log.extraQuantity ? `含多給：+${log.extraQuantity} ${escapeHtml(logUnit)}<br>` : ''}
+        ${log.scrapQuantity ? `含報廢：${log.scrapQuantity} ${escapeHtml(logUnit)}（損失約 NT$${(log.scrapQuantity * (log.unitCost||0)).toFixed(2)}）<br>` : ''}
+        ${log.secondaryQuantity ? `含次品：+${log.secondaryQuantity} ${escapeHtml(logUnit)}<br>` : ''}
+        ${log.sampleQuantity ? `含留樣：${log.sampleQuantity} ${escapeHtml(logUnit)}<br>` : ''}
         總額：${totalCostTags}<br>
         單價：${unitCostTags}
         ${log.note ? '<br>備註：' + escapeHtml(log.note) : ''}`;
