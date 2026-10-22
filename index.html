@@ -2624,6 +2624,22 @@ function checkDuplicate() {
   updateAmountCalc();
 }
 
+// 從材料詳情頁的「新增進貨」按鈕進來:直接帶入這款材料的身分欄位,
+// 借用 checkDuplicate() 原本的比對邏輯自動辨識出這款材料,不用另外寫一套比對規則。
+// 只給未下架的材料用(下架材料本來就被比對邏輯排除在外,帶進來也比對不到,會誤判成全新材料)
+function openPurchaseModalForMaterial(m) {
+  resetPurchaseForm();
+  document.getElementById('pCategory').value = m.category || '';
+  document.getElementById('pBrand').value = m.brand || '';
+  document.getElementById('pMaterial').value = m.material || '';
+  document.getElementById('pBeadType').value = m.beadType || '';
+  document.getElementById('pSize').value = m.size || '';
+  document.getElementById('pColorSeries').value = m.colorSeries || '';
+  document.getElementById('pColorCode').value = m.colorCode || '';
+  checkDuplicate();
+  openModal('purchaseModal');
+}
+
 // 即時試算換算金額 / 單價 / 顆數(依三種金額輸入模式各自計算)
 ['pCurrency','pQuantity','pQuantityUnit','pUnitPrice','pTotalAmount','pPkgUnit','pPkgBaseQty','pPkgUnitPrice','pPkgUnitQty','pPkgCount','pShortageQty','pExtraQty','pScrapQty','pSecondaryQty','pSampleQty'].forEach(id => {
   document.getElementById(id).addEventListener('input', updateAmountCalc);
@@ -3242,6 +3258,7 @@ async function openDetail(id) {
         <div class="ta-detail-title">${escapeHtml(displayName(m))}</div>
         <div>
           <button class="ta-btn ta-btn-sm" id="editFieldsBtn">編輯屬性</button>
+          ${m.archived ? '' : '<button class="ta-btn ta-btn-sm" id="detailAddPurchaseBtn">新增進貨</button>'}
           ${(m.images && m.images.length) ? `<button class="ta-btn ta-btn-sm" id="viewImagesBtn">查看圖片</button>` : ''}
           <button class="ta-btn ta-btn-sm" id="adjustBtn">人工盤點調整</button>
           <button class="ta-btn ta-btn-sm" id="historyMigrationBtn">歷史資料搬遷</button>
@@ -3303,6 +3320,10 @@ async function openDetail(id) {
   document.getElementById('archiveBtn').addEventListener('click', () => toggleArchive(m));
   document.getElementById('editFieldsBtn').addEventListener('click', () => editMaterialFields(m));
   document.getElementById('deleteBtn').addEventListener('click', () => deleteMaterial(m));
+  const detailAddPurchaseBtn = document.getElementById('detailAddPurchaseBtn');
+  if (detailAddPurchaseBtn) {
+    detailAddPurchaseBtn.addEventListener('click', () => openPurchaseModalForMaterial(m));
+  }
   const viewImagesBtn = document.getElementById('viewImagesBtn');
   if (viewImagesBtn) {
     viewImagesBtn.addEventListener('click', () => {
