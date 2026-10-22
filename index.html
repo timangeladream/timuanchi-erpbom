@@ -1312,6 +1312,8 @@ let exchangeRates = { CNY: 5, JPY: 3 };
 let currentDetailId = null;
 let currentDetailScrapQtyTotal = 0; // 材料詳情頁算出的累計報廢數量,順手帶給人工盤點調整彈窗用,不用另外再讀一次歷史
 let dupMatchedMaterial = null; // 新增進貨時比對到的既有材料
+let purchaseModalSourceDetailId = null; // 如果是從材料詳情頁的「新增進貨」按鈕進來,記下是哪一款材料,
+// 送出成功後才知道要重新整理回那款材料的詳情頁,不然詳情頁底下還開著,送出後不會自動看到新資料
 let categoryFilter = ''; // 目前選中的分類頁籤,空字串代表全部
 let currentPage = 1;
 const PAGE_SIZE = 200;
@@ -2522,6 +2524,7 @@ document.getElementById('refreshPageBtn').addEventListener('click', (e) => {
 // ---------- 新增進貨 / 材料 ----------
 document.getElementById('openPurchaseBtn').addEventListener('click', () => {
   resetPurchaseForm();
+  purchaseModalSourceDetailId = null;
   openModal('purchaseModal');
 });
 
@@ -2637,6 +2640,7 @@ function openPurchaseModalForMaterial(m) {
   document.getElementById('pColorSeries').value = m.colorSeries || '';
   document.getElementById('pColorCode').value = m.colorCode || '';
   checkDuplicate();
+  purchaseModalSourceDetailId = m.id;
   openModal('purchaseModal');
 }
 
@@ -3193,6 +3197,12 @@ async function submitPurchase() {
     await refreshMaterialLocal(materialId);
 
     closeModal('purchaseModal');
+    // 如果是從材料詳情頁的「新增進貨」按鈕進來,詳情頁底下還開著,送出後要主動重新整理回那款材料的
+    // 詳情頁,不然會停留在打開當下的舊畫面,要手動重新整理才看得到剛剛送出的這筆進貨
+    if (purchaseModalSourceDetailId) {
+      await openDetail(purchaseModalSourceDetailId);
+      purchaseModalSourceDetailId = null;
+    }
   } catch (e) {
     alert('送出失敗：' + e.message);
   } finally {
