@@ -306,7 +306,7 @@
   .ta-timeline-summary-row { cursor: pointer; border-radius: 6px; padding: 4px 6px; margin-left: -6px; display: flex; align-items: baseline; gap: 8px; }
   .ta-timeline-summary-row:hover { background: #eff3f7; }
   .ta-timeline-summary-extra { font-size: 12px; color: var(--text-muted); }
-  .ta-timeline-edit-btn-row { margin-top: 8px; }
+  .ta-timeline-edit-btn-row { margin-top: 8px; display: flex; gap: 6px; }
   .ta-timeline-edit-btn { font-size: 11px; padding: 3px 8px; }
   .ta-timeline-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
   .ta-timeline-tab {
@@ -1269,6 +1269,7 @@
   <button class="ta-drawer-item" id="openExportBtn">匯出資料</button>
   <button class="ta-drawer-item" id="openHistoryCountBtn">查看進貨紀錄總筆數</button>
   <button class="ta-drawer-item" id="recalcPurchaseValueBtn">重新核算累計進貨總額</button>
+  <button class="ta-drawer-item" id="recalcAllStockBtn">重新計算全部材料庫存</button>
   <div class="ta-drawer-divider"></div>
   <button class="ta-drawer-item ta-drawer-item--danger" id="openWipeBtn">清除資料</button>
   <div class="ta-drawer-divider"></div>
@@ -1479,6 +1480,83 @@ document.getElementById('recalcPurchaseValueBtn').addEventListener('click', asyn
     alert('重新核算完成，「累計進貨總額」已更新為最新正確的數字。');
   } catch (err) {
     alert('核算失敗：' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+});
+
+// 批次重算全部材料的庫存/成本:用來一次性修正過去因為 recalculateMaterialStock 漏處理
+// 生產/出貨/POS銷售消耗,被重算成錯誤數字的材料(修 bug 之前的舊資料)。
+// 用 collectionGroup 一次讀出全部材料的歷史紀錄,照 materialId 分組、各自排序後,
+// 用跟單筆重算完全同一套邏輯(computeStockFromHistory)算一次,整批寫回去。
+async function recalculateAllMaterialStocks() {
+  const snap = await getDocs(query(collectionGroup(db, 'history'), orderBy('timestamp', 'asc')));
+  const historyByMaterialId = {};
+  snap.docs.forEach(d => {
+    const materialId = d.ref.parent.parent.id;
+    (historyByMaterialId[materialId] = historyByMaterialId[materialId] || []).push(d.data());
+  });
+
+  const resultsByMaterialId = {};
+  const changes = [];
+  materials.forEach(m => {
+    const r = computeStockFromHistory(historyByMaterialId[m.id] || []);
+    resultsByMaterialId[m.id] = r;
+    if (r.stock !== (m.currentStock || 0)) {
+      changes.push({ material: m, before: m.currentStock || 0, after: r.stock });
+    }
+  });
+
+  const materialIds = Object.keys(resultsByMaterialId);
+  const CHUNK_SIZE = 400;
+  for (let i = 0; i < materialIds.length; i += CHUNK_SIZE) {
+    const chunk = materialIds.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+    chunk.forEach(id => {
+      const r = resultsByMaterialId[id];
+      batch.update(doc(db, 'materials', id), {
+        currentStock: r.stock, currentStockSecondary: r.secondaryStock, currentStockSample: r.sampleStock,
+        currentUnitCost: r.unitCost, currentUnitCostWeightedAvg: r.weightedAvg,
+        cumulativePurchaseValue: r.totalPurchaseValue, lastPurchaseDate: r.lastPurchaseDate,
+        updatedAt: serverTimestamp(),
+      });
+    });
+    await batch.commit();
+  }
+
+  await syncMaterialsFromServer();
+  renderTable();
+  renderSummary();
+  return changes;
+}
+
+document.getElementById('recalcAllStockBtn').addEventListener('click', async () => {
+  closeDrawer();
+  const ok = await showConfirmModal({
+    title: '重新計算全部材料庫存',
+    text: '這會把全部材料的庫存、成本數字，依照完整歷史紀錄重新算一次並覆蓋目前的數字。正常情況下算出來的應該跟現在一樣；只有過去被錯誤重算過的材料數字才會被修正。確定要執行嗎？',
+  });
+  if (!ok) return;
+
+  const btn = document.getElementById('recalcAllStockBtn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '重新計算中...';
+  try {
+    const changes = await recalculateAllMaterialStocks();
+    if (!changes.length) {
+      alert('重新計算完成，全部材料的庫存數字都跟原本一致，沒有發現需要修正的材料。');
+    } else {
+      const LIST_LIMIT = 40;
+      const lines = changes.slice(0, LIST_LIMIT).map(c =>
+        `${c.material.materialCode || displayName(c.material)}：${c.before} → ${c.after}（${c.after - c.before >= 0 ? '+' : ''}${c.after - c.before}）`
+      );
+      const more = changes.length > LIST_LIMIT ? `\n...還有 ${changes.length - LIST_LIMIT} 款未列出` : '';
+      alert(`重新計算完成，共有 ${changes.length} 款材料的庫存數字被修正：\n\n${lines.join('\n')}${more}`);
+    }
+  } catch (err) {
+    alert('重新計算失敗：' + err.message);
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
@@ -2868,12 +2946,16 @@ function openEditPurchaseModal(materialId, historyId, log, unit) {
 // 編輯進貨紀錄(改金額/數量)可能牽動整條加權平均成本的計算鏈,沒辦法只算差額,一定要整個重播;
 // 順便也把「累計進貨總額」用同一次重播算出來的真實加總覆蓋回去,確保編輯進貨紀錄後這個欄位一定是對的,
 // 不用另外再處理「編輯」這個情境的累加/扣除邏輯
-async function recalculateMaterialStock(materialId) {
-  const histSnap = await getDocs(query(collection(db, 'materials', materialId, 'history'), orderBy('timestamp', 'asc')));
+//
+// 這段重播邏輯單筆重算(recalculateMaterialStock)跟批次重算全部材料(recalculateAllMaterialStocks)
+// 共用同一份,避免兩邊各寫一份、以後修 bug 只改到一邊忘了改另一邊
+function computeStockFromHistory(historyLogs) {
   let stock = 0, secondaryStock = 0, sampleStock = 0, unitCost = 0, weightedAvg = 0, lastPurchaseDate = null, totalPurchaseValue = 0;
-  histSnap.docs.forEach(d => {
-    const log = d.data();
-    if (log.type === 'purchase') {
+  historyLogs.forEach(log => {
+    if (log.type === 'purchase' && !log.voided) {
+      // 已作廢的進貨紀錄(voided)當作從沒發生過,整段跳過不累加,
+      // 這樣加權平均成本/最高單價/累計進貨金額/最後進貨日期才會是「排除這筆」後正確重算出來的結果,
+      // 不用額外寫反向扣減的數學(加權平均一旦混入其他批次,無法簡單用減法還原)
       const qty = log.quantity || 0;
       const denom = stock + qty;
       weightedAvg = denom > 0 ? (stock * weightedAvg + qty * (log.unitCost || 0)) / denom : weightedAvg;
@@ -2894,13 +2976,33 @@ async function recalculateMaterialStock(materialId) {
       // 歷史資料搬遷是把庫存直接設定成某個絕對數字(afterQty),不是累加;過去這裡完全沒處理這個類型,
       // 導致只要編輯這款材料的任何一筆進貨紀錄觸發重新核算,搬遷的修正效果就會被整個跳過、洗掉
       stock = log.afterQty;
+    } else if (log.type === 'shipment') {
+      // 登記出貨當初是「已預留 → 真正扣除」,過去這裡完全沒處理,導致重算會把已經出貨掉的數量復原回庫存
+      stock -= (log.consumedQuantity || 0);
+    } else if (log.type === 'shipmentLogDeleted') {
+      // 出貨刪除還原時存的 consumedQuantity 是正數(代表「補回多少」),跟 shipment 的扣除方向相反,要分開處理
+      stock += (log.consumedQuantity || 0);
+    } else if (log.type === 'posSaleConfirm') {
+      // POS銷售確認是「已預留 → 真正扣除」,跟登記出貨一樣會真的減少庫存
+      stock -= (log.consumedQuantity || 0);
+    } else if (log.type === 'production' || log.type === 'productionLogDeleted') {
+      // 生產登記只有額外損耗(extraLossQuantity)會真的扣庫存,消耗量本身只是從庫存轉去已預留,不影響這裡算的庫存;
+      // 刪除還原那筆寫入時 extraLossQuantity 本身存的就是負數,用同一個減法公式剛好自動變成加回去
+      stock -= (log.extraLossQuantity || 0);
     }
   });
+  return { stock, secondaryStock, sampleStock, unitCost, weightedAvg, lastPurchaseDate, totalPurchaseValue };
+}
+
+async function recalculateMaterialStock(materialId) {
+  const histSnap = await getDocs(query(collection(db, 'materials', materialId, 'history'), orderBy('timestamp', 'asc')));
+  const r = computeStockFromHistory(histSnap.docs.map(d => d.data()));
   await updateDoc(doc(db, 'materials', materialId), {
-    currentStock: stock, currentStockSecondary: secondaryStock, currentStockSample: sampleStock, currentUnitCost: unitCost,
-    currentUnitCostWeightedAvg: weightedAvg,
-    cumulativePurchaseValue: totalPurchaseValue,
-    lastPurchaseDate, updatedAt: serverTimestamp(),
+    currentStock: r.stock, currentStockSecondary: r.secondaryStock, currentStockSample: r.sampleStock,
+    currentUnitCost: r.unitCost,
+    currentUnitCostWeightedAvg: r.weightedAvg,
+    cumulativePurchaseValue: r.totalPurchaseValue,
+    lastPurchaseDate: r.lastPurchaseDate, updatedAt: serverTimestamp(),
   });
   await refreshMaterialLocal(materialId);
 }
@@ -3016,6 +3118,71 @@ document.getElementById('submitEditPurchaseBtn').addEventListener('click', async
     btn.disabled = false;
   }
 });
+
+// 刪除進貨紀錄:不是真的從資料庫移除原始那筆,而是標記 voided + 另外寫一筆 purchaseVoided 補償紀錄,
+// 讓時間軸還能查到「這筆進貨曾經存在、後來被刪除」,recalculateMaterialStock 重算時會直接跳過
+// voided 的原始紀錄,等於整筆當作沒發生過(庫存、加權平均成本、累計進貨金額都會正確重算)。
+// 適用情境例如:廠商發貨前告知缺貨並退款,這筆進貨根本沒有真正完成。
+async function deletePurchaseLog(materialId, historyId, log, unit) {
+  if (log.voided) return;
+
+  const reason = await showInputModal({ title: '刪除進貨紀錄', label: '請輸入刪除原因（例如：廠商缺貨，已退款）' });
+  if (!reason) return;
+
+  // 模擬排除這筆之後重新計算一次,確認不會讓庫存變成負數
+  // (如果這筆進貨之後材料已經被生產登記等用途消耗掉一部分,刪除這筆進貨會讓庫存變成負數)
+  const histSnap = await getDocs(query(collection(db, 'materials', materialId, 'history'), orderBy('timestamp', 'asc')));
+  let simStock = 0, simSecondary = 0, simSample = 0;
+  histSnap.docs.forEach(d => {
+    if (d.id === historyId) return;
+    const l = d.data();
+    if (l.type === 'purchase' && !l.voided) {
+      simStock += l.quantity || 0;
+      simSecondary += l.secondaryQuantity || 0;
+      simSample += l.sampleQuantity || 0;
+    } else if (l.type === 'adjust') {
+      if (l.target === 'secondary') simSecondary = l.afterQty;
+      else if (l.target === 'sample') simSample = l.afterQty;
+      else if (l.target === 'primary') simStock = l.afterQty;
+    } else if (l.type === 'historyMigration') {
+      simStock = l.afterQty;
+    }
+  });
+  if (simStock < 0 || simSecondary < 0 || simSample < 0) {
+    alert(`這筆進貨之後材料已經有消耗，刪除會導致庫存變成負數（刪除後：正品 ${simStock}、次品 ${simSecondary}、留樣 ${simSample} ${unit}），無法刪除。`);
+    return;
+  }
+
+  const ok = await showConfirmModal({
+    title: '刪除進貨紀錄',
+    text: '這筆進貨紀錄不會真的從資料庫移除，而是標記為「已刪除」並保留在時間軸上供日後查核；庫存與成本會重新計算成「這筆進貨從沒發生過」。此動作無法復原，確定要刪除嗎？',
+  });
+  if (!ok) return;
+
+  try {
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'materials', materialId, 'history', historyId), {
+      voided: true, voidReason: reason, voidedAt: serverTimestamp(),
+    });
+    const newLogRef = doc(collection(db, 'materials', materialId, 'history'));
+    batch.set(newLogRef, {
+      type: 'purchaseVoided',
+      voidedHistoryId: historyId,
+      quantity: log.quantity || 0,
+      secondaryQuantity: log.secondaryQuantity || 0,
+      sampleQuantity: log.sampleQuantity || 0,
+      platform: log.platform || '', seller: log.seller || '',
+      reason,
+      timestamp: serverTimestamp(),
+    });
+    await batch.commit();
+
+    await recalculateMaterialStock(materialId);
+    openDetail(materialId);
+  } catch (err) {
+    alert('刪除失敗：' + err.message);
+  }
+}
 
 // ---------- 材料編號 ----------
 const MATERIAL_CODE_SEQ_DIGITS = 5;
@@ -3513,10 +3680,12 @@ function getFilteredTimelineLogs() {
 // 算出每種類型的「收合摘要」:不用展開就能大概掃過去知道量體,異常狀況才需要展開細看
 function buildLogSummary(log, unit) {
   if (log.type === 'purchase') {
+    if (log.voided) return `已刪除`;
     const logUnit = log.quantityUnit || unit;
     const hasIssue = log.shortageQuantity || log.scrapQuantity || log.extraQuantity;
     return `+${log.quantity} ${logUnit}${hasIssue ? ' ⚠️' : ''}`;
   }
+  if (log.type === 'purchaseVoided') return `-${log.quantity} ${unit}`;
   if (log.type === 'adjust') {
     if (log.scrapQuantity) return `-${log.scrapQuantity} ${unit}`;
     return `${log.diff >= 0 ? '+' : ''}${log.diff} ${unit}`;
@@ -3534,7 +3703,7 @@ function buildLogView(log, unit) {
   const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('zh-TW') : '（時間處理中）';
   let typeLabel = '', cls = '', detail = '';
     if (log.type === 'purchase') {
-      typeLabel = '進貨'; cls = 'purchase';
+      typeLabel = log.voided ? '進貨（已刪除）' : '進貨'; cls = log.voided ? 'edit' : 'purchase';
       const logUnit = log.quantityUnit || unit;
       const amountLine = log.amountMode === 'unit'
         ? `單價：${log.originalAmount} ${log.currency} / 個（供應商報價，匯率 ${log.exchangeRateUsed}）`
@@ -3554,7 +3723,8 @@ function buildLogView(log, unit) {
           const rate = exchangeRates[code] || 1;
           return `<span class="ta-tag ta-tag--money">${escapeHtml(code)} ${((log.unitCost||0) / rate).toFixed(4)} / ${escapeHtml(logUnit)}</span>`;
         })).join(' ');
-      detail = `${escapeHtml(log.platform || '')} ${log.seller ? ' / ' + escapeHtml(log.seller) : ''}<br>
+      detail = `${log.voided ? `⚠️ 這筆已刪除，原因：${escapeHtml(log.voidReason || '')}（庫存與成本計算已排除這筆，當作沒發生過）<br>` : ''}
+        ${escapeHtml(log.platform || '')} ${log.seller ? ' / ' + escapeHtml(log.seller) : ''}<br>
         ${log.supplierColorName ? '供應商原始顏色名稱：' + escapeHtml(log.supplierColorName) + '<br>' : ''}
         ${amountLine}<br>
         正品入庫數量：+${log.quantity} ${escapeHtml(logUnit)}<br>
@@ -3617,9 +3787,17 @@ function buildLogView(log, unit) {
       detail = `庫存：${log.beforeQty} → ${log.afterQty} ${escapeHtml(unit)}(${log.diff >= 0 ? '+' : ''}${log.diff})<br>
         這次新增歷史銷售：${log.salesQuantityAdded || 0} ${escapeHtml(unit)}<br>
         這次新增歷史非銷售：${log.nonSalesQuantityAdded || 0} ${escapeHtml(unit)}`;
+    } else if (log.type === 'purchaseVoided') {
+      typeLabel = '進貨紀錄已刪除（還原）'; cls = 'edit';
+      detail = `${escapeHtml(log.platform || '')}${log.seller ? ' / ' + escapeHtml(log.seller) : ''}<br>
+        還原正品數量：${log.quantity} ${escapeHtml(unit)}
+        ${log.secondaryQuantity ? `<br>還原次品數量：${log.secondaryQuantity} ${escapeHtml(unit)}` : ''}
+        ${log.sampleQuantity ? `<br>還原留樣數量：${log.sampleQuantity} ${escapeHtml(unit)}` : ''}
+        <br>原因：${escapeHtml(log.reason || '')}`;
     }
-    const editable = log.type === 'purchase' || log.type === 'historyMigration';
-    return { time, typeLabel, cls, detail, summary: buildLogSummary(log, unit), editable };
+    const editable = (log.type === 'purchase' && !log.voided) || log.type === 'historyMigration';
+    const deletable = log.type === 'purchase' && !log.voided;
+    return { time, typeLabel, cls, detail, summary: buildLogSummary(log, unit), editable, deletable };
 }
 
 function renderTimeline(logs, unit, materialId) {
@@ -3672,8 +3850,11 @@ function renderTimelineList() {
     el.innerHTML = filtered.map(log => {
       const view = buildLogView(log, timelineUnit);
       const expanded = timelineExpandedIds.has(log.id);
-      const editBtn = (view.editable && expanded)
-        ? `<div class="ta-timeline-edit-btn-row"><button type="button" class="ta-btn ta-btn-sm ta-timeline-edit-btn" data-edit-log="${escapeHtml(log.id)}">編輯</button></div>`
+      const editBtn = ((view.editable || view.deletable) && expanded)
+        ? `<div class="ta-timeline-edit-btn-row">
+            ${view.editable ? `<button type="button" class="ta-btn ta-btn-sm ta-timeline-edit-btn" data-edit-log="${escapeHtml(log.id)}">編輯</button>` : ''}
+            ${view.deletable ? `<button type="button" class="ta-btn ta-btn-sm ta-btn-danger ta-timeline-edit-btn" data-delete-log="${escapeHtml(log.id)}">刪除</button>` : ''}
+          </div>`
         : '';
       return `<div class="ta-timeline-item">
         <div class="ta-timeline-summary-row" data-log-id="${escapeHtml(log.id)}">
@@ -3701,6 +3882,14 @@ function renderTimelineList() {
         if (!log) return;
         if (log.type === 'historyMigration') openHistoryMigrationEditModal(timelineMaterialId, log.id, log);
         else openEditPurchaseModal(timelineMaterialId, log.id, log, timelineUnit);
+      });
+    });
+    el.querySelectorAll('[data-delete-log]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const log = timelineAllLogs.find(l => l.id === btn.dataset.deleteLog);
+        if (!log) return;
+        deletePurchaseLog(timelineMaterialId, log.id, log, timelineUnit);
       });
     });
   }
@@ -5066,7 +5255,8 @@ document.getElementById('confirmExportBtn').addEventListener('click', async () =
           log.originalAmount ?? '', log.pkgUnit || '', log.pkgBaseQty ?? '', log.pkgUnitQty ?? '', log.pkgCount ?? '',
           log.quantity ?? '', log.quantityUnit || '',
           log.shortageQuantity ?? '', log.extraQuantity ?? '',
-          log.scrapQuantity ?? '', log.secondaryQuantity ?? '', log.sampleQuantity ?? '', log.note || '',
+          log.scrapQuantity ?? '', log.secondaryQuantity ?? '', log.sampleQuantity ?? '',
+          (log.voided ? `[已刪除：${log.voidReason || ''}] ` : '') + (log.note || ''),
           Number(twdAmount.toFixed(2)), Number(unitCost.toFixed(4)),
           Number((twdAmount / cnyRate).toFixed(2)), Number((unitCost / cnyRate).toFixed(4)),
         ]);
