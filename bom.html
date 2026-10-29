@@ -1055,6 +1055,22 @@
     <p class="ta-modal-text" style="margin-top:-8px;">勾選「獨立售價」的項目（如寄櫃）不會併入稅後售價的手續費加總，而是另外算出一個獨立售價</p>
     <div id="pcFeeList" style="margin-bottom:1rem;"></div>
 
+    <p class="ta-modal-text" style="margin:0;font-weight:600;">工時成本</p>
+    <div class="ta-pc-grid ta-pc-grid-3">
+      <div class="ta-pc-field">
+        <label for="pcWage">時薪</label>
+        <input type="number" id="pcWage" value="0" step="1">
+      </div>
+      <div class="ta-pc-field">
+        <label for="pcMinutes">製作時間（分鐘）</label>
+        <input type="number" id="pcMinutes" value="0" step="1">
+      </div>
+      <div class="ta-pc-field">
+        <label id="pcLaborCostLabel">工時費用（自動算出）</label>
+        <input type="number" id="pcLaborCost" value="0" step="0.01" disabled>
+      </div>
+    </div>
+
     <div class="ta-form-row" style="max-width:320px;">
       <input type="text" id="pcAaLabel" value="設計成本（三種比較情境）" style="font-weight:600;border:none;padding:0;background:transparent;">
     </div>
@@ -4769,7 +4785,7 @@ let pricingEditIsTemplate = false; // true代表目前在編輯「定價公式�
 let pricingTemplateCache = null; // 定價公式範本的本地快取(讀過一次就記住,不用每次都問)
 
 function pcBlankInputs() {
-  return { rate: 0, currency: 'CNY', marginMode: false, q: 0, u: 0, r: 0, aa1: 0, aa2: 0, aa3: 0, aaLabel: '設計成本（三種比較情境）', costItems: [], feeItems: [] };
+  return { rate: 0, currency: 'CNY', marginMode: false, q: 0, u: 0, r: 0, wage: 0, minutes: 0, aa1: 0, aa2: 0, aa3: 0, aaLabel: '設計成本（三種比較情境）', costItems: [], feeItems: [] };
 }
 
 // 幣別選單:選項來自材料系統的匯率設定(settings/exchangeRates),沒設定過就只剩savedCurrency這個保底選項可選
@@ -4796,6 +4812,8 @@ function pcGatherCurrentInputs() {
     q: parseFloat(document.getElementById('pcQ').value) || 0,
     u: parseFloat(document.getElementById('pcU').value) || 0,
     r: parseFloat(document.getElementById('pcR').value) || 0,
+    wage: parseFloat(document.getElementById('pcWage').value) || 0,
+    minutes: parseFloat(document.getElementById('pcMinutes').value) || 0,
     aa1: parseFloat(document.getElementById('pcAa1').value) || 0,
     aa2: parseFloat(document.getElementById('pcAa2').value) || 0,
     aa3: parseFloat(document.getElementById('pcAa3').value) || 0,
@@ -4856,17 +4874,17 @@ function renderPcFeeList() {
   )).join('');
 }
 
-function pcCalcOne(L, Q, R, AA) {
+function pcCalcOne(L, Q, R, AA, laborCost) {
   const M = L;
   const S = M + R;
   const T = S * Q;
   const costSum = pcCurrentInputs.costItems.filter(c => c.enabled).reduce((s, c) => s + (parseFloat(c.value) || 0), 0);
-  const AB = T + costSum + AA;
+  const AB = T + costSum + AA + laborCost;
   const feeRate = pcCurrentInputs.feeItems.filter(f => f.enabled && !f.standalone).reduce((s, f) => s + (parseFloat(f.percent) || 0), 0) / 100;
   const AI = AB * feeRate;
   const AJ = feeRate < 1 ? AB / (1 - feeRate) : AB;
   const AK = Math.ceil(AJ / 10) * 10;
-  const AP = AJ - AI - AA - costSum - S;
+  const AP = AJ - AI - AA - costSum - S - laborCost;
   const standalones = pcCurrentInputs.feeItems.filter(f => f.enabled && f.standalone).map(f => {
     const r2 = (parseFloat(f.percent) || 0) / 100;
     return { name: f.name, price: r2 < 1 ? AB / (1 - r2) : AB };
@@ -4904,15 +4922,19 @@ function renderPcCards() {
     uInput.value = (Uratio * 100).toFixed(1);
   }
   const R = parseFloat(document.getElementById('pcR').value) || 0;
+  const wage = parseFloat(document.getElementById('pcWage').value) || 0;
+  const minutes = parseFloat(document.getElementById('pcMinutes').value) || 0;
+  const laborCost = wage / 60 * minutes;
+  document.getElementById('pcLaborCost').value = laborCost.toFixed(2);
   const AA1 = parseFloat(document.getElementById('pcAa1').value) || 0;
   const AA2 = parseFloat(document.getElementById('pcAa2').value) || 0;
   const AA3 = parseFloat(document.getElementById('pcAa3').value) || 0;
 
   const aaLabel = document.getElementById('pcAaLabel').value.trim() || '設計成本';
   const results = [
-    { label: aaLabel + ' ' + AA1, r: pcCalcOne(L, Q, R, AA1) },
-    { label: aaLabel + ' ' + AA2, r: pcCalcOne(L, Q, R, AA2) },
-    { label: aaLabel + ' ' + AA3, r: pcCalcOne(L, Q, R, AA3) },
+    { label: aaLabel + ' ' + AA1, r: pcCalcOne(L, Q, R, AA1, laborCost) },
+    { label: aaLabel + ' ' + AA2, r: pcCalcOne(L, Q, R, AA2, laborCost) },
+    { label: aaLabel + ' ' + AA3, r: pcCalcOne(L, Q, R, AA3, laborCost) },
   ];
 
   document.getElementById('pcCards').innerHTML = results.map(({ label, r }) => {
@@ -5014,7 +5036,7 @@ function pcApplyMarginMode() {
 }
 document.getElementById('pcMarginModeToggle').addEventListener('change', () => { pcApplyMarginMode(); renderPcCards(); });
 
-['pcRmb', 'pcRate', 'pcQ', 'pcR', 'pcAa1', 'pcAa2', 'pcAa3', 'pcTwd', 'pcU', 'pcAaLabel'].forEach(id => {
+['pcRmb', 'pcRate', 'pcQ', 'pcR', 'pcWage', 'pcMinutes', 'pcAa1', 'pcAa2', 'pcAa3', 'pcTwd', 'pcU', 'pcAaLabel'].forEach(id => {
   document.getElementById(id).addEventListener('input', renderPcCards);
 });
 
@@ -5059,6 +5081,8 @@ async function openPricingModal(p) {
   document.getElementById('pcU').value = pcCurrentInputs.u;
   document.getElementById('pcMarginModeToggle').checked = pcCurrentInputs.marginMode;
   document.getElementById('pcR').value = pcCurrentInputs.r;
+  document.getElementById('pcWage').value = pcCurrentInputs.wage || 0;
+  document.getElementById('pcMinutes').value = pcCurrentInputs.minutes || 0;
   document.getElementById('pcAa1').value = pcCurrentInputs.aa1;
   document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
   document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
@@ -5091,6 +5115,8 @@ async function openPricingModal(p) {
         document.getElementById('pcQ').value = pcCurrentInputs.q;
         document.getElementById('pcMarginModeToggle').checked = pcCurrentInputs.marginMode;
         document.getElementById('pcR').value = pcCurrentInputs.r;
+        document.getElementById('pcWage').value = pcCurrentInputs.wage || 0;
+        document.getElementById('pcMinutes').value = pcCurrentInputs.minutes || 0;
         document.getElementById('pcAa1').value = pcCurrentInputs.aa1;
         document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
         document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
@@ -5133,6 +5159,8 @@ document.getElementById('openPricingTemplateBtn').addEventListener('click', asyn
   document.getElementById('pcU').value = pcCurrentInputs.u;
   document.getElementById('pcMarginModeToggle').checked = pcCurrentInputs.marginMode;
   document.getElementById('pcR').value = pcCurrentInputs.r;
+  document.getElementById('pcWage').value = pcCurrentInputs.wage || 0;
+  document.getElementById('pcMinutes').value = pcCurrentInputs.minutes || 0;
   document.getElementById('pcAa1').value = pcCurrentInputs.aa1;
   document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
   document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
@@ -5178,6 +5206,8 @@ document.getElementById('pcResetBlankBtn').addEventListener('click', () => {
   document.getElementById('pcU').value = 0;
   document.getElementById('pcMarginModeToggle').checked = false;
   document.getElementById('pcR').value = 0;
+  document.getElementById('pcWage').value = 0;
+  document.getElementById('pcMinutes').value = 0;
   document.getElementById('pcAa1').value = 0;
   document.getElementById('pcAa2').value = 0;
   document.getElementById('pcAa3').value = 0;
