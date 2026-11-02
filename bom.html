@@ -4819,6 +4819,7 @@ function pcApplyTemplateToForm(template) {
   renderPcCostList();
   renderPcFeeList();
   renderPcCards();
+  document.getElementById('pcStatusLabel').textContent = '已套用範本公式，尚未儲存（記得按下方「儲存個別設定」）';
 }
 
 // 幣別選單:選項來自材料系統的匯率設定(settings/exchangeRates),沒設定過就只剩savedCurrency這個保底選項可選
