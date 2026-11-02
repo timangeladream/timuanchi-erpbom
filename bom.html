@@ -5170,7 +5170,7 @@ document.getElementById('openPricingTemplateBtn').addEventListener('click', asyn
   document.getElementById('pricingModalDesc').textContent = '這裡設定的是「公版範本」，不綁定任何成品。成品第一次打開定價試算、還沒有自己的設定時，可以選擇套用這裡的內容當起點，之後範本更新不會回頭影響已經套用過的成品。';
   document.getElementById('pcSellingPriceRow').classList.add('ta-is-hidden');
   document.getElementById('pcSaveInputsBtn').classList.add('ta-is-hidden');
-  document.getElementById('pcApplyGlobalBtn').classList.add('ta-is-hidden');
+  document.getElementById('pcApplyGlobalBtn').classList.remove('ta-is-hidden');
   document.getElementById('pcApplyTemplateBtn').classList.add('ta-is-hidden');
   document.getElementById('pcSaveBtn').classList.add('ta-is-hidden');
   document.getElementById('pcSaveTemplateBtn').classList.remove('ta-is-hidden');
@@ -5287,7 +5287,7 @@ document.getElementById('pcSaveInputsBtn').addEventListener('click', async () =>
 });
 
 document.getElementById('pcApplyGlobalBtn').addEventListener('click', async () => {
-  if (!pricingEditProductId) return;
+  if (!pricingEditProductId && !pricingEditIsTemplate) return;
   const individualCount = products.filter(p => p.pricingInputs && p.pricingInputs.source === 'individual' && p.id !== pricingEditProductId).length;
   const ok = await showConfirmModal({
     title: '全區套用',
