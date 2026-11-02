@@ -1097,6 +1097,7 @@
     <div class="ta-modal-actions">
       <button class="ta-btn" data-close="pricingModal">取消</button>
       <button class="ta-btn ta-btn-danger" id="pcResetBlankBtn">恢復初始空白</button>
+      <button class="ta-btn" id="pcApplyTemplateBtn">套用範本公式</button>
       <button class="ta-btn ta-btn-primary" id="pcSaveInputsBtn">儲存個別設定</button>
       <button class="ta-btn ta-btn-primary" id="pcApplyGlobalBtn">全區套用</button>
       <button class="ta-btn ta-btn-primary" id="pcSaveBtn">儲存售價到成品</button>
@@ -4795,6 +4796,31 @@ function pcBlankInputs() {
   return { rate: 0, currency: 'CNY', marginMode: false, q: 0, u: 0, r: 0, laborEnabled: true, wage: 0, minutes: 0, aa1: 0, aa2: 0, aa3: 0, aaLabel: '設計成本（三種比較情境）', costItems: [], feeItems: [] };
 }
 
+// 把範本內容套進目前畫面(不含商品成本本身跟售價);新成品第一次打開自動詢問、
+// 或已設定過的成品手動按「套用範本公式」,都共用這個函式
+function pcApplyTemplateToForm(template) {
+  pcCurrentInputs = { ...pcBlankInputs(), ...template, costItems: (template.costItems || []).map(it => ({ ...it })), feeItems: (template.feeItems || []).map(it => ({ ...it })) };
+  pcNextCostId = Math.max(0, ...pcCurrentInputs.costItems.map(c => c.id)) + 1;
+  pcNextFeeId = Math.max(0, ...pcCurrentInputs.feeItems.map(f => f.id)) + 1;
+  fillPcCurrencySelect(pcCurrentInputs.currency);
+  document.getElementById('pcRate').value = pcCurrentInputs.rate;
+  document.getElementById('pcQ').value = pcCurrentInputs.q;
+  document.getElementById('pcMarginModeToggle').checked = pcCurrentInputs.marginMode;
+  document.getElementById('pcR').value = pcCurrentInputs.r;
+  document.getElementById('pcLaborCostToggle').checked = pcCurrentInputs.laborEnabled !== false;
+  document.getElementById('pcWage').value = pcCurrentInputs.wage || 0;
+  document.getElementById('pcMinutes').value = pcCurrentInputs.minutes || 0;
+  document.getElementById('pcAa1').value = pcCurrentInputs.aa1;
+  document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
+  document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
+  document.getElementById('pcAaLabel').value = pcCurrentInputs.aaLabel;
+  pcApplyCurrencyMode();
+  pcApplyMarginMode();
+  renderPcCostList();
+  renderPcFeeList();
+  renderPcCards();
+}
+
 // 幣別選單:選項來自材料系統的匯率設定(settings/exchangeRates),沒設定過就只剩savedCurrency這個保底選項可選
 function fillPcCurrencySelect(savedCurrency) {
   const sel = document.getElementById('pcForeignCurrencySelect');
@@ -5069,6 +5095,7 @@ async function openPricingModal(p) {
   document.getElementById('pcSellingPriceRow').classList.remove('ta-is-hidden');
   document.getElementById('pcSaveInputsBtn').classList.remove('ta-is-hidden');
   document.getElementById('pcApplyGlobalBtn').classList.remove('ta-is-hidden');
+  document.getElementById('pcApplyTemplateBtn').classList.remove('ta-is-hidden');
   document.getElementById('pcSaveBtn').classList.remove('ta-is-hidden');
   document.getElementById('pcSaveTemplateBtn').classList.add('ta-is-hidden');
 
@@ -5127,26 +5154,7 @@ async function openPricingModal(p) {
         text: '這個成品還沒有設定過定價試算，要不要套用已經建立好的定價公式範本（匯率/倍數/包裝成本/成本項目/手續費項目/設計成本標題）當作起點？套用後你還是可以自己再調整。',
       });
       if (apply && pricingEditProductId === p.id) {
-        pcCurrentInputs = { ...pcBlankInputs(), ...template, costItems: (template.costItems || []).map(it => ({ ...it })), feeItems: (template.feeItems || []).map(it => ({ ...it })) };
-        pcNextCostId = Math.max(0, ...pcCurrentInputs.costItems.map(c => c.id)) + 1;
-        pcNextFeeId = Math.max(0, ...pcCurrentInputs.feeItems.map(f => f.id)) + 1;
-        fillPcCurrencySelect(pcCurrentInputs.currency);
-        document.getElementById('pcRate').value = pcCurrentInputs.rate;
-        document.getElementById('pcQ').value = pcCurrentInputs.q;
-        document.getElementById('pcMarginModeToggle').checked = pcCurrentInputs.marginMode;
-        document.getElementById('pcR').value = pcCurrentInputs.r;
-        document.getElementById('pcLaborCostToggle').checked = pcCurrentInputs.laborEnabled !== false;
-        document.getElementById('pcWage').value = pcCurrentInputs.wage || 0;
-        document.getElementById('pcMinutes').value = pcCurrentInputs.minutes || 0;
-        document.getElementById('pcAa1').value = pcCurrentInputs.aa1;
-        document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
-        document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
-        document.getElementById('pcAaLabel').value = pcCurrentInputs.aaLabel;
-        pcApplyCurrencyMode();
-        pcApplyMarginMode();
-        renderPcCostList();
-        renderPcFeeList();
-        renderPcCards();
+        pcApplyTemplateToForm(template);
       }
     }
   }
@@ -5162,6 +5170,7 @@ document.getElementById('openPricingTemplateBtn').addEventListener('click', asyn
   document.getElementById('pcSellingPriceRow').classList.add('ta-is-hidden');
   document.getElementById('pcSaveInputsBtn').classList.add('ta-is-hidden');
   document.getElementById('pcApplyGlobalBtn').classList.add('ta-is-hidden');
+  document.getElementById('pcApplyTemplateBtn').classList.add('ta-is-hidden');
   document.getElementById('pcSaveBtn').classList.add('ta-is-hidden');
   document.getElementById('pcSaveTemplateBtn').classList.remove('ta-is-hidden');
 
@@ -5215,6 +5224,20 @@ document.getElementById('pcSaveTemplateBtn').addEventListener('click', async () 
   } finally {
     btn.disabled = false;
   }
+});
+
+document.getElementById('pcApplyTemplateBtn').addEventListener('click', async () => {
+  const template = await loadPricingTemplate();
+  if (!template) {
+    alert('尚未建立定價公式範本，請先到「定價公式範本設定」建立範本。');
+    return;
+  }
+  const ok = await showConfirmModal({
+    title: '套用範本公式',
+    text: '會覆蓋目前畫面上的倍數/包裝成本/成本項目/手續費項目/工時/設計成本標題，確定要套用範本最新的設定嗎？（套用後只是改畫面，要按「儲存個別設定」才會真的存檔）',
+  });
+  if (!ok) return;
+  pcApplyTemplateToForm(template);
 });
 
 document.getElementById('pcResetBlankBtn').addEventListener('click', () => {
