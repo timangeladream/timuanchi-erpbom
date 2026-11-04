@@ -1679,11 +1679,21 @@ function switchProductCategory() {
 function pcProductPriceLabel(p) {
   const src = p.sellingPriceSource;
   if (src && src.manual) return '手動設定';
-  if (src && src.slot) {
+  if (src && src.value != null) {
     const aaLabel = pcStripAaSuffix((p.pricingInputs && p.pricingInputs.aaLabel) || '') || '設計成本';
     return aaLabel + ' ' + src.value;
   }
-  return p.sellingPriceLabel || null; // 舊資料相容:還沒重新存檔過,沒有 sellingPriceSource
+  // 舊資料相容(還沒有 sellingPriceSource,只有更早以前整串存死的 sellingPriceLabel):
+  // 從文字尾巴抓出凍結的數字,標題文字一樣即時換成現在的 aaLabel,這樣舊資料不用重新套用也會跟著動
+  if (p.sellingPriceLabel) {
+    const m = p.sellingPriceLabel.match(/(\d+(\.\d+)?)\s*$/);
+    if (m) {
+      const aaLabel = pcStripAaSuffix((p.pricingInputs && p.pricingInputs.aaLabel) || '') || '設計成本';
+      return aaLabel + ' ' + m[1];
+    }
+    return p.sellingPriceLabel; // 例如舊的「手動設定」,沒有數字結尾,原樣顯示
+  }
+  return null;
 }
 
 function renderProductTable() {
