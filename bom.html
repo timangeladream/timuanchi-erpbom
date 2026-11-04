@@ -1668,6 +1668,19 @@ function switchProductCategory() {
   renderProductTable();
 }
 
+// 售價標籤即時組字:情境套用只存格位+當時的數字,標題文字一律讀這個成品「現在」的 aaLabel,
+// 這樣之後改標題(例如「設計成本」改成「廣告成本」)已經套用過的成品列表會跟著變,不用重新存檔;
+// 數字則維持套用當下凍結的值,避免跟實際存進去的售價金額對不起來
+function pcProductPriceLabel(p) {
+  const src = p.sellingPriceSource;
+  if (src && src.manual) return '手動設定';
+  if (src && src.slot) {
+    const aaLabel = ((p.pricingInputs && p.pricingInputs.aaLabel) || '').trim() || '設計成本';
+    return aaLabel + ' ' + src.value;
+  }
+  return p.sellingPriceLabel || null; // 舊資料相容:還沒重新存檔過,沒有 sellingPriceSource
+}
+
 function renderProductTable() {
   const tbody = document.getElementById('productsTbody');
   if (!tbody) return;
@@ -1702,7 +1715,7 @@ function renderProductTable() {
       <td>${escapeHtml(p.productCode)}${p.customCode ? `<br><span style="font-size:11px;color:var(--text-muted);">自設：${escapeHtml(p.customCode)}</span>` : ''}</td>
       <td>${escapeHtml(p.category)}</td>
       <td>${escapeHtml(p.name)}</td>
-      <td class="ta-col-right">${p.sellingPrice != null ? 'NT$ ' + Number(p.sellingPrice).toFixed(0) + (p.sellingPriceLabel ? `<br><span style="font-size:11px;color:var(--text-muted);">${escapeHtml(p.sellingPriceLabel)}</span>` : '') : ''}</td>
+      <td class="ta-col-right">${p.sellingPrice != null ? 'NT$ ' + Number(p.sellingPrice).toFixed(0) + (pcProductPriceLabel(p) ? `<br><span style="font-size:11px;color:var(--text-muted);">${escapeHtml(pcProductPriceLabel(p))}</span>` : '') : ''}</td>
       <td class="ta-col-center">${variantCount ? `${variantCount} 個規格` : ''}</td>
       <td class="ta-col-right">${preMadeStock.toLocaleString()}</td>
       <td class="ta-col-center">${escapeHtml(productRecipeStatusLabel(p))}</td>
@@ -4789,7 +4802,7 @@ document.getElementById('recipeSaveBtn').addEventListener('click', async () => {
 let pcCurrentInputs = null; // 目前彈窗編輯中的完整設定(本地暫存,尚未存檔)
 let pcNextCostId = 1, pcNextFeeId = 1;
 let pricingEditProductId = null;
-let pcAppliedPriceLabel = null; // 目前售價欄位是套用哪個比較情境帶入的(null代表手動輸入/修改過)
+let pcAppliedPriceSource = null; // 目前售價欄位是套用哪個比較情境帶入的:{slot, value}(null代表手動輸入/修改過)
 let pricingEditIsTemplate = false; // true代表目前在編輯「定價公式範本」,不是綁定某個成品
 let pricingTemplateCache = null; // 定價公式範本的本地快取(讀過一次就記住,不用每次都問)
 
@@ -4974,19 +4987,19 @@ function renderPcCards() {
 
   const aaLabel = document.getElementById('pcAaLabel').value.trim() || '設計成本';
   const results = [
-    { label: aaLabel + ' ' + AA1, r: pcCalcOne(L, Q, R, AA1, laborCost) },
-    { label: aaLabel + ' ' + AA2, r: pcCalcOne(L, Q, R, AA2, laborCost) },
-    { label: aaLabel + ' ' + AA3, r: pcCalcOne(L, Q, R, AA3, laborCost) },
+    { label: aaLabel + ' ' + AA1, slot: 1, aa: AA1, r: pcCalcOne(L, Q, R, AA1, laborCost) },
+    { label: aaLabel + ' ' + AA2, slot: 2, aa: AA2, r: pcCalcOne(L, Q, R, AA2, laborCost) },
+    { label: aaLabel + ' ' + AA3, slot: 3, aa: AA3, r: pcCalcOne(L, Q, R, AA3, laborCost) },
   ];
 
-  document.getElementById('pcCards').innerHTML = results.map(({ label, r }) => {
+  document.getElementById('pcCards').innerHTML = results.map(({ label, slot, aa, r }) => {
     let html = '<div class="ta-pc-card">' +
       '<p class="ta-pc-card-label">' + escapeHtml(label) + '</p>' +
       '<p class="ta-pc-card-small">稅後售價</p>' +
       '<p class="ta-pc-card-val">' + pcFmt(r.AJ.toFixed(1)) + '</p>' +
       '<p class="ta-pc-card-small">一般售價</p>' +
       '<p class="ta-pc-card-val-hero">' + pcFmt(r.AK.toFixed(0)) + '</p>' +
-      (!pricingEditIsTemplate ? '<button type="button" class="ta-btn ta-btn-sm" data-apply-price="' + r.AK.toFixed(0) + '" data-apply-label="' + escapeHtml(label) + '">套用這個售價</button>' : '');
+      (!pricingEditIsTemplate ? '<button type="button" class="ta-btn ta-btn-sm" data-apply-price="' + r.AK.toFixed(0) + '" data-apply-slot="' + slot + '" data-apply-value="' + aa + '">套用這個售價</button>' : '');
     r.standalones.forEach(s => {
       html += '<p class="ta-pc-card-small">' + escapeHtml(s.name) + '售價</p><p class="ta-pc-card-val">' + pcFmt(s.price.toFixed(1)) + '</p>';
     });
@@ -5012,10 +5025,10 @@ document.getElementById('pcCards').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-apply-price]');
   if (!btn) return;
   document.getElementById('pcSellingPrice').value = btn.dataset.applyPrice;
-  pcAppliedPriceLabel = btn.dataset.applyLabel;
+  pcAppliedPriceSource = { slot: Number(btn.dataset.applySlot), value: Number(btn.dataset.applyValue) };
 });
 document.getElementById('pcSellingPrice').addEventListener('input', () => {
-  pcAppliedPriceLabel = null; // 手動改過售價欄位,不再算是套用某個比較情境
+  pcAppliedPriceSource = null; // 手動改過售價欄位,不再算是套用某個比較情境
 });
 
 document.getElementById('pcCostList').addEventListener('input', (e) => {
@@ -5128,7 +5141,7 @@ async function openPricingModal(p) {
     ? Math.max(calcRecipeCost(p.recipe), ...Object.values(p.variantRecipes || {}).map(r => calcRecipeCost(r)), 0)
     : calcRecipeCost(p.recipe);
   const existingSellingPrice = p.sellingPrice;
-  pcAppliedPriceLabel = p.sellingPriceLabel || null;
+  pcAppliedPriceSource = (p.sellingPriceSource && p.sellingPriceSource.slot) ? p.sellingPriceSource : null;
 
   // 成本欄位一律自動帶入這個成品「目前」的材料成本(台幣),不套用之前儲存的舊值,
   // 這樣配方材料漲價時才能馬上反映最新真實成本;連帶幣別模式也固定用台幣輸入,
@@ -5342,11 +5355,12 @@ document.getElementById('pcSaveBtn').addEventListener('click', async () => {
       text: '售價欄位是空白的，確定要把這個成品的售價清掉嗎？清掉後會變成「尚未設定售價」。',
     });
     if (!ok) return;
-    updatePayload = { sellingPrice: deleteField(), sellingPriceLabel: deleteField(), updatedAt: serverTimestamp() };
+    updatePayload = { sellingPrice: deleteField(), sellingPriceLabel: deleteField(), sellingPriceSource: deleteField(), updatedAt: serverTimestamp() };
   } else {
     const priceVal = parseFloat(rawVal);
     if (isNaN(priceVal) || priceVal < 0) { alert('請輸入正確的售價'); return; }
-    updatePayload = { sellingPrice: priceVal, sellingPriceLabel: pcAppliedPriceLabel || '手動設定', updatedAt: serverTimestamp() };
+    const sellingPriceSource = pcAppliedPriceSource || { manual: true };
+    updatePayload = { sellingPrice: priceVal, sellingPriceSource, sellingPriceLabel: deleteField(), updatedAt: serverTimestamp() };
   }
   const btn = document.getElementById('pcSaveBtn');
   btn.disabled = true;
