@@ -1078,8 +1078,13 @@
       </div>
     </div>
 
-    <div class="ta-form-row" style="max-width:320px;">
-      <input type="text" id="pcAaLabel" value="設計成本（三種比較情境）" style="font-weight:600;border:none;padding:0;background:transparent;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+      <label class="ta-switch">
+        <input type="checkbox" id="pcAaCompareToggle" checked>
+        <span class="track"></span><span class="thumb"></span>
+      </label>
+      <input type="text" id="pcAaLabel" value="設計成本" style="font-weight:600;border:none;padding:0;background:transparent;max-width:160px;">
+      <span id="pcAaCompareHint" class="ta-modal-text" style="margin:0;color:var(--text-muted);font-weight:400;">（三選一情境）</span>
     </div>
     <div class="ta-pc-grid ta-pc-grid-3">
       <input type="number" id="pcAa1" value="100" step="1">
@@ -4807,7 +4812,13 @@ let pricingEditIsTemplate = false; // true代表目前在編輯「定價公式�
 let pricingTemplateCache = null; // 定價公式範本的本地快取(讀過一次就記住,不用每次都問)
 
 function pcBlankInputs() {
-  return { rate: 0, currency: 'CNY', marginMode: false, q: 0, u: 0, r: 0, laborEnabled: true, wage: 0, minutes: 0, aa1: 0, aa2: 0, aa3: 0, aaLabel: '設計成本（三種比較情境）', costItems: [], feeItems: [] };
+  return { rate: 0, currency: 'CNY', marginMode: false, q: 0, u: 0, r: 0, laborEnabled: true, wage: 0, minutes: 0, aaCompareEnabled: true, aa1: 0, aa2: 0, aa3: 0, aaLabel: '設計成本', costItems: [], feeItems: [] };
+}
+
+// 舊資料相容:以前aaLabel欄位整串存成「設計成本（三種比較情境）」,拆分成獨立開關後
+// 欄位只留短名稱,載入時把結尾的「(三種比較情境)」字樣濾掉,讓輸入框乾淨顯示
+function pcStripAaSuffix(s) {
+  return (s || '').replace(/[（(]\s*三種比較情境\s*[）)]\s*$/, '').trim();
 }
 
 // 把範本內容套進目前畫面(不含商品成本本身跟售價);新成品第一次打開自動詢問、
@@ -4824,12 +4835,14 @@ function pcApplyTemplateToForm(template) {
   document.getElementById('pcLaborCostToggle').checked = pcCurrentInputs.laborEnabled !== false;
   document.getElementById('pcWage').value = pcCurrentInputs.wage || 0;
   document.getElementById('pcMinutes').value = pcCurrentInputs.minutes || 0;
+  document.getElementById('pcAaCompareToggle').checked = pcCurrentInputs.aaCompareEnabled !== false;
   document.getElementById('pcAa1').value = pcCurrentInputs.aa1;
   document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
   document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
-  document.getElementById('pcAaLabel').value = pcCurrentInputs.aaLabel;
+  document.getElementById('pcAaLabel').value = pcStripAaSuffix(pcCurrentInputs.aaLabel);
   pcApplyCurrencyMode();
   pcApplyMarginMode();
+  pcApplyAaCompareMode();
   renderPcCostList();
   renderPcFeeList();
   renderPcCards();
@@ -4863,10 +4876,11 @@ function pcGatherCurrentInputs() {
     laborEnabled: document.getElementById('pcLaborCostToggle').checked,
     wage: parseFloat(document.getElementById('pcWage').value) || 0,
     minutes: parseFloat(document.getElementById('pcMinutes').value) || 0,
+    aaCompareEnabled: document.getElementById('pcAaCompareToggle').checked,
     aa1: parseFloat(document.getElementById('pcAa1').value) || 0,
     aa2: parseFloat(document.getElementById('pcAa2').value) || 0,
     aa3: parseFloat(document.getElementById('pcAa3').value) || 0,
-    aaLabel: document.getElementById('pcAaLabel').value.trim() || '設計成本（三種比較情境）',
+    aaLabel: document.getElementById('pcAaLabel').value.trim() || '設計成本',
     costItems: pcCurrentInputs.costItems,
     feeItems: pcCurrentInputs.feeItems,
   };
@@ -4985,12 +4999,17 @@ function renderPcCards() {
   const AA2 = parseFloat(document.getElementById('pcAa2').value) || 0;
   const AA3 = parseFloat(document.getElementById('pcAa3').value) || 0;
 
+  const aaCompareEnabled = document.getElementById('pcAaCompareToggle').checked;
   const aaLabel = document.getElementById('pcAaLabel').value.trim() || '設計成本';
-  const results = [
-    { label: aaLabel + ' ' + AA1, slot: 1, aa: AA1, r: pcCalcOne(L, Q, R, AA1, laborCost) },
-    { label: aaLabel + ' ' + AA2, slot: 2, aa: AA2, r: pcCalcOne(L, Q, R, AA2, laborCost) },
-    { label: aaLabel + ' ' + AA3, slot: 3, aa: AA3, r: pcCalcOne(L, Q, R, AA3, laborCost) },
-  ];
+  const results = aaCompareEnabled
+    ? [
+        { label: aaLabel + ' ' + AA1, slot: 1, aa: AA1, r: pcCalcOne(L, Q, R, AA1, laborCost) },
+        { label: aaLabel + ' ' + AA2, slot: 2, aa: AA2, r: pcCalcOne(L, Q, R, AA2, laborCost) },
+        { label: aaLabel + ' ' + AA3, slot: 3, aa: AA3, r: pcCalcOne(L, Q, R, AA3, laborCost) },
+      ]
+    : [
+        { label: aaLabel + ' ' + AA1, slot: 1, aa: AA1, r: pcCalcOne(L, Q, R, AA1, laborCost) },
+      ];
 
   document.getElementById('pcCards').innerHTML = results.map(({ label, slot, aa, r }) => {
     let html = '<div class="ta-pc-card">' +
@@ -5107,6 +5126,15 @@ function pcApplyMarginMode() {
 document.getElementById('pcMarginModeToggle').addEventListener('change', () => { pcApplyMarginMode(); renderPcCards(); });
 document.getElementById('pcLaborCostToggle').addEventListener('change', renderPcCards);
 
+// 設計成本三選一開關:關掉時只留aa1一個金額、只算一張卡片,aa2/aa3先隱藏但數字留著,開回來還在
+function pcApplyAaCompareMode() {
+  const on = document.getElementById('pcAaCompareToggle').checked;
+  document.getElementById('pcAa2').style.display = on ? '' : 'none';
+  document.getElementById('pcAa3').style.display = on ? '' : 'none';
+  document.getElementById('pcAaCompareHint').style.display = on ? '' : 'none';
+}
+document.getElementById('pcAaCompareToggle').addEventListener('change', () => { pcApplyAaCompareMode(); renderPcCards(); });
+
 ['pcRmb', 'pcRate', 'pcQ', 'pcR', 'pcWage', 'pcMinutes', 'pcAa1', 'pcAa2', 'pcAa3', 'pcTwd', 'pcU', 'pcAaLabel'].forEach(id => {
   document.getElementById(id).addEventListener('input', renderPcCards);
 });
@@ -5157,14 +5185,16 @@ async function openPricingModal(p) {
   document.getElementById('pcLaborCostToggle').checked = pcCurrentInputs.laborEnabled !== false;
   document.getElementById('pcWage').value = pcCurrentInputs.wage || 0;
   document.getElementById('pcMinutes').value = pcCurrentInputs.minutes || 0;
+  document.getElementById('pcAaCompareToggle').checked = pcCurrentInputs.aaCompareEnabled !== false;
   document.getElementById('pcAa1').value = pcCurrentInputs.aa1;
   document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
   document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
-  document.getElementById('pcAaLabel').value = pcCurrentInputs.aaLabel || '設計成本（三種比較情境）';
+  document.getElementById('pcAaLabel').value = pcStripAaSuffix(pcCurrentInputs.aaLabel || '設計成本');
   document.getElementById('pcSellingPrice').value = existingSellingPrice != null ? existingSellingPrice : '';
 
   pcApplyCurrencyMode();
   pcApplyMarginMode();
+  pcApplyAaCompareMode();
   renderPcCostList();
   renderPcFeeList();
   renderPcCards();
@@ -5219,14 +5249,16 @@ document.getElementById('openPricingTemplateBtn').addEventListener('click', asyn
   document.getElementById('pcLaborCostToggle').checked = pcCurrentInputs.laborEnabled !== false;
   document.getElementById('pcWage').value = pcCurrentInputs.wage || 0;
   document.getElementById('pcMinutes').value = pcCurrentInputs.minutes || 0;
+  document.getElementById('pcAaCompareToggle').checked = pcCurrentInputs.aaCompareEnabled !== false;
   document.getElementById('pcAa1').value = pcCurrentInputs.aa1;
   document.getElementById('pcAa2').value = pcCurrentInputs.aa2;
   document.getElementById('pcAa3').value = pcCurrentInputs.aa3;
-  document.getElementById('pcAaLabel').value = pcCurrentInputs.aaLabel || '設計成本（三種比較情境）';
+  document.getElementById('pcAaLabel').value = pcStripAaSuffix(pcCurrentInputs.aaLabel || '設計成本');
   document.getElementById('pcStatusLabel').textContent = template ? '範本已建立' : '尚未建立範本，目前為空白';
 
   pcApplyCurrencyMode();
   pcApplyMarginMode();
+  pcApplyAaCompareMode();
   renderPcCostList();
   renderPcFeeList();
   renderPcCards();
@@ -5281,12 +5313,14 @@ document.getElementById('pcResetBlankBtn').addEventListener('click', () => {
   document.getElementById('pcLaborCostToggle').checked = true;
   document.getElementById('pcWage').value = 0;
   document.getElementById('pcMinutes').value = 0;
+  document.getElementById('pcAaCompareToggle').checked = true;
   document.getElementById('pcAa1').value = 0;
   document.getElementById('pcAa2').value = 0;
   document.getElementById('pcAa3').value = 0;
-  document.getElementById('pcAaLabel').value = '設計成本（三種比較情境）';
+  document.getElementById('pcAaLabel').value = '設計成本';
   pcApplyCurrencyMode();
   pcApplyMarginMode();
+  pcApplyAaCompareMode();
   renderPcCostList();
   renderPcFeeList();
   renderPcCards();
@@ -5302,6 +5336,7 @@ document.getElementById('pcSaveInputsBtn').addEventListener('click', async () =>
     const p = products.find(x => x.id === pricingEditProductId);
     if (p) p.pricingInputs = pricingInputs;
     renderPcStatusLabel({ pricingInputs });
+    renderProductTable(); // 售價標籤文字會讀pricingInputs.aaLabel,改了標題要讓列表馬上跟著變
     const originalLabel = btn.textContent;
     btn.textContent = '已儲存！';
     setTimeout(() => { btn.textContent = originalLabel; }, 1200);
@@ -5334,6 +5369,7 @@ document.getElementById('pcApplyGlobalBtn').addEventListener('click', async () =
       chunk.forEach(p => { p.pricingInputs = pricingInputs; });
     }
     renderPcStatusLabel({ pricingInputs });
+    renderProductTable(); // 全部成品的aaLabel都被改了,列表要馬上跟著變
     const originalLabel = btn.textContent;
     btn.textContent = '已套用！';
     setTimeout(() => { btn.textContent = originalLabel; }, 1200);
@@ -5368,6 +5404,7 @@ document.getElementById('pcSaveBtn').addEventListener('click', async () => {
     await updateDoc(doc(db, 'products', savedProductId), updatePayload);
     await refreshProductLocal(savedProductId);
     closeModal('pricingModal');
+    renderProductTable(); // 存檔後立刻刷新成品列表,才看得到最新售價/標籤
     if (document.getElementById('productDetailModal').classList.contains('ta-is-open')) {
       openProductDetail(savedProductId); // 存檔後立刻刷新底下的成品詳情頁,才看得到最新售價/毛利
     }
