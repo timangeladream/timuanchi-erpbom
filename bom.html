@@ -1084,7 +1084,7 @@
         <span class="track"></span><span class="thumb"></span>
       </label>
       <input type="text" id="pcAaLabel" value="設計成本" style="font-weight:600;border:none;padding:0;background:transparent;max-width:160px;">
-      <span id="pcAaCompareHint" class="ta-modal-text" style="margin:0;color:var(--text-muted);font-weight:400;">（三選一情境）</span>
+      <span id="pcAaCompareHint" class="ta-modal-text" style="margin:0;color:var(--text-muted);font-weight:400;">(三種比較情境)</span>
     </div>
     <div class="ta-pc-grid ta-pc-grid-3">
       <input type="number" id="pcAa1" value="100" step="1">
@@ -1680,7 +1680,7 @@ function pcProductPriceLabel(p) {
   const src = p.sellingPriceSource;
   if (src && src.manual) return '手動設定';
   if (src && src.slot) {
-    const aaLabel = ((p.pricingInputs && p.pricingInputs.aaLabel) || '').trim() || '設計成本';
+    const aaLabel = pcStripAaSuffix((p.pricingInputs && p.pricingInputs.aaLabel) || '') || '設計成本';
     return aaLabel + ' ' + src.value;
   }
   return p.sellingPriceLabel || null; // 舊資料相容:還沒重新存檔過,沒有 sellingPriceSource
